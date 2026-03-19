@@ -145,7 +145,7 @@ router.get("/dashboard/stats", requireAuth, async (req, res) => {
       .from(vitalsTable)
       .where(gte(vitalsTable.recordedAt, today));
 
-    res.json({
+    return res.json({
       isPatientView: false,
       totalPatients: Number(patientCount.count),
       activeAlerts: Number(activeAlertsCount.count),
@@ -156,7 +156,7 @@ router.get("/dashboard/stats", requireAuth, async (req, res) => {
     });
   } catch (err) {
     console.error("Dashboard stats error:", err);
-    res.status(500).json({ error: "Internal Server Error", message: "Failed to get dashboard stats" });
+    return res.status(500).json({ error: "Internal Server Error", message: "Failed to get dashboard stats" });
   }
 });
 

@@ -58,7 +58,7 @@ export default function Dashboard() {
   );
   const { data: patients, isLoading: patientsLoading } = useListPatients(
     {},
-    { query: { enabled: !isPatient }, request: withAuth() }
+    { query: { enabled: !isPatient } as any, request: withAuth() }
   );
 
   const isLoading = statsLoading || alertsLoading || (!isPatient && patientsLoading);
