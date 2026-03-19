@@ -1,0 +1,13 @@
+packages:
+  "recharts": "For rendering patient vitals history charts"
+  "framer-motion": "For page transitions and fluid micro-interactions"
+  "date-fns": "For formatting clinical dates and times"
+  "clsx": "For conditional class name joining"
+  "tailwind-merge": "For merging tailwind classes safely"
+  "lucide-react": "Icons for the dashboard"
+
+images: []
+
+notes:
+  - Token is stored in localStorage as 'rpm_token'
+  - The API client hooks are imported from @workspace/api-client-react

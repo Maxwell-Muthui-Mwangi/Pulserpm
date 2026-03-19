@@ -1,22 +1,35 @@
 openapi: 3.1.0
 info:
-  # Do not change the title, if the title changes, the import paths will be broken
   title: Api
-  version: 0.1.0
-  description: API specification
+  version: 1.0.0
+  description: Remote Patient Monitoring API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: auth
+    description: Authentication operations
+  - name: patients
+    description: Patient management
+  - name: providers
+    description: Provider management
+  - name: vitals
+    description: Vitals readings
+  - name: alerts
+    description: Alert management
+  - name: thresholds
+    description: Threshold configuration
+  - name: summary
+    description: Summary and analytics
+
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,7 +37,493 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /auth/login:
+    post:
+      operationId: login
+      tags: [auth]
+      summary: Login for providers and patients
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/me:
+    get:
+      operationId: getMe
+      tags: [auth]
+      summary: Get current user info
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthUser"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /providers:
+    get:
+      operationId: listProviders
+      tags: [providers]
+      summary: List all providers
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: List of providers
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Provider"
+    post:
+      operationId: createProvider
+      tags: [providers]
+      summary: Create a new provider
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateProviderRequest"
+      responses:
+        "201":
+          description: Provider created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Provider"
+
+  /patients:
+    get:
+      operationId: listPatients
+      tags: [patients]
+      summary: List patients (optionally filtered by provider)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: providerId
+          in: query
+          schema:
+            type: integer
+        - name: search
+          in: query
+          schema:
+            type: string
+        - name: riskLevel
+          in: query
+          schema:
+            type: string
+            enum: [normal, warning, critical]
+      responses:
+        "200":
+          description: List of patients
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PatientSummary"
+    post:
+      operationId: createPatient
+      tags: [patients]
+      summary: Create a new patient
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePatientRequest"
+      responses:
+        "201":
+          description: Patient created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Patient"
+
+  /patients/{patientId}:
+    get:
+      operationId: getPatient
+      tags: [patients]
+      summary: Get a patient by ID
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: patientId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Patient details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PatientDetail"
+        "404":
+          description: Patient not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      operationId: updatePatient
+      tags: [patients]
+      summary: Update a patient
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: patientId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdatePatientRequest"
+      responses:
+        "200":
+          description: Patient updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Patient"
+
+  /patients/{patientId}/vitals:
+    get:
+      operationId: getPatientVitals
+      tags: [vitals]
+      summary: Get vitals history for a patient
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: patientId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: period
+          in: query
+          schema:
+            type: string
+            enum: [day, week, month]
+            default: day
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 100
+      responses:
+        "200":
+          description: Vitals history
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/VitalsReading"
+    post:
+      operationId: ingestVitals
+      tags: [vitals]
+      summary: Ingest vitals data for a patient (from wearable or manual input)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: patientId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/IngestVitalsRequest"
+      responses:
+        "201":
+          description: Vitals ingested and alerts evaluated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IngestVitalsResponse"
+
+  /patients/{patientId}/vitals/latest:
+    get:
+      operationId: getLatestVitals
+      tags: [vitals]
+      summary: Get the most recent vitals for a patient
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: patientId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Latest vitals
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VitalsReading"
+        "404":
+          description: No vitals found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /patients/{patientId}/summary:
+    get:
+      operationId: getPatientSummary
+      tags: [summary]
+      summary: Get daily summary stats for a patient
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: patientId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Patient daily summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PatientDailySummary"
+
+  /patients/{patientId}/thresholds:
+    get:
+      operationId: getPatientThresholds
+      tags: [thresholds]
+      summary: Get alert thresholds for a patient
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: patientId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Threshold configuration
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VitalThresholds"
+    put:
+      operationId: updatePatientThresholds
+      tags: [thresholds]
+      summary: Update alert thresholds for a patient
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: patientId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateThresholdsRequest"
+      responses:
+        "200":
+          description: Thresholds updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VitalThresholds"
+
+  /patients/{patientId}/alerts:
+    get:
+      operationId: getPatientAlerts
+      tags: [alerts]
+      summary: Get alerts for a patient
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: patientId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [active, acknowledged, resolved]
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+      responses:
+        "200":
+          description: List of alerts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Alert"
+
+  /alerts:
+    get:
+      operationId: listAlerts
+      tags: [alerts]
+      summary: List all alerts across all patients
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [active, acknowledged, resolved]
+        - name: severity
+          in: query
+          schema:
+            type: string
+            enum: [warning, critical]
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+      responses:
+        "200":
+          description: List of alerts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AlertWithPatient"
+
+  /alerts/{alertId}/acknowledge:
+    post:
+      operationId: acknowledgeAlert
+      tags: [alerts]
+      summary: Acknowledge an alert
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: alertId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Alert acknowledged
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Alert"
+
+  /alerts/{alertId}/resolve:
+    post:
+      operationId: resolveAlert
+      tags: [alerts]
+      summary: Resolve an alert
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: alertId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Alert resolved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Alert"
+
+  /vitals/ingest-batch:
+    post:
+      operationId: ingestVitalsBatch
+      tags: [vitals]
+      summary: Batch ingest vitals for multiple patients (wearable sync)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BatchIngestRequest"
+      responses:
+        "200":
+          description: Batch processed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BatchIngestResponse"
+
+  /dashboard/stats:
+    get:
+      operationId: getDashboardStats
+      tags: [summary]
+      summary: Get aggregate stats for the provider dashboard
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Dashboard statistics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardStats"
+
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
   schemas:
     HealthStatus:
       type: object
@@ -34,3 +533,594 @@ components:
       required:
         - status
 
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+      required:
+        - error
+        - message
+
+    LoginRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+      required:
+        - email
+        - password
+
+    LoginResponse:
+      type: object
+      properties:
+        token:
+          type: string
+        user:
+          $ref: "#/components/schemas/AuthUser"
+      required:
+        - token
+        - user
+
+    AuthUser:
+      type: object
+      properties:
+        id:
+          type: integer
+        email:
+          type: string
+        name:
+          type: string
+        role:
+          type: string
+          enum: [provider, admin, patient]
+      required:
+        - id
+        - email
+        - name
+        - role
+
+    Provider:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        email:
+          type: string
+        specialty:
+          type: string
+        patientCount:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - name
+        - email
+        - patientCount
+        - createdAt
+
+    CreateProviderRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        email:
+          type: string
+        password:
+          type: string
+        specialty:
+          type: string
+      required:
+        - name
+        - email
+        - password
+
+    Patient:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        email:
+          type: string
+        dateOfBirth:
+          type: string
+          format: date
+        gender:
+          type: string
+          enum: [male, female, other]
+        conditions:
+          type: array
+          items:
+            type: string
+        providerId:
+          type: integer
+        deviceType:
+          type: string
+          enum: [apple_health, google_fit, fitbit, garmin, manual]
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - name
+        - email
+        - createdAt
+
+    PatientSummary:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        email:
+          type: string
+        age:
+          type: integer
+        conditions:
+          type: array
+          items:
+            type: string
+        riskLevel:
+          type: string
+          enum: [normal, warning, critical]
+        latestVitals:
+          $ref: "#/components/schemas/VitalsSnapshot"
+        activeAlertCount:
+          type: integer
+        lastSeen:
+          type: string
+          format: date-time
+      required:
+        - id
+        - name
+        - email
+        - riskLevel
+        - activeAlertCount
+
+    PatientDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        email:
+          type: string
+        dateOfBirth:
+          type: string
+          format: date
+        age:
+          type: integer
+        gender:
+          type: string
+        conditions:
+          type: array
+          items:
+            type: string
+        providerId:
+          type: integer
+        deviceType:
+          type: string
+        riskLevel:
+          type: string
+          enum: [normal, warning, critical]
+        latestVitals:
+          $ref: "#/components/schemas/VitalsSnapshot"
+        thresholds:
+          $ref: "#/components/schemas/VitalThresholds"
+        activeAlertCount:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - name
+        - email
+        - riskLevel
+        - activeAlertCount
+        - createdAt
+
+    CreatePatientRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        email:
+          type: string
+        password:
+          type: string
+        dateOfBirth:
+          type: string
+          format: date
+        gender:
+          type: string
+          enum: [male, female, other]
+        conditions:
+          type: array
+          items:
+            type: string
+        providerId:
+          type: integer
+        deviceType:
+          type: string
+          enum: [apple_health, google_fit, fitbit, garmin, manual]
+      required:
+        - name
+        - email
+        - password
+
+    UpdatePatientRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        email:
+          type: string
+        dateOfBirth:
+          type: string
+          format: date
+        gender:
+          type: string
+          enum: [male, female, other]
+        conditions:
+          type: array
+          items:
+            type: string
+        providerId:
+          type: integer
+        deviceType:
+          type: string
+          enum: [apple_health, google_fit, fitbit, garmin, manual]
+
+    VitalsReading:
+      type: object
+      properties:
+        id:
+          type: integer
+        patientId:
+          type: integer
+        heartRate:
+          type: number
+          description: BPM
+        systolicBp:
+          type: number
+          description: mmHg
+        diastolicBp:
+          type: number
+          description: mmHg
+        spo2:
+          type: number
+          description: Oxygen saturation percentage
+        caloriesBurned:
+          type: number
+        temperature:
+          type: number
+          description: Celsius
+        source:
+          type: string
+          enum: [apple_health, google_fit, fitbit, garmin, manual, simulated]
+        recordedAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - patientId
+        - recordedAt
+        - createdAt
+        - source
+
+    VitalsSnapshot:
+      type: object
+      properties:
+        heartRate:
+          type: number
+        systolicBp:
+          type: number
+        diastolicBp:
+          type: number
+        spo2:
+          type: number
+        caloriesBurned:
+          type: number
+        temperature:
+          type: number
+        recordedAt:
+          type: string
+          format: date-time
+
+    IngestVitalsRequest:
+      type: object
+      properties:
+        heartRate:
+          type: number
+        systolicBp:
+          type: number
+        diastolicBp:
+          type: number
+        spo2:
+          type: number
+        caloriesBurned:
+          type: number
+        temperature:
+          type: number
+        source:
+          type: string
+          enum: [apple_health, google_fit, fitbit, garmin, manual, simulated]
+        recordedAt:
+          type: string
+          format: date-time
+      required:
+        - source
+
+    IngestVitalsResponse:
+      type: object
+      properties:
+        vitals:
+          $ref: "#/components/schemas/VitalsReading"
+        alertsTriggered:
+          type: array
+          items:
+            $ref: "#/components/schemas/Alert"
+        riskLevel:
+          type: string
+          enum: [normal, warning, critical]
+      required:
+        - vitals
+        - alertsTriggered
+        - riskLevel
+
+    BatchIngestRequest:
+      type: object
+      properties:
+        readings:
+          type: array
+          items:
+            type: object
+            properties:
+              patientId:
+                type: integer
+              vitals:
+                $ref: "#/components/schemas/IngestVitalsRequest"
+            required:
+              - patientId
+              - vitals
+      required:
+        - readings
+
+    BatchIngestResponse:
+      type: object
+      properties:
+        processed:
+          type: integer
+        alertsTriggered:
+          type: integer
+        errors:
+          type: array
+          items:
+            type: string
+      required:
+        - processed
+        - alertsTriggered
+        - errors
+
+    Alert:
+      type: object
+      properties:
+        id:
+          type: integer
+        patientId:
+          type: integer
+        vitalType:
+          type: string
+          enum: [heart_rate, blood_pressure, spo2, temperature]
+        severity:
+          type: string
+          enum: [warning, critical]
+        message:
+          type: string
+        value:
+          type: number
+        threshold:
+          type: number
+        status:
+          type: string
+          enum: [active, acknowledged, resolved]
+        suggestedAction:
+          type: string
+        triggeredAt:
+          type: string
+          format: date-time
+        acknowledgedAt:
+          type: string
+          format: date-time
+        resolvedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - patientId
+        - vitalType
+        - severity
+        - message
+        - status
+        - triggeredAt
+
+    AlertWithPatient:
+      allOf:
+        - $ref: "#/components/schemas/Alert"
+        - type: object
+          properties:
+            patientName:
+              type: string
+            patientEmail:
+              type: string
+          required:
+            - patientName
+            - patientEmail
+
+    VitalThresholds:
+      type: object
+      properties:
+        patientId:
+          type: integer
+        heartRateMin:
+          type: number
+          default: 50
+        heartRateMax:
+          type: number
+          default: 100
+        heartRateCriticalMin:
+          type: number
+          default: 40
+        heartRateCriticalMax:
+          type: number
+          default: 120
+        systolicBpMin:
+          type: number
+          default: 90
+        systolicBpMax:
+          type: number
+          default: 140
+        systolicBpCriticalMin:
+          type: number
+          default: 80
+        systolicBpCriticalMax:
+          type: number
+          default: 180
+        diastolicBpMin:
+          type: number
+          default: 60
+        diastolicBpMax:
+          type: number
+          default: 90
+        diastolicBpCriticalMax:
+          type: number
+          default: 120
+        spo2Min:
+          type: number
+          default: 95
+        spo2CriticalMin:
+          type: number
+          default: 90
+        temperatureMin:
+          type: number
+          default: 36.0
+        temperatureMax:
+          type: number
+          default: 37.5
+        temperatureCriticalMax:
+          type: number
+          default: 39.0
+      required:
+        - patientId
+
+    UpdateThresholdsRequest:
+      type: object
+      properties:
+        heartRateMin:
+          type: number
+        heartRateMax:
+          type: number
+        heartRateCriticalMin:
+          type: number
+        heartRateCriticalMax:
+          type: number
+        systolicBpMin:
+          type: number
+        systolicBpMax:
+          type: number
+        systolicBpCriticalMin:
+          type: number
+        systolicBpCriticalMax:
+          type: number
+        diastolicBpMin:
+          type: number
+        diastolicBpMax:
+          type: number
+        diastolicBpCriticalMax:
+          type: number
+        spo2Min:
+          type: number
+        spo2CriticalMin:
+          type: number
+        temperatureMin:
+          type: number
+        temperatureMax:
+          type: number
+        temperatureCriticalMax:
+          type: number
+
+    PatientDailySummary:
+      type: object
+      properties:
+        patientId:
+          type: integer
+        date:
+          type: string
+          format: date
+        avgHeartRate:
+          type: number
+        minHeartRate:
+          type: number
+        maxHeartRate:
+          type: number
+        avgSystolicBp:
+          type: number
+        avgDiastolicBp:
+          type: number
+        avgSpo2:
+          type: number
+        totalCalories:
+          type: number
+        readingsCount:
+          type: integer
+        alertsCount:
+          type: integer
+        riskLevel:
+          type: string
+          enum: [normal, warning, critical]
+      required:
+        - patientId
+        - date
+        - readingsCount
+        - alertsCount
+        - riskLevel
+
+    DashboardStats:
+      type: object
+      properties:
+        totalPatients:
+          type: integer
+        activeAlerts:
+          type: integer
+        criticalPatients:
+          type: integer
+        warningPatients:
+          type: integer
+        normalPatients:
+          type: integer
+        todaysReadings:
+          type: integer
+      required:
+        - totalPatients
+        - activeAlerts
+        - criticalPatients
+        - warningPatients
+        - normalPatients
+        - todaysReadings
