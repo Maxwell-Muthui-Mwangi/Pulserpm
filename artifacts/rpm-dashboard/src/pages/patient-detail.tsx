@@ -147,13 +147,17 @@ export default function PatientDetail() {
   if (pLoading) return <Layout><div className="flex justify-center py-20"><Loader2 className="animate-spin text-primary h-8 w-8" /></div></Layout>;
   if (!patient) return <Layout><div className="text-center py-20">Patient not found</div></Layout>;
 
-  const chartData = vitals?.map(v => ({
-    time: format(new Date(v.recordedAt), period === 'day' ? 'HH:mm' : 'MMM dd'),
-    hr: v.heartRate,
-    sys: v.systolicBp,
-    dia: v.diastolicBp,
-    spo2: v.spo2
-  })).reverse() || [];
+  const chartData = vitals?.map(v => {
+    const date = v.recordedAt ? new Date(v.recordedAt) : null;
+    const isValid = date && !isNaN(date.getTime());
+    return {
+      time: isValid ? format(date!, period === 'day' ? 'HH:mm' : 'MMM dd') : '—',
+      hr: v.heartRate,
+      sys: v.systolicBp,
+      dia: v.diastolicBp,
+      spo2: v.spo2
+    };
+  }).reverse() || [];
 
   const ingestUrl = `${window.location.origin}${API_BASE}/api/device/ingest`;
 
@@ -299,7 +303,7 @@ export default function PatientDetail() {
                           <Badge variant={alert.severity === 'critical' ? 'critical' : 'amber'} className="capitalize">
                             {isPatient && alert.severity === 'warning' ? 'average' : alert.severity}
                           </Badge>
-                          <span className="text-xs text-muted-foreground">{format(new Date(alert.triggeredAt), 'h:mm a')}</span>
+                          <span className="text-xs text-muted-foreground">{alert.triggeredAt && !isNaN(new Date(alert.triggeredAt).getTime()) ? format(new Date(alert.triggeredAt), 'h:mm a') : '—'}</span>
                         </div>
                         <p className="font-medium text-sm text-foreground">{alert.message}</p>
                         <p className="text-xs text-muted-foreground mt-1 mb-3">Value: <span className="font-semibold text-foreground">{alert.value}</span> (Threshold: {alert.threshold})</p>

@@ -213,7 +213,7 @@ export default function Dashboard() {
                               {alert.severity === 'warning' ? 'average' : alert.severity}
                             </Badge>
                             <span className="text-xs text-muted-foreground">
-                              {format(new Date(alert.triggeredAt), 'MMM d, h:mm a')}
+                              {alert.triggeredAt && !isNaN(new Date(alert.triggeredAt).getTime()) ? format(new Date(alert.triggeredAt), 'MMM d, h:mm a') : '—'}
                             </span>
                           </div>
                         </div>
@@ -389,7 +389,7 @@ export default function Dashboard() {
                               {alert.severity}
                             </Badge>
                             <span className="text-xs text-muted-foreground">
-                              {format(new Date(alert.triggeredAt), 'MMM d, h:mm a')}
+                              {alert.triggeredAt && !isNaN(new Date(alert.triggeredAt).getTime()) ? format(new Date(alert.triggeredAt), 'MMM d, h:mm a') : '—'}
                             </span>
                           </div>
                         </div>

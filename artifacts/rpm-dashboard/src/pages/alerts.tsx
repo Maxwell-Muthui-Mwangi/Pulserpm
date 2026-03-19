@@ -107,7 +107,7 @@ export default function Alerts() {
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-muted-foreground">
-                        {format(new Date(alert.triggeredAt), 'MMM dd, h:mm a')}
+                        {alert.triggeredAt && !isNaN(new Date(alert.triggeredAt).getTime()) ? format(new Date(alert.triggeredAt), 'MMM dd, h:mm a') : '—'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right">
                         {isPatient ? (
