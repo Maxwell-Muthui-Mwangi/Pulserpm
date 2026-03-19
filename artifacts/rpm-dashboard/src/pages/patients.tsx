@@ -1,8 +1,9 @@
-import { useState } from "react";
-import { Link } from "wouter";
-import { Search, Filter, Activity, Heart, Thermometer, Droplets } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Link, useLocation } from "wouter";
+import { Search, Filter, Activity, Heart, Thermometer, Droplets, Users } from "lucide-react";
 import { useListPatients, ListPatientsRiskLevel } from "@workspace/api-client-react";
 import { withAuth } from "@/lib/utils";
+import { useAuth } from "@/lib/auth-context";
 import Layout from "@/components/layout";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -13,13 +14,22 @@ import { formatDistanceToNow } from "date-fns";
 export default function Patients() {
   const [search, setSearch] = useState("");
   const [riskFilter, setRiskFilter] = useState<ListPatientsRiskLevel | "all">("all");
+  const { isPatient, user } = useAuth();
+  const [, setLocation] = useLocation();
+
+  // Patients should go directly to their own profile
+  useEffect(() => {
+    if (isPatient && user) {
+      setLocation(`/patients/${user.id}`);
+    }
+  }, [isPatient, user, setLocation]);
 
   const { data: patients, isLoading } = useListPatients(
     { 
       search: search || undefined, 
       riskLevel: riskFilter !== "all" ? riskFilter : undefined 
     }, 
-    { request: withAuth() }
+    { request: withAuth(), query: { queryKey: [], enabled: !isPatient } as any }
   );
 
   const getRiskBadge = (level: string) => {
@@ -29,6 +39,16 @@ export default function Patients() {
       default: return <Badge variant="normal">Normal</Badge>;
     }
   };
+
+  if (isPatient) {
+    return (
+      <Layout>
+        <div className="flex justify-center py-20">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        </div>
+      </Layout>
+    );
+  }
 
   return (
     <Layout>

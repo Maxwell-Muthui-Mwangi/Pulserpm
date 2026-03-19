@@ -1,8 +1,8 @@
-# Remote Patient Monitoring (RPM) System
+# Remote Patient Monitoring (RPM) System — PulseRPM
 
 ## Overview
 
-A full-stack Remote Patient Monitoring platform for healthcare providers. Monitors elderly patients with chronic conditions via wearable device data integration, real-time vitals tracking, and automated alert generation.
+A full-stack Remote Patient Monitoring platform with role-based access control for both healthcare providers and patients. Monitors elderly patients with chronic conditions via wearable device data integration, real-time vitals tracking, and automated alert generation.
 
 ## Stack
 
@@ -16,6 +16,38 @@ A full-stack Remote Patient Monitoring platform for healthcare providers. Monito
 - **API codegen**: Orval (from OpenAPI spec)
 - **Build**: esbuild (CJS bundle)
 - **Frontend**: React + Vite + Tailwind CSS + Recharts + Framer Motion
+
+## Role-Based Access
+
+### Provider view
+- Full patient list, dashboard overview, alert management, threshold configuration
+- Can acknowledge/resolve alerts, view all patients
+
+### Patient view
+- Only see their own data (enforced at API level — 403 on cross-patient access)
+- Dashboard: "Your Status" with Critical/Average/Good levels
+- Profile: own vitals, history charts, alerts (read-only)
+- "Connect Device" tab: API key management + integration instructions
+- Sidebar shows: My Dashboard, My Profile, My Alerts
+
+## Device & Wearable Integration
+
+### Device API Key system (`/api/device/`)
+- `POST /api/device/generate-key` — patient generates a UUID API key
+- `GET /api/device/key` — fetch current key
+- `DELETE /api/device/key` — revoke key
+
+### Data Ingest endpoint (no JWT required)
+- `POST /api/device/ingest` with `X-Device-Api-Key` header
+- Accepts multiple formats: standard, Apple Health (Shortcuts), Fitbit, Google Fit, generic REST
+- Runs alert engine on each reading
+- Response: `{ success, vitalsId, patientId, alertsTriggered }`
+
+### Supported payload formats
+Standard: `{ heartRate, systolicBp, diastolicBp, spo2, temperature, caloriesBurned, recordedAt }`
+Apple Health: `{ HeartRate, BloodPressureSystolic, BloodPressureDiastolic, OxygenSaturation, BodyTemperature, StartDate }`
+Fitbit: `{ heart: { restingHeartRate }, spo2: { value } }`
+Google Fit: `{ heartRate: { bpm }, bloodPressure: { systolic, diastolic }, oxygen: { saturation } }`
 
 ## Structure
 

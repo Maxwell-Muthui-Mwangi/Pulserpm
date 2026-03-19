@@ -7,6 +7,7 @@ import vitalsRouter from "./vitals.js";
 import alertsRouter from "./alerts.js";
 import thresholdsRouter from "./thresholds.js";
 import summaryRouter from "./summary.js";
+import deviceRouter from "./device.js";
 
 const router: IRouter = Router();
 
@@ -18,5 +19,6 @@ router.use(vitalsRouter);
 router.use(alertsRouter);
 router.use(thresholdsRouter);
 router.use(summaryRouter);
+router.use(deviceRouter);
 
 export default router;

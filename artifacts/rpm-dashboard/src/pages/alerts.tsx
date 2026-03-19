@@ -1,6 +1,7 @@
 import { useState } from "react";
 import Layout from "@/components/layout";
 import { useListAlerts, useAcknowledgeAlert, useResolveAlert, ListAlertsStatus } from "@workspace/api-client-react";
+import { useAuth } from "@/lib/auth-context";
 import { withAuth } from "@/lib/utils";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -32,12 +33,20 @@ export default function Alerts() {
     });
   };
 
+  const { isPatient } = useAuth();
+
   return (
     <Layout>
       <div className="space-y-6">
         <div>
-          <h1 className="text-3xl font-display font-bold text-foreground">System Alerts</h1>
-          <p className="text-muted-foreground mt-1">Review and manage clinical alerts across all patients.</p>
+          <h1 className="text-3xl font-display font-bold text-foreground">
+            {isPatient ? "My Alerts" : "System Alerts"}
+          </h1>
+          <p className="text-muted-foreground mt-1">
+            {isPatient 
+              ? "Your personal health alerts and notifications." 
+              : "Review and manage clinical alerts across all patients."}
+          </p>
         </div>
 
         {/* Filters */}
@@ -64,7 +73,7 @@ export default function Alerts() {
               <thead className="text-xs text-muted-foreground uppercase bg-muted/50 border-b border-border/50">
                 <tr>
                   <th className="px-6 py-4 font-medium">Severity</th>
-                  <th className="px-6 py-4 font-medium">Patient</th>
+                  {!isPatient && <th className="px-6 py-4 font-medium">Patient</th>}
                   <th className="px-6 py-4 font-medium">Alert Details</th>
                   <th className="px-6 py-4 font-medium">Time</th>
                   <th className="px-6 py-4 font-medium text-right">Actions</th>
@@ -73,7 +82,7 @@ export default function Alerts() {
               <tbody>
                 {isLoading ? (
                   <tr>
-                    <td colSpan={5} className="px-6 py-20 text-center">
+                    <td colSpan={isPatient ? 4 : 5} className="px-6 py-20 text-center">
                       <Loader2 className="animate-spin h-6 w-6 text-primary mx-auto" />
                     </td>
                   </tr>
@@ -82,13 +91,15 @@ export default function Alerts() {
                     <tr key={alert.id} className="border-b border-border/50 hover:bg-muted/20 transition-colors">
                       <td className="px-6 py-4 whitespace-nowrap">
                         <Badge variant={alert.severity === 'critical' ? 'critical' : 'amber'} className="capitalize">
-                          {alert.severity}
+                          {isPatient && alert.severity === 'warning' ? 'average' : alert.severity}
                         </Badge>
                       </td>
-                      <td className="px-6 py-4">
-                        <div className="font-medium text-foreground">{alert.patientName}</div>
-                        <div className="text-xs text-muted-foreground">ID: #{alert.patientId}</div>
-                      </td>
+                      {!isPatient && (
+                        <td className="px-6 py-4">
+                          <div className="font-medium text-foreground">{alert.patientName}</div>
+                          <div className="text-xs text-muted-foreground">ID: #{alert.patientId}</div>
+                        </td>
+                      )}
                       <td className="px-6 py-4">
                         <div className="font-medium text-foreground">{alert.message}</div>
                         <div className="text-xs text-muted-foreground mt-0.5">
@@ -99,7 +110,9 @@ export default function Alerts() {
                         {format(new Date(alert.triggeredAt), 'MMM dd, h:mm a')}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right">
-                        {statusFilter === 'active' ? (
+                        {isPatient ? (
+                          <span className="text-xs text-muted-foreground capitalize">{alert.status}</span>
+                        ) : statusFilter === 'active' ? (
                           <div className="flex justify-end space-x-2">
                             <Button size="sm" variant="outline" onClick={() => handleAction('ack', alert.id)}>
                               Acknowledge
@@ -130,7 +143,7 @@ export default function Alerts() {
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={5} className="px-6 py-16 text-center text-muted-foreground">
+                    <td colSpan={isPatient ? 4 : 5} className="px-6 py-16 text-center text-muted-foreground">
                       <div className="flex flex-col items-center">
                         <CheckCircle2 className="h-10 w-10 text-success opacity-50 mb-3" />
                         <p>No {statusFilter} alerts found.</p>

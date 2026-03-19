@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRoute } from "wouter";
 import Layout from "@/components/layout";
 import { 
@@ -10,7 +10,8 @@ import {
   useAcknowledgeAlert,
   useResolveAlert
 } from "@workspace/api-client-react";
-import { withAuth } from "@/lib/utils";
+import { withAuth, getAuthToken } from "@/lib/utils";
+import { useAuth } from "@/lib/auth-context";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -18,28 +19,106 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
-import { Heart, Activity, Droplets, Thermometer, ArrowLeft, Settings, Bell, CheckCircle2, XCircle, Loader2 } from "lucide-react";
+import { 
+  Heart, Activity, Droplets, Thermometer, ArrowLeft, Settings, Bell, 
+  CheckCircle2, XCircle, Loader2, Smartphone, Copy, RefreshCw, Trash2,
+  Wifi, Apple, Watch
+} from "lucide-react";
 import { Link } from "wouter";
 import { 
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, ReferenceLine 
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, 
+  ResponsiveContainer, ReferenceLine 
 } from "recharts";
+
+const API_BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 export default function PatientDetail() {
   const [, params] = useRoute("/patients/:id");
   const patientId = parseInt(params?.id || "0", 10);
   const { toast } = useToast();
+  const { isPatient } = useAuth();
   
-  const [activeTab, setActiveTab] = useState<"overview" | "charts" | "thresholds">("overview");
+  const defaultTab = isPatient ? "overview" : "overview";
+  const [activeTab, setActiveTab] = useState<"overview" | "charts" | "thresholds" | "device">(defaultTab);
   const [period, setPeriod] = useState<"day" | "week" | "month">("day");
 
-  const { data: patient, isLoading: pLoading } = useGetPatient(patientId, { request: withAuth(), query: { enabled: !!patientId } });
-  const { data: vitals, isLoading: vLoading } = useGetPatientVitals(patientId, { period, limit: 100 }, { request: withAuth(), query: { enabled: !!patientId && activeTab === "charts" } });
-  const { data: alerts, refetch: refetchAlerts } = useGetPatientAlerts(patientId, { status: "active" }, { request: withAuth(), query: { enabled: !!patientId } });
-  const { data: thresholds } = useGetPatientThresholds(patientId, { request: withAuth(), query: { enabled: !!patientId && activeTab === "thresholds" } });
+  const [deviceApiKey, setDeviceApiKey] = useState<string | null>(null);
+  const [deviceLoading, setDeviceLoading] = useState(false);
+  const [keyCopied, setKeyCopied] = useState(false);
+
+  const { data: patient, isLoading: pLoading } = useGetPatient(patientId, { request: withAuth(), query: { queryKey: [], enabled: !!patientId } as any });
+  const { data: vitals, isLoading: vLoading } = useGetPatientVitals(patientId, { period, limit: 100 }, { request: withAuth(), query: { queryKey: [], enabled: !!patientId && activeTab === "charts" } as any });
+  const { data: alerts, refetch: refetchAlerts } = useGetPatientAlerts(patientId, { status: "active" }, { request: withAuth(), query: { queryKey: [], enabled: !!patientId } as any });
+  const { data: thresholds } = useGetPatientThresholds(patientId, { request: withAuth(), query: { queryKey: [], enabled: !!patientId && activeTab === "thresholds" } as any });
   
   const updateThresholds = useUpdatePatientThresholds();
   const ackAlert = useAcknowledgeAlert();
   const resAlert = useResolveAlert();
+
+  const fetchDeviceKey = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/device/key`, {
+        headers: { Authorization: `Bearer ${getAuthToken()}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setDeviceApiKey(data.apiKey || null);
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === "device" && isPatient) {
+      fetchDeviceKey();
+    }
+  }, [activeTab, isPatient, fetchDeviceKey]);
+
+  const handleGenerateKey = async () => {
+    setDeviceLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/device/generate-key`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${getAuthToken()}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setDeviceApiKey(data.apiKey);
+        toast({ title: "Device key generated", description: "Your new API key is ready to use." });
+      }
+    } catch {
+      toast({ title: "Failed to generate key", variant: "destructive" });
+    } finally {
+      setDeviceLoading(false);
+    }
+  };
+
+  const handleRevokeKey = async () => {
+    setDeviceLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/device/key`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${getAuthToken()}` }
+      });
+      if (res.ok) {
+        setDeviceApiKey(null);
+        toast({ title: "Device key revoked" });
+      }
+    } catch {
+      toast({ title: "Failed to revoke key", variant: "destructive" });
+    } finally {
+      setDeviceLoading(false);
+    }
+  };
+
+  const handleCopyKey = () => {
+    if (deviceApiKey) {
+      navigator.clipboard.writeText(deviceApiKey);
+      setKeyCopied(true);
+      setTimeout(() => setKeyCopied(false), 2000);
+    }
+  };
 
   const handleAction = (action: 'ack' | 'resolve', alertId: number) => {
     const mutation = action === 'ack' ? ackAlert : resAlert;
@@ -76,54 +155,65 @@ export default function PatientDetail() {
     spo2: v.spo2
   })).reverse() || [];
 
+  const ingestUrl = `${window.location.origin}${API_BASE}/api/device/ingest`;
+
   return (
     <Layout>
       <div className="space-y-6">
         {/* Header Section */}
         <div className="flex items-center space-x-4 mb-2">
           <Button variant="ghost" size="icon" asChild className="rounded-full">
-            <Link href="/patients"><ArrowLeft className="h-5 w-5" /></Link>
+            <Link href={isPatient ? "/" : "/patients"}><ArrowLeft className="h-5 w-5" /></Link>
           </Button>
           <div>
             <h1 className="text-3xl font-display font-bold text-foreground flex items-center">
-              {patient.name}
+              {isPatient ? "My Health Profile" : patient.name}
               {patient.riskLevel === 'critical' && <Badge variant="critical" className="ml-3">Critical</Badge>}
-              {patient.riskLevel === 'warning' && <Badge variant="amber" className="ml-3">Warning</Badge>}
-              {patient.riskLevel === 'normal' && <Badge variant="normal" className="ml-3">Normal</Badge>}
+              {patient.riskLevel === 'warning' && <Badge variant="amber" className="ml-3">{isPatient ? "Average" : "Warning"}</Badge>}
+              {patient.riskLevel === 'normal' && <Badge variant="normal" className="ml-3">{isPatient ? "Good" : "Normal"}</Badge>}
             </h1>
             <p className="text-muted-foreground text-sm flex items-center mt-1">
-              ID: {patient.id} • {patient.gender} • {patient.age} yrs • DOB: {patient.dateOfBirth} 
+              {isPatient ? patient.email : `ID: ${patient.id} • ${patient.gender} • ${patient.age} yrs • DOB: ${patient.dateOfBirth}`}
             </p>
           </div>
         </div>
 
         {/* Tab Navigation */}
-        <div className="flex border-b border-border/50">
+        <div className="flex border-b border-border/50 overflow-x-auto">
           <button 
             onClick={() => setActiveTab("overview")}
-            className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === "overview" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+            className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === "overview" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
           >
-            Overview
+            {isPatient ? "My Vitals" : "Overview"}
           </button>
           <button 
             onClick={() => setActiveTab("charts")}
-            className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === "charts" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+            className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === "charts" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
           >
             Vitals History
           </button>
-          <button 
-            onClick={() => setActiveTab("thresholds")}
-            className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === "thresholds" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
-          >
-            Alert Thresholds
-          </button>
+          {!isPatient && (
+            <button 
+              onClick={() => setActiveTab("thresholds")}
+              className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === "thresholds" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+            >
+              Alert Thresholds
+            </button>
+          )}
+          {isPatient && (
+            <button 
+              onClick={() => setActiveTab("device")}
+              className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap flex items-center gap-1.5 ${activeTab === "device" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+            >
+              <Smartphone className="h-4 w-4" /> Connect Device
+            </button>
+          )}
         </div>
 
-        {/* Content based on active tab */}
+        {/* Overview Tab */}
         {activeTab === "overview" && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-2 space-y-6">
-              {/* Latest Vitals */}
               <h3 className="font-display font-bold text-lg text-foreground">Latest Readings</h3>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <Card className="border-border/50 shadow-sm bg-gradient-to-br from-card to-card">
@@ -156,21 +246,28 @@ export default function PatientDetail() {
                 </Card>
               </div>
 
-              {/* Patient Info Card */}
               <Card className="border-border/50 shadow-sm">
                 <CardHeader>
                   <CardTitle className="text-lg">Medical Profile</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="grid grid-cols-2 gap-4">
+                    {!isPatient && (
+                      <div>
+                        <p className="text-sm text-muted-foreground">Email</p>
+                        <p className="font-medium">{patient.email}</p>
+                      </div>
+                    )}
                     <div>
-                      <p className="text-sm text-muted-foreground">Email</p>
-                      <p className="font-medium">{patient.email}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">Device Integration</p>
+                      <p className="text-sm text-muted-foreground">Device</p>
                       <p className="font-medium capitalize">{patient.deviceType?.replace('_', ' ') || 'None'}</p>
                     </div>
+                    {isPatient && (
+                      <div>
+                        <p className="text-sm text-muted-foreground">Age</p>
+                        <p className="font-medium">{patient.age} years old</p>
+                      </div>
+                    )}
                     <div className="col-span-2">
                       <p className="text-sm text-muted-foreground mb-1">Conditions</p>
                       <div className="flex gap-2 flex-wrap">
@@ -187,7 +284,7 @@ export default function PatientDetail() {
             {/* Active Alerts Sidebar */}
             <div className="lg:col-span-1 space-y-4">
               <h3 className="font-display font-bold text-lg text-foreground flex items-center">
-                <Bell className="h-5 w-5 mr-2 text-destructive" /> Active Alerts
+                <Bell className="h-5 w-5 mr-2 text-destructive" /> {isPatient ? "My Active Alerts" : "Active Alerts"}
                 {alerts && alerts.length > 0 && (
                   <Badge variant="destructive" className="ml-auto rounded-full w-6 h-6 p-0 flex items-center justify-center">{alerts.length}</Badge>
                 )}
@@ -199,20 +296,24 @@ export default function PatientDetail() {
                     <Card key={alert.id} className={`border ${alert.severity === 'critical' ? 'border-destructive/50 bg-destructive/5' : 'border-warning/50 bg-warning/5'} shadow-sm`}>
                       <CardContent className="p-4">
                         <div className="flex justify-between items-start mb-2">
-                          <Badge variant={alert.severity === 'critical' ? 'critical' : 'amber'} className="capitalize">{alert.severity}</Badge>
+                          <Badge variant={alert.severity === 'critical' ? 'critical' : 'amber'} className="capitalize">
+                            {isPatient && alert.severity === 'warning' ? 'average' : alert.severity}
+                          </Badge>
                           <span className="text-xs text-muted-foreground">{format(new Date(alert.triggeredAt), 'h:mm a')}</span>
                         </div>
                         <p className="font-medium text-sm text-foreground">{alert.message}</p>
                         <p className="text-xs text-muted-foreground mt-1 mb-3">Value: <span className="font-semibold text-foreground">{alert.value}</span> (Threshold: {alert.threshold})</p>
                         
-                        <div className="flex space-x-2">
-                          <Button size="sm" variant="outline" className="flex-1 text-xs h-8" onClick={() => handleAction('ack', alert.id)}>
-                            <CheckCircle2 className="h-3 w-3 mr-1" /> Ack
-                          </Button>
-                          <Button size="sm" variant="default" className="flex-1 text-xs h-8 bg-success hover:bg-success/80 text-white" onClick={() => handleAction('resolve', alert.id)}>
-                            <XCircle className="h-3 w-3 mr-1" /> Resolve
-                          </Button>
-                        </div>
+                        {!isPatient && (
+                          <div className="flex space-x-2">
+                            <Button size="sm" variant="outline" className="flex-1 text-xs h-8" onClick={() => handleAction('ack', alert.id)}>
+                              <CheckCircle2 className="h-3 w-3 mr-1" /> Ack
+                            </Button>
+                            <Button size="sm" variant="default" className="flex-1 text-xs h-8 bg-success hover:bg-success/80 text-white" onClick={() => handleAction('resolve', alert.id)}>
+                              <XCircle className="h-3 w-3 mr-1" /> Resolve
+                            </Button>
+                          </div>
+                        )}
                       </CardContent>
                     </Card>
                   ))}
@@ -221,13 +322,14 @@ export default function PatientDetail() {
                 <div className="p-6 text-center border border-border/50 border-dashed rounded-xl bg-card">
                   <CheckCircle2 className="h-10 w-10 text-success mx-auto mb-2 opacity-50" />
                   <p className="text-sm font-medium text-foreground">No active alerts</p>
-                  <p className="text-xs text-muted-foreground">Patient is currently stable.</p>
+                  <p className="text-xs text-muted-foreground">{isPatient ? "You're looking good!" : "Patient is currently stable."}</p>
                 </div>
               )}
             </div>
           </div>
         )}
 
+        {/* Charts Tab */}
         {activeTab === "charts" && (
           <div className="space-y-6">
             <div className="flex justify-end space-x-2">
@@ -256,9 +358,7 @@ export default function PatientDetail() {
                         <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
                         <XAxis dataKey="time" stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} />
                         <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} />
-                        <RechartsTooltip 
-                          contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                        />
+                        <RechartsTooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
                         {thresholds?.heartRateMax && <ReferenceLine y={thresholds.heartRateMax} stroke="hsl(var(--warning))" strokeDasharray="3 3" />}
                         {thresholds?.heartRateCriticalMax && <ReferenceLine y={thresholds.heartRateCriticalMax} stroke="hsl(var(--destructive))" strokeDasharray="3 3" />}
                         <Line type="monotone" dataKey="hr" stroke="#f43f5e" strokeWidth={2} dot={{r: 3, fill: '#f43f5e', strokeWidth: 0}} activeDot={{r: 5}} />
@@ -289,7 +389,8 @@ export default function PatientDetail() {
           </div>
         )}
 
-        {activeTab === "thresholds" && (
+        {/* Alert Thresholds Tab (providers only) */}
+        {activeTab === "thresholds" && !isPatient && (
           <Card className="max-w-3xl border-border/50 shadow-sm">
             <CardHeader>
               <CardTitle className="flex items-center"><Settings className="mr-2 w-5 h-5 text-muted-foreground" /> Alert Configuration</CardTitle>
@@ -297,8 +398,6 @@ export default function PatientDetail() {
             </CardHeader>
             <CardContent>
               <form onSubmit={handleThresholdSubmit} className="space-y-8">
-                
-                {/* Heart Rate Section */}
                 <div>
                   <h4 className="font-medium text-foreground mb-4 border-b pb-2 flex items-center">
                     <Heart className="w-4 h-4 mr-2 text-rose-500" /> Heart Rate (bpm)
@@ -323,7 +422,6 @@ export default function PatientDetail() {
                   </div>
                 </div>
 
-                {/* Blood Pressure */}
                 <div>
                   <h4 className="font-medium text-foreground mb-4 border-b pb-2 flex items-center">
                     <Activity className="w-4 h-4 mr-2 text-blue-500" /> Blood Pressure (mmHg)
@@ -357,6 +455,142 @@ export default function PatientDetail() {
               </form>
             </CardContent>
           </Card>
+        )}
+
+        {/* Connect Device Tab (patients only) */}
+        {activeTab === "device" && isPatient && (
+          <div className="space-y-6 max-w-3xl">
+            {/* API Key Card */}
+            <Card className="border-border/50 shadow-sm">
+              <CardHeader>
+                <CardTitle className="flex items-center text-lg">
+                  <Wifi className="mr-2 h-5 w-5 text-primary" /> Your Device API Key
+                </CardTitle>
+                <CardDescription>
+                  Use this key to send health data from your wearable device or smartphone app directly into PulseRPM.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {deviceApiKey ? (
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2">
+                      <code className="flex-1 bg-muted rounded-lg px-3 py-2.5 text-sm font-mono text-foreground break-all border border-border/50">
+                        {deviceApiKey}
+                      </code>
+                      <Button variant="outline" size="icon" onClick={handleCopyKey} className="shrink-0">
+                        {keyCopied ? <CheckCircle2 className="h-4 w-4 text-success" /> : <Copy className="h-4 w-4" />}
+                      </Button>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button variant="outline" size="sm" onClick={handleGenerateKey} disabled={deviceLoading} className="gap-1.5">
+                        <RefreshCw className={`h-4 w-4 ${deviceLoading ? 'animate-spin' : ''}`} /> Regenerate Key
+                      </Button>
+                      <Button variant="ghost" size="sm" onClick={handleRevokeKey} disabled={deviceLoading} className="gap-1.5 text-destructive hover:bg-destructive/10 hover:text-destructive">
+                        <Trash2 className="h-4 w-4" /> Revoke Key
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center py-6 border border-dashed rounded-xl border-border/50">
+                    <Smartphone className="h-10 w-10 text-muted-foreground/50 mx-auto mb-3" />
+                    <p className="text-sm text-muted-foreground mb-4">No device key yet. Generate one to connect your wearable.</p>
+                    <Button onClick={handleGenerateKey} disabled={deviceLoading}>
+                      {deviceLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                      Generate Device Key
+                    </Button>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Integration Instructions */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Apple Health */}
+              <Card className="border-border/50 shadow-sm">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Apple className="h-4 w-4" /> Apple Health / iPhone
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="text-sm text-muted-foreground space-y-2">
+                  <p>Use the <strong>iOS Shortcuts</strong> app to send data automatically:</p>
+                  <ol className="list-decimal list-inside space-y-1.5 text-xs">
+                    <li>Open Shortcuts → New Shortcut</li>
+                    <li>Add action: <em>"Get Health Samples"</em> (Heart Rate, Blood Pressure, etc.)</li>
+                    <li>Add action: <em>"Get Contents of URL"</em></li>
+                    <li>Set URL to the endpoint below</li>
+                    <li>Method: POST, Body: JSON with your vitals</li>
+                    <li>Add <code>X-Device-Api-Key</code> header with your key</li>
+                    <li>Set as automation to run every hour</li>
+                  </ol>
+                  <div className="mt-3 p-2 bg-muted rounded text-xs font-mono break-all">{ingestUrl}</div>
+                </CardContent>
+              </Card>
+
+              {/* Android / Google Fit */}
+              <Card className="border-border/50 shadow-sm">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Smartphone className="h-4 w-4" /> Android / Google Fit
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="text-sm text-muted-foreground space-y-2">
+                  <p>Use <strong>Tasker</strong> or <strong>Automate</strong> to send Google Fit data:</p>
+                  <ol className="list-decimal list-inside space-y-1.5 text-xs">
+                    <li>Install Tasker + Google Fit plugin</li>
+                    <li>Create a task triggered hourly</li>
+                    <li>Action: HTTP POST to endpoint below</li>
+                    <li>Add header: <code>X-Device-Api-Key: your-key</code></li>
+                    <li>Body: JSON with heartRate, systolicBp, spo2</li>
+                  </ol>
+                  <div className="mt-3 p-2 bg-muted rounded text-xs font-mono break-all">{ingestUrl}</div>
+                </CardContent>
+              </Card>
+
+              {/* Wearables */}
+              <Card className="border-border/50 shadow-sm">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Watch className="h-4 w-4" /> Smartwatch / Wearable
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="text-sm text-muted-foreground space-y-2">
+                  <p>Any device that can make HTTP requests (Garmin, Fitbit, Samsung Health) can push directly:</p>
+                  <div className="bg-muted rounded-lg p-2 text-xs font-mono space-y-1">
+                    <div className="text-primary">POST {ingestUrl}</div>
+                    <div className="text-muted-foreground">X-Device-Api-Key: your-key</div>
+                    <div>{"{"}</div>
+                    <div className="pl-3">"heartRate": 72,</div>
+                    <div className="pl-3">"systolicBp": 120,</div>
+                    <div className="pl-3">"diastolicBp": 80,</div>
+                    <div className="pl-3">"spo2": 98,</div>
+                    <div className="pl-3">"temperature": 36.6</div>
+                    <div>{"}"}</div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* REST API */}
+              <Card className="border-border/50 shadow-sm">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Activity className="h-4 w-4" /> REST API / Custom App
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="text-sm text-muted-foreground space-y-2">
+                  <p>Send data from any custom app, script, or health device:</p>
+                  <div className="bg-muted rounded-lg p-2 text-xs font-mono space-y-0.5">
+                    <div className="text-primary">curl -X POST \</div>
+                    <div className="pl-3">-H "X-Device-Api-Key: your-key" \</div>
+                    <div className="pl-3">-H "Content-Type: application/json" \</div>
+                    <div className="pl-3">-d '{"{"}"heartRate":72,"spo2":98{"}"}' \</div>
+                    <div className="pl-3 break-all">{ingestUrl}</div>
+                  </div>
+                  <p className="text-xs">Supported fields: heartRate, systolicBp, diastolicBp, spo2, temperature, caloriesBurned, recordedAt</p>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
         )}
       </div>
     </Layout>
