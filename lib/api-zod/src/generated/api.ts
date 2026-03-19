@@ -15,6 +15,19 @@ export const HealthCheckResponse = zod.object({
 });
 
 /**
+ * @summary Register a new provider or patient account
+ */
+export const signupBodyRoleDefault = `provider`;
+
+export const SignupBody = zod.object({
+  name: zod.string(),
+  email: zod.string().email(),
+  password: zod.string(),
+  role: zod.enum(["provider", "patient"]).default(signupBodyRoleDefault),
+  specialty: zod.string().optional(),
+});
+
+/**
  * @summary Login for providers and patients
  */
 export const LoginBody = zod.object({

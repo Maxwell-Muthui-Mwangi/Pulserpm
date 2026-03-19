@@ -14,6 +14,22 @@ export interface ErrorResponse {
   message: string;
 }
 
+export type SignupRequestRole =
+  (typeof SignupRequestRole)[keyof typeof SignupRequestRole];
+
+export const SignupRequestRole = {
+  provider: "provider",
+  patient: "patient",
+} as const;
+
+export interface SignupRequest {
+  name: string;
+  email: string;
+  password: string;
+  role?: SignupRequestRole;
+  specialty?: string;
+}
+
 export interface LoginRequest {
   email: string;
   password: string;

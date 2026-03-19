@@ -48,6 +48,8 @@ export * from "./patientGender";
 export * from "./patientSummary";
 export * from "./patientSummaryRiskLevel";
 export * from "./provider";
+export * from "./signupRequest";
+export * from "./signupRequestRole";
 export * from "./updatePatientRequest";
 export * from "./updatePatientRequestDeviceType";
 export * from "./updatePatientRequestGender";
