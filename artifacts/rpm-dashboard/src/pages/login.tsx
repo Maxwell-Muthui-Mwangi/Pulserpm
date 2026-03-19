@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
-import { Activity, Loader2, Eye, EyeOff } from "lucide-react";
+import { Activity, Stethoscope, User, Loader2, Eye, EyeOff } from "lucide-react";
 import { useLogin, useSignup } from "@workspace/api-client-react";
 import { setAuthToken } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,28 @@ import { useToast } from "@/hooks/use-toast";
 import { motion, AnimatePresence } from "framer-motion";
 
 type Mode = "login" | "signup";
+type Role = "provider" | "patient";
+
+const ROLE_CONFIG = {
+  provider: {
+    label: "Healthcare Provider",
+    icon: Stethoscope,
+    subtitle: "Provider Portal — Monitor your patients remotely",
+    emailPlaceholder: "you@hospital.org",
+    accent: "text-primary",
+    bg: "bg-primary/10",
+    border: "border-primary",
+  },
+  patient: {
+    label: "Patient",
+    icon: User,
+    subtitle: "Patient Portal — View your health at a glance",
+    emailPlaceholder: "you@email.com",
+    accent: "text-teal-600",
+    bg: "bg-teal-50",
+    border: "border-teal-500",
+  },
+} as const;
 
 export default function Login() {
   const [, setLocation] = useLocation();
@@ -20,13 +42,15 @@ export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
-  const [role, setRole] = useState<"provider" | "patient">("provider");
+  const [role, setRole] = useState<Role>("provider");
   const [specialty, setSpecialty] = useState("");
 
   const loginMutation = useLogin();
   const signupMutation = useSignup();
 
   const isPending = loginMutation.isPending || signupMutation.isPending;
+  const cfg = ROLE_CONFIG[role];
+  const RoleIcon = cfg.icon;
 
   const onSuccess = (token: string, userName: string) => {
     setAuthToken(token);
@@ -79,6 +103,12 @@ export default function Login() {
     setShowPassword(false);
   };
 
+  const switchRole = (next: Role) => {
+    setRole(next);
+    setEmail("");
+    setPassword("");
+  };
+
   return (
     <div className="min-h-screen bg-background flex flex-col justify-center py-12 sm:px-6 lg:px-8 relative overflow-hidden">
       <div className="absolute top-0 -left-4 w-72 h-72 bg-primary/10 rounded-full mix-blend-multiply filter blur-3xl opacity-70 animate-blob" />
@@ -99,11 +129,18 @@ export default function Login() {
         <h2 className="text-center text-3xl font-bold tracking-tight text-foreground">
           {mode === "login" ? "Sign in to PulseRPM" : "Create your account"}
         </h2>
-        <p className="mt-2 text-center text-sm text-muted-foreground">
-          {mode === "login"
-            ? "Remote Patient Monitoring Provider Portal"
-            : "Join PulseRPM to monitor patient health"}
-        </p>
+        <AnimatePresence mode="wait">
+          <motion.p
+            key={`${mode}-${role}`}
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 4 }}
+            transition={{ duration: 0.2 }}
+            className="mt-2 text-center text-sm text-muted-foreground"
+          >
+            {mode === "login" ? cfg.subtitle : "Join PulseRPM to monitor patient health"}
+          </motion.p>
+        </AnimatePresence>
       </motion.div>
 
       <motion.div
@@ -113,7 +150,7 @@ export default function Login() {
         className="mt-8 sm:mx-auto sm:w-full sm:max-w-md z-10"
       >
         <div className="bg-card py-8 px-4 shadow-xl border border-border/50 sm:rounded-2xl sm:px-10">
-          {/* Mode toggle tabs */}
+          {/* Sign In / Sign Up toggle */}
           <div className="flex rounded-xl bg-muted p-1 mb-6">
             <button
               type="button"
@@ -139,6 +176,35 @@ export default function Login() {
             </button>
           </div>
 
+          {/* Role selector — shown on both login and signup */}
+          <div className="mb-5">
+            <p className="text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wide">
+              I am a…
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              {(["provider", "patient"] as const).map((r) => {
+                const c = ROLE_CONFIG[r];
+                const Icon = c.icon;
+                const active = role === r;
+                return (
+                  <button
+                    key={r}
+                    type="button"
+                    onClick={() => switchRole(r)}
+                    className={`flex items-center gap-2.5 px-4 py-3 rounded-xl border-2 text-sm font-medium transition-all ${
+                      active
+                        ? `${c.border} ${c.bg} ${c.accent}`
+                        : "border-border text-muted-foreground hover:border-primary/30 hover:text-foreground"
+                    }`}
+                  >
+                    <Icon className={`h-4 w-4 shrink-0 ${active ? c.accent : ""}`} />
+                    {c.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           <form className="space-y-4" onSubmit={handleSubmit}>
             <AnimatePresence mode="wait">
               {mode === "signup" && (
@@ -159,37 +225,9 @@ export default function Login() {
                         required
                         value={name}
                         onChange={(e) => setName(e.target.value)}
-                        placeholder="Dr. Jane Smith"
+                        placeholder={role === "provider" ? "Dr. Jane Smith" : "Jane Smith"}
                         className="w-full"
                       />
-                    </div>
-                  </div>
-
-                  <div>
-                    <Label htmlFor="role">Account type</Label>
-                    <div className="mt-1.5 flex gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setRole("provider")}
-                        className={`flex-1 py-2.5 px-3 text-sm rounded-lg border transition-all ${
-                          role === "provider"
-                            ? "border-primary bg-primary/10 text-primary font-medium"
-                            : "border-border text-muted-foreground hover:border-primary/50"
-                        }`}
-                      >
-                        Healthcare Provider
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setRole("patient")}
-                        className={`flex-1 py-2.5 px-3 text-sm rounded-lg border transition-all ${
-                          role === "patient"
-                            ? "border-primary bg-primary/10 text-primary font-medium"
-                            : "border-border text-muted-foreground hover:border-primary/50"
-                        }`}
-                      >
-                        Patient
-                      </button>
                     </div>
                   </div>
 
@@ -201,7 +239,10 @@ export default function Login() {
                       transition={{ duration: 0.2 }}
                       className="overflow-hidden"
                     >
-                      <Label htmlFor="specialty">Specialty <span className="text-muted-foreground font-normal">(optional)</span></Label>
+                      <Label htmlFor="specialty">
+                        Specialty{" "}
+                        <span className="text-muted-foreground font-normal">(optional)</span>
+                      </Label>
                       <div className="mt-1.5">
                         <Input
                           id="specialty"
@@ -228,7 +269,7 @@ export default function Login() {
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="you@hospital.org"
+                  placeholder={cfg.emailPlaceholder}
                   className="w-full"
                 />
               </div>
@@ -273,14 +314,35 @@ export default function Login() {
                   {mode === "login" ? "Signing in..." : "Creating account..."}
                 </>
               ) : mode === "login" ? (
-                "Sign in"
+                <>
+                  <RoleIcon className="mr-2 h-4 w-4" />
+                  Sign in as {cfg.label}
+                </>
               ) : (
                 "Create account"
               )}
             </Button>
           </form>
 
-          <div className="mt-6 text-center text-xs text-muted-foreground">
+          {/* Demo hint for sign-in */}
+          {mode === "login" && (
+            <motion.div
+              key={role}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.2 }}
+              className="mt-4 rounded-lg bg-muted/60 px-4 py-3 text-xs text-muted-foreground"
+            >
+              <span className="font-medium text-foreground">Demo — </span>
+              {role === "provider" ? (
+                <>sarah.mitchell@rpmhospital.com / <span className="font-mono">password123</span></>
+              ) : (
+                <>eleanor.thompson@email.com / <span className="font-mono">patient123</span></>
+              )}
+            </motion.div>
+          )}
+
+          <div className="mt-4 text-center text-xs text-muted-foreground">
             {mode === "login" ? (
               <>
                 Don't have an account?{" "}
