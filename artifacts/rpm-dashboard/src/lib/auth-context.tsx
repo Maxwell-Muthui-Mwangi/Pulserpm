@@ -1,6 +1,6 @@
 import { createContext, useContext, ReactNode } from "react";
 import { useGetMe } from "@workspace/api-client-react";
-import { withAuth } from "@/lib/utils";
+import { withAuth, getAuthToken } from "@/lib/utils";
 
 interface User {
   id: number;
@@ -24,7 +24,11 @@ const AuthContext = createContext<AuthContextValue>({
 });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const { data: user, isLoading } = useGetMe({ request: withAuth() });
+  const token = getAuthToken();
+  const { data: user, isLoading } = useGetMe({
+    request: withAuth(),
+    query: { queryKey: ["me", token], enabled: !!token } as any,
+  });
 
   const value: AuthContextValue = {
     user: user ?? null,

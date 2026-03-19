@@ -1,6 +1,7 @@
-import { db, alertsTable, thresholdsTable } from "@workspace/db";
+import { db, alertsTable, thresholdsTable, patientsTable, providersTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import type { Vitals, Threshold, InsertAlert } from "@workspace/db";
+import { sendAlertEmail } from "./email.js";
 
 type RiskLevel = "normal" | "warning" | "critical";
 
@@ -156,6 +157,17 @@ export function computeRiskLevel(alerts: AlertCandidate[]): RiskLevel {
   return "normal";
 }
 
+function computeAge(dateOfBirth: string | null | undefined): number | null {
+  if (!dateOfBirth) return null;
+  const dob = new Date(dateOfBirth);
+  if (isNaN(dob.getTime())) return null;
+  const today = new Date();
+  let age = today.getFullYear() - dob.getFullYear();
+  const m = today.getMonth() - dob.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) age--;
+  return age;
+}
+
 export async function processAndSaveAlerts(
   patientId: number,
   candidates: AlertCandidate[]
@@ -175,5 +187,42 @@ export async function processAndSaveAlerts(
   }));
 
   const saved = await db.insert(alertsTable).values(toInsert).returning();
+
+  setImmediate(async () => {
+    try {
+      const [patient] = await db
+        .select()
+        .from(patientsTable)
+        .where(eq(patientsTable.id, patientId))
+        .limit(1);
+
+      if (!patient) return;
+
+      const providers = await db.select().from(providersTable);
+      if (providers.length === 0) return;
+
+      const provider = patient.providerId
+        ? providers.find((p) => p.id === patient.providerId) ?? providers[0]
+        : providers[0];
+
+      await sendAlertEmail({
+        providerName: provider.name,
+        providerEmail: provider.email,
+        patientName: patient.name,
+        patientAge: computeAge(patient.dateOfBirth),
+        patientGender: patient.gender,
+        patientConditions: patient.conditions ?? [],
+        alerts: candidates.map((c) => ({
+          vitalType: c.vitalType,
+          severity: c.severity,
+          message: c.message,
+          suggestedAction: c.suggestedAction,
+        })),
+      });
+    } catch (err) {
+      console.error("[alertEngine] Email notification error:", err);
+    }
+  });
+
   return saved;
 }

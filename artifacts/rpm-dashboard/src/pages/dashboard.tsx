@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Link } from "wouter";
 import { 
@@ -15,14 +16,19 @@ import {
   Clock,
   ChevronRight,
 } from "lucide-react";
+import { 
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend
+} from "recharts";
 import { useGetDashboardStats, useListAlerts, useListPatients } from "@workspace/api-client-react";
-import { withAuth } from "@/lib/utils";
+import { withAuth, getAuthToken } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 import Layout from "@/components/layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { format, formatDistanceToNow } from "date-fns";
+
+const API_BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 const container = {
   hidden: { opacity: 0 },
@@ -49,6 +55,41 @@ function VitalPill({ icon: Icon, value, unit, warn }: { icon: React.ElementType;
   );
 }
 
+interface TrendPoint {
+  date: string;
+  avgHeartRate: number | null;
+  avgSystolicBp: number | null;
+  avgSpo2: number | null;
+  avgTemperature: number | null;
+  totalReadings: number;
+}
+
+function useTrends() {
+  const [trend, setTrend] = useState<TrendPoint[]>([]);
+  const [patientStatus, setPatientStatus] = useState<{ critical: number; warning: number; normal: number } | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    const token = getAuthToken();
+    fetch(`${API_BASE}/api/dashboard/trends?days=7`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((r) => r.json())
+      .then((data) => {
+        if (!cancelled) {
+          setTrend(data.trend ?? []);
+          setPatientStatus(data.patientStatus ?? null);
+        }
+      })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, []);
+
+  return { trend, patientStatus, loading };
+}
+
 export default function Dashboard() {
   const { isPatient, user } = useAuth();
   const { data: stats, isLoading: statsLoading } = useGetDashboardStats({ request: withAuth() });
@@ -60,6 +101,7 @@ export default function Dashboard() {
     {},
     { query: { enabled: !isPatient } as any, request: withAuth() }
   );
+  const { trend, patientStatus, loading: trendsLoading } = useTrends();
 
   const isLoading = statsLoading || alertsLoading || (!isPatient && patientsLoading);
 
@@ -237,6 +279,28 @@ export default function Dashboard() {
     return (order[(a as any).riskLevel as keyof typeof order] ?? 2) - (order[(b as any).riskLevel as keyof typeof order] ?? 2);
   });
 
+  const dangerCount = (patientStatus?.critical ?? 0) + (patientStatus?.warning ?? 0);
+  const totalPatientsCount = (patientStatus?.critical ?? 0) + (patientStatus?.warning ?? 0) + (patientStatus?.normal ?? 0);
+
+  const trendChartData = trend.map((d) => {
+    let dateLabel = d.date ?? "";
+    if (dateLabel) {
+      try {
+        dateLabel = format(new Date(dateLabel + "T12:00:00"), "MMM d");
+      } catch {
+        dateLabel = dateLabel.slice(5);
+      }
+    }
+    return {
+      date: dateLabel,
+      "Heart Rate": d.avgHeartRate,
+      "Systolic BP": d.avgSystolicBp,
+      "SpO2": d.avgSpo2,
+      "Temperature": d.avgTemperature,
+      readings: d.totalReadings,
+    };
+  });
+
   return (
     <Layout>
       <div className="space-y-6">
@@ -292,8 +356,8 @@ export default function Dashboard() {
               <CardContent className="p-6">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm font-medium text-muted-foreground mb-1">Critical</p>
-                    <h3 className="text-3xl font-bold font-display text-destructive">{stats?.criticalPatients ?? 0}</h3>
+                    <p className="text-sm font-medium text-muted-foreground mb-1">Patients in Danger</p>
+                    <h3 className="text-3xl font-bold font-display text-destructive">{dangerCount}</h3>
                   </div>
                   <div className="h-12 w-12 rounded-2xl bg-destructive/10 flex items-center justify-center text-destructive">
                     <ShieldAlert className="h-6 w-6" />
@@ -320,8 +384,128 @@ export default function Dashboard() {
           </motion.div>
         </motion.div>
 
+        {/* Patient Status Breakdown + 7-day Trends */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Patient status card */}
+          <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
+            <Card className="shadow-sm border-border/50 h-full">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-lg flex items-center">
+                  <HeartPulse className="h-5 w-5 mr-2 text-primary" />Patient Status
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between p-4 rounded-xl bg-destructive/5 border border-destructive/20">
+                    <div className="flex items-center gap-3">
+                      <div className="w-3 h-3 rounded-full bg-destructive animate-pulse" />
+                      <div>
+                        <p className="font-semibold text-destructive">Critical</p>
+                        <p className="text-xs text-muted-foreground">Immediate attention</p>
+                      </div>
+                    </div>
+                    <span className="text-2xl font-bold font-display text-destructive">{patientStatus?.critical ?? stats?.criticalPatients ?? 0}</span>
+                  </div>
+                  <div className="flex items-center justify-between p-4 rounded-xl bg-warning/5 border border-warning/20">
+                    <div className="flex items-center gap-3">
+                      <div className="w-3 h-3 rounded-full bg-warning" />
+                      <div>
+                        <p className="font-semibold text-warning-foreground">Warning</p>
+                        <p className="text-xs text-muted-foreground">Needs monitoring</p>
+                      </div>
+                    </div>
+                    <span className="text-2xl font-bold font-display text-warning-foreground">{patientStatus?.warning ?? stats?.warningPatients ?? 0}</span>
+                  </div>
+                  <div className="flex items-center justify-between p-4 rounded-xl bg-success/5 border border-success/20">
+                    <div className="flex items-center gap-3">
+                      <div className="w-3 h-3 rounded-full bg-success" />
+                      <div>
+                        <p className="font-semibold text-success-foreground">Stable</p>
+                        <p className="text-xs text-muted-foreground">Within normal range</p>
+                      </div>
+                    </div>
+                    <span className="text-2xl font-bold font-display text-success-foreground">{patientStatus?.normal ?? stats?.normalPatients ?? totalPatientsCount}</span>
+                  </div>
+                </div>
+                <div className="mt-4">
+                  <Button variant="outline" className="w-full" asChild>
+                    <Link href="/patients" className="flex items-center justify-center gap-2">
+                      <Users className="h-4 w-4" />View All Patients
+                    </Link>
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
+
+          {/* 7-day trends chart */}
+          <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }} className="lg:col-span-2">
+            <Card className="shadow-sm border-border/50 h-full">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-lg flex items-center justify-between">
+                  <span className="flex items-center">
+                    <TrendingUp className="h-5 w-5 mr-2 text-primary" />7-Day Vital Trends
+                  </span>
+                  <span className="text-xs font-normal text-muted-foreground">Average across all patients</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {trendsLoading ? (
+                  <div className="h-52 flex items-center justify-center">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+                  </div>
+                ) : trendChartData.length === 0 ? (
+                  <div className="h-52 flex flex-col items-center justify-center text-center">
+                    <Activity className="h-8 w-8 text-muted-foreground/30 mb-2" />
+                    <p className="text-sm text-muted-foreground">No readings in the last 7 days</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {/* Heart Rate + BP chart */}
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground mb-1">Heart Rate &amp; Blood Pressure</p>
+                      <ResponsiveContainer width="100%" height={120}>
+                        <LineChart data={trendChartData} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.5} />
+                          <XAxis dataKey="date" tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} tickLine={false} />
+                          <YAxis tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} tickLine={false} axisLine={false} />
+                          <Tooltip
+                            contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }}
+                            labelStyle={{ color: "hsl(var(--foreground))", fontWeight: 600 }}
+                          />
+                          <Legend wrapperStyle={{ fontSize: 11 }} />
+                          <Line type="monotone" dataKey="Heart Rate" stroke="#ef4444" strokeWidth={2} dot={{ r: 3 }} activeDot={{ r: 5 }} connectNulls />
+                          <Line type="monotone" dataKey="Systolic BP" stroke="#3b82f6" strokeWidth={2} dot={{ r: 3 }} activeDot={{ r: 5 }} connectNulls />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                    {/* SpO2 + Temperature chart */}
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground mb-1">SpO2 &amp; Temperature</p>
+                      <ResponsiveContainer width="100%" height={120}>
+                        <LineChart data={trendChartData} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.5} />
+                          <XAxis dataKey="date" tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} tickLine={false} />
+                          <YAxis tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} tickLine={false} axisLine={false} />
+                          <Tooltip
+                            contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }}
+                            labelStyle={{ color: "hsl(var(--foreground))", fontWeight: 600 }}
+                          />
+                          <Legend wrapperStyle={{ fontSize: 11 }} />
+                          <Line type="monotone" dataKey="SpO2" stroke="#22c55e" strokeWidth={2} dot={{ r: 3 }} activeDot={{ r: 5 }} connectNulls />
+                          <Line type="monotone" dataKey="Temperature" stroke="#f97316" strokeWidth={2} dot={{ r: 3 }} activeDot={{ r: 5 }} connectNulls />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </motion.div>
+        </div>
+
         {/* Patient monitoring table */}
-        <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}>
+        <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
           <Card className="shadow-sm border-border/50">
             <CardHeader className="flex flex-row items-center justify-between py-4 border-b border-border/40">
               <CardTitle className="text-lg flex items-center">
@@ -356,7 +540,6 @@ export default function Dashboard() {
                         transition={{ delay: 0.1 + idx * 0.04 }}
                         className="flex items-center gap-4 px-5 py-4 hover:bg-muted/30 transition-colors group"
                       >
-                        {/* Status dot + name */}
                         <div className="flex items-center gap-3 w-44 shrink-0">
                           <div className={`h-2.5 w-2.5 rounded-full shrink-0 ${risk.dot}`} />
                           <div className="min-w-0">
@@ -365,7 +548,6 @@ export default function Dashboard() {
                           </div>
                         </div>
 
-                        {/* Conditions */}
                         <div className="hidden md:flex flex-wrap gap-1 w-40 shrink-0">
                           {(p.conditions ?? []).slice(0, 2).map((c: string) => (
                             <span key={c} className="text-[10px] bg-muted text-muted-foreground rounded-md px-1.5 py-0.5 leading-tight">{c}</span>
@@ -375,7 +557,6 @@ export default function Dashboard() {
                           )}
                         </div>
 
-                        {/* Live vitals */}
                         <div className="hidden lg:flex items-center gap-4 flex-1 min-w-0">
                           <VitalPill icon={Heart} value={v?.heartRate} unit=" bpm" warn={v?.heartRate > 100 || v?.heartRate < 50} />
                           <VitalPill icon={Activity} value={v?.systolicBp} unit=" sys" warn={v?.systolicBp > 140} />
@@ -383,7 +564,6 @@ export default function Dashboard() {
                           <VitalPill icon={Thermometer} value={v?.temperature} unit="°C" warn={v?.temperature > 38} />
                         </div>
 
-                        {/* Right side: alerts + last seen + badge + action */}
                         <div className="flex items-center gap-3 ml-auto shrink-0">
                           {p.activeAlertCount > 0 && (
                             <span className="flex items-center gap-1 text-xs text-destructive font-medium">
@@ -417,7 +597,7 @@ export default function Dashboard() {
 
         {/* Recent alerts */}
         {alerts && alerts.length > 0 && (
-          <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.35 }}>
+          <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }}>
             <Card className="shadow-sm border-border/50">
               <CardHeader className="flex flex-row items-center justify-between py-4 border-b border-border/40">
                 <CardTitle className="text-lg flex items-center">

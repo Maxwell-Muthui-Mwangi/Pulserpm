@@ -20,15 +20,23 @@ A full-stack Remote Patient Monitoring platform with role-based access control f
 ## Role-Based Access
 
 ### Provider view
-- Full patient list, dashboard overview, alert management, threshold configuration
+- Dashboard (`/`): 4 KPI cards (Total Patients, Active Alerts, Patients in Danger, Today's Readings), Patient Status breakdown (Critical/Warning/Stable counts), 7-Day Vital Trends charts (Heart Rate + Systolic BP, SpO2 + Temperature), Patient Monitoring table
+- Sidebar: Overview, Patients, Alerts
+- Notification bell: dropdown shows only critical+warning patient alerts with patient names and severity badges
+- Full patient list, alert management, threshold configuration
 - Can acknowledge/resolve alerts, view all patients
 
 ### Patient view
 - Only see their own data (enforced at API level — 403 on cross-patient access)
-- Dashboard: "Your Status" with Critical/Average/Good levels
+- Dashboard: "Your Status" with Critical/Average/Good levels, 3 KPI cards (Active Alerts, Today's Readings, Overall Status)
 - Profile: own vitals, history charts, alerts (read-only)
 - "Connect Device" tab: API key management + integration instructions
 - Sidebar shows: My Dashboard, My Profile, My Alerts
+
+### Session management
+- Login: `setAuthToken` → `queryClient.clear()` → `window.location.href` (full page reload ensures clean state for role switching)
+- Logout: `queryClient.clear()` → `removeAuthToken` → SPA redirect to /login
+- `useGetMe` uses `queryKey: ["me", token]` — token change = fresh cache entry, no stale role data
 
 ## Device & Wearable Integration
 

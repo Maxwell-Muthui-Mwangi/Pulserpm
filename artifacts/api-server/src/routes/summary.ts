@@ -160,4 +160,59 @@ router.get("/dashboard/stats", requireAuth, async (req, res) => {
   }
 });
 
+router.get("/dashboard/trends", requireAuth, async (req, res) => {
+  try {
+    if (req.user!.role !== "provider") {
+      res.status(403).json({ error: "Forbidden" });
+      return;
+    }
+
+    const days = Math.min(Math.max(parseInt(String(req.query.days ?? "7"), 10), 1), 30);
+
+    const since = new Date();
+    since.setDate(since.getDate() - days + 1);
+    since.setHours(0, 0, 0, 0);
+
+    const rows = await db
+      .select({
+        day: sql<string>`DATE_TRUNC('day', ${vitalsTable.recordedAt})::text`,
+        avgHeartRate: avg(vitalsTable.heartRate),
+        avgSystolicBp: avg(vitalsTable.systolicBp),
+        avgSpo2: avg(vitalsTable.spo2),
+        avgTemperature: avg(vitalsTable.temperature),
+        totalReadings: count(),
+      })
+      .from(vitalsTable)
+      .where(gte(vitalsTable.recordedAt, since))
+      .groupBy(sql`DATE_TRUNC('day', ${vitalsTable.recordedAt})`)
+      .orderBy(sql`DATE_TRUNC('day', ${vitalsTable.recordedAt})`);
+
+    const trend = rows.map((r) => ({
+      date: r.day ? (r.day.includes("T") ? r.day.split("T")[0] : r.day.split(" ")[0]) : "",
+      avgHeartRate: r.avgHeartRate ? parseFloat(Number(r.avgHeartRate).toFixed(1)) : null,
+      avgSystolicBp: r.avgSystolicBp ? parseFloat(Number(r.avgSystolicBp).toFixed(1)) : null,
+      avgSpo2: r.avgSpo2 ? parseFloat(Number(r.avgSpo2).toFixed(1)) : null,
+      avgTemperature: r.avgTemperature ? parseFloat(Number(r.avgTemperature).toFixed(2)) : null,
+      totalReadings: Number(r.totalReadings),
+    }));
+
+    const allPatients = await db.select({ id: patientsTable.id }).from(patientsTable);
+    let critical = 0, warning = 0, normal = 0;
+    for (const p of allPatients) {
+      const activeAlerts = await db
+        .select()
+        .from(alertsTable)
+        .where(and(eq(alertsTable.patientId, p.id), eq(alertsTable.status, "active")));
+      if (activeAlerts.some((a) => a.severity === "critical")) critical++;
+      else if (activeAlerts.some((a) => a.severity === "warning")) warning++;
+      else normal++;
+    }
+
+    return res.json({ trend, patientStatus: { critical, warning, normal } });
+  } catch (err) {
+    console.error("Dashboard trends error:", err);
+    return res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
 export default router;

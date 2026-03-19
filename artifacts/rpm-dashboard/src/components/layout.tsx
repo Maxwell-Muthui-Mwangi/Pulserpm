@@ -1,4 +1,4 @@
-import { ReactNode, useEffect } from "react";
+import { ReactNode, useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { 
   Activity, 
@@ -9,11 +9,19 @@ import {
   Bell,
   Search,
   Menu,
-  UserCircle
+  UserCircle,
+  AlertTriangle,
+  X,
+  ChevronRight,
 } from "lucide-react";
 import { removeAuthToken } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
+import { useListAlerts } from "@workspace/api-client-react";
+import { withAuth } from "@/lib/utils";
+import { queryClient } from "@/lib/query-client";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { format } from "date-fns";
 
 interface LayoutProps {
   children: ReactNode;
@@ -22,8 +30,31 @@ interface LayoutProps {
 export default function Layout({ children }: LayoutProps) {
   const [location, setLocation] = useLocation();
   const { user, isLoading, isPatient } = useAuth();
+  const [notifOpen, setNotifOpen] = useState(false);
+  const notifRef = useRef<HTMLDivElement>(null);
+
+  const { data: dangerAlerts } = useListAlerts(
+    { status: "active", limit: 20 },
+    { request: withAuth(), query: { enabled: !isPatient } as any }
+  );
+
+  const filteredDangerAlerts = (dangerAlerts ?? []).filter(
+    (a) => a.severity === "critical" || a.severity === "warning"
+  );
+  const dangerCount = filteredDangerAlerts.length;
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (notifRef.current && !notifRef.current.contains(e.target as Node)) {
+        setNotifOpen(false);
+      }
+    }
+    if (notifOpen) document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [notifOpen]);
 
   const handleLogout = () => {
+    queryClient.clear();
     removeAuthToken();
     setLocation("/login");
   };
@@ -123,16 +154,117 @@ export default function Layout({ children }: LayoutProps) {
             <Search className="h-4 w-4 text-muted-foreground mr-2" />
             <input 
               type="text" 
-              placeholder="Search patients..." 
+              placeholder={isPatient ? "Search alerts..." : "Search patients..."} 
               className="bg-transparent border-none outline-none text-sm w-full placeholder:text-muted-foreground"
             />
           </div>
 
           <div className="flex items-center space-x-3">
-            <button className="relative p-2 rounded-full text-muted-foreground hover:bg-muted transition-colors">
-              <Bell className="h-5 w-5" />
-              <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-destructive border-2 border-card"></span>
-            </button>
+            {/* Notification Bell */}
+            <div className="relative" ref={notifRef}>
+              <button
+                onClick={() => setNotifOpen((o) => !o)}
+                className="relative p-2 rounded-full text-muted-foreground hover:bg-muted transition-colors"
+                aria-label="Notifications"
+              >
+                <Bell className="h-5 w-5" />
+                {dangerCount > 0 && (
+                  <span className="absolute top-1 right-1 h-4 w-4 rounded-full bg-destructive border-2 border-card flex items-center justify-center">
+                    <span className="text-[9px] font-bold text-white leading-none">
+                      {dangerCount > 9 ? "9+" : dangerCount}
+                    </span>
+                  </span>
+                )}
+              </button>
+
+              {/* Notification panel */}
+              {notifOpen && (
+                <div className="absolute right-0 top-full mt-2 w-96 max-h-[480px] bg-card border border-border rounded-2xl shadow-xl overflow-hidden z-50 flex flex-col">
+                  {/* Panel header */}
+                  <div className="flex items-center justify-between px-4 py-3 border-b border-border/50 shrink-0">
+                    <div className="flex items-center gap-2">
+                      <Bell className="h-4 w-4 text-foreground" />
+                      <span className="font-semibold text-sm text-foreground">
+                        {isPatient ? "My Notifications" : "Patient Alerts"}
+                      </span>
+                      {dangerCount > 0 && (
+                        <Badge variant="critical" className="text-[10px] px-1.5 py-0 h-4">
+                          {dangerCount}
+                        </Badge>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => setNotifOpen(false)}
+                      className="p-1 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+
+                  {/* Alert list */}
+                  <div className="overflow-y-auto flex-1">
+                    {filteredDangerAlerts.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center py-10 text-center px-4">
+                        <div className="h-10 w-10 rounded-full bg-success/10 flex items-center justify-center mb-3">
+                          <Bell className="h-5 w-5 text-success" />
+                        </div>
+                        <p className="text-sm font-medium text-foreground">No danger alerts</p>
+                        <p className="text-xs text-muted-foreground mt-1">All patients are currently stable.</p>
+                      </div>
+                    ) : (
+                      <div className="divide-y divide-border/40">
+                        {filteredDangerAlerts.map((alert) => (
+                          <Link
+                            key={alert.id}
+                            href={`/patients/${alert.patientId}`}
+                            onClick={() => setNotifOpen(false)}
+                            className="flex items-start gap-3 px-4 py-3 hover:bg-muted/50 transition-colors group"
+                          >
+                            <div className={`mt-1.5 h-2 w-2 rounded-full shrink-0 ${
+                              alert.severity === "critical" ? "bg-destructive animate-pulse" : "bg-warning"
+                            }`} />
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-0.5">
+                                <span className="font-medium text-sm text-foreground truncate">
+                                  {(alert as any).patientName ?? "Patient"}
+                                </span>
+                                <Badge
+                                  variant={alert.severity === "critical" ? "critical" : "amber"}
+                                  className="text-[9px] px-1 py-0 h-3.5 shrink-0"
+                                >
+                                  {alert.severity === "critical" ? "CRITICAL" : "WARNING"}
+                                </Badge>
+                              </div>
+                              <p className="text-xs text-muted-foreground truncate">{alert.message}</p>
+                              <p className="text-[10px] text-muted-foreground/70 mt-0.5">
+                                {alert.triggeredAt && !isNaN(new Date(alert.triggeredAt).getTime())
+                                  ? format(new Date(alert.triggeredAt), "MMM d, h:mm a")
+                                  : "—"}
+                                {" · "}{alert.vitalType.replace("_", " ")}
+                              </p>
+                            </div>
+                            <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/50 mt-1.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
+                          </Link>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Panel footer */}
+                  <div className="px-4 py-3 border-t border-border/50 shrink-0">
+                    <Link
+                      href="/alerts"
+                      onClick={() => setNotifOpen(false)}
+                      className="flex items-center justify-center gap-1.5 text-xs font-medium text-primary hover:text-primary/80 transition-colors"
+                    >
+                      <AlertTriangle className="h-3.5 w-3.5" />
+                      View all alerts
+                    </Link>
+                  </div>
+                </div>
+              )}
+            </div>
+
             <button className="md:hidden p-2 rounded-md text-muted-foreground hover:bg-muted">
               <Menu className="h-5 w-5" />
             </button>

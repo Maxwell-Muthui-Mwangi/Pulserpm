@@ -3,6 +3,7 @@ import { useLocation } from "wouter";
 import { Activity, Stethoscope, User, Loader2, Eye, EyeOff } from "lucide-react";
 import { useLogin, useSignup } from "@workspace/api-client-react";
 import { setAuthToken } from "@/lib/utils";
+import { queryClient } from "@/lib/query-client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -54,11 +55,13 @@ export default function Login() {
 
   const onSuccess = (token: string, userName: string) => {
     setAuthToken(token);
+    queryClient.clear();
     toast({
       title: mode === "login" ? "Welcome back!" : "Account created!",
       description: `Signed in as ${userName}`,
     });
-    setLocation("/");
+    const base = (import.meta.env.BASE_URL ?? "/").replace(/\/$/, "");
+    window.location.href = base + "/";
   };
 
   const onError = (err: unknown) => {
