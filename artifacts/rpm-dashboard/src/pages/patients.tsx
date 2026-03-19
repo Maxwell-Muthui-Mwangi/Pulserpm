@@ -29,7 +29,7 @@ export default function Patients() {
       search: search || undefined, 
       riskLevel: riskFilter !== "all" ? riskFilter : undefined 
     }, 
-    { request: withAuth(), query: { queryKey: [], enabled: !isPatient } as any }
+    { request: withAuth(), query: { enabled: !isPatient } as any }
   );
 
   const getRiskBadge = (level: string) => {

@@ -46,10 +46,10 @@ export default function PatientDetail() {
   const [deviceLoading, setDeviceLoading] = useState(false);
   const [keyCopied, setKeyCopied] = useState(false);
 
-  const { data: patient, isLoading: pLoading } = useGetPatient(patientId, { request: withAuth(), query: { queryKey: [], enabled: !!patientId } as any });
-  const { data: vitals, isLoading: vLoading } = useGetPatientVitals(patientId, { period, limit: 100 }, { request: withAuth(), query: { queryKey: [], enabled: !!patientId && activeTab === "charts" } as any });
-  const { data: alerts, refetch: refetchAlerts } = useGetPatientAlerts(patientId, { status: "active" }, { request: withAuth(), query: { queryKey: [], enabled: !!patientId } as any });
-  const { data: thresholds } = useGetPatientThresholds(patientId, { request: withAuth(), query: { queryKey: [], enabled: !!patientId && activeTab === "thresholds" } as any });
+  const { data: patient, isLoading: pLoading } = useGetPatient(patientId, { request: withAuth(), query: { enabled: !!patientId } as any });
+  const { data: vitals, isLoading: vLoading } = useGetPatientVitals(patientId, { period, limit: 100 }, { request: withAuth(), query: { enabled: !!patientId && activeTab === "charts" } as any });
+  const { data: alerts, refetch: refetchAlerts } = useGetPatientAlerts(patientId, { status: "active" }, { request: withAuth(), query: { enabled: !!patientId } as any });
+  const { data: thresholds } = useGetPatientThresholds(patientId, { request: withAuth(), query: { enabled: !!patientId && activeTab === "thresholds" } as any });
   
   const updateThresholds = useUpdatePatientThresholds();
   const ackAlert = useAcknowledgeAlert();
