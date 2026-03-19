@@ -8,6 +8,10 @@ const router = Router();
 router.get("/patients/:patientId/summary", requireAuth, async (req, res) => {
   try {
     const patientId = Number(req.params.patientId);
+    if (req.user!.role === "patient" && req.user!.id !== patientId) {
+      res.status(403).json({ error: "Forbidden", message: "Access denied" });
+      return;
+    }
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const tomorrow = new Date(today);
@@ -73,11 +77,48 @@ router.get("/patients/:patientId/summary", requireAuth, async (req, res) => {
   }
 });
 
-router.get("/dashboard/stats", requireAuth, async (_req, res) => {
+router.get("/dashboard/stats", requireAuth, async (req, res) => {
   try {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    // Patient-specific stats: return their own health summary
+    if (req.user!.role === "patient") {
+      const patientId = req.user!.id;
+
+      const activeAlerts = await db
+        .select()
+        .from(alertsTable)
+        .where(and(eq(alertsTable.patientId, patientId), eq(alertsTable.status, "active")));
+
+      const criticalAlerts = activeAlerts.filter((a) => a.severity === "critical").length;
+      const averageAlerts = activeAlerts.filter((a) => a.severity === "warning").length;
+
+      // Determine overall status
+      let overallStatus: "critical" | "average" | "good" = "good";
+      if (criticalAlerts > 0) overallStatus = "critical";
+      else if (averageAlerts > 0) overallStatus = "average";
+
+      const [todaysReadings] = await db
+        .select({ count: count() })
+        .from(vitalsTable)
+        .where(and(eq(vitalsTable.patientId, patientId), gte(vitalsTable.recordedAt, today)));
+
+      return res.json({
+        isPatientView: true,
+        activeAlerts: activeAlerts.length,
+        criticalAlerts,
+        averageAlerts,
+        goodAlerts: overallStatus === "good" ? 1 : 0,
+        overallStatus,
+        todaysReadings: Number(todaysReadings.count),
+      });
+    }
+
+    // Provider stats: aggregate across all patients
     const [patientCount] = await db.select({ count: count() }).from(patientsTable);
 
-    const [activeAlerts] = await db
+    const [activeAlertsCount] = await db
       .select({ count: count() })
       .from(alertsTable)
       .where(eq(alertsTable.status, "active"));
@@ -99,17 +140,15 @@ router.get("/dashboard/stats", requireAuth, async (_req, res) => {
       else normalPatients++;
     }
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
     const [todaysReadings] = await db
       .select({ count: count() })
       .from(vitalsTable)
       .where(gte(vitalsTable.recordedAt, today));
 
     res.json({
+      isPatientView: false,
       totalPatients: Number(patientCount.count),
-      activeAlerts: Number(activeAlerts.count),
+      activeAlerts: Number(activeAlertsCount.count),
       criticalPatients,
       warningPatients,
       normalPatients,

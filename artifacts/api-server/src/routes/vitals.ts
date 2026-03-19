@@ -14,6 +14,10 @@ const router = Router();
 router.get("/patients/:patientId/vitals", requireAuth, async (req, res) => {
   try {
     const patientId = Number(req.params.patientId);
+    if (req.user!.role === "patient" && req.user!.id !== patientId) {
+      res.status(403).json({ error: "Forbidden", message: "Access denied" });
+      return;
+    }
     const period = (req.query.period as string) || "day";
     const limit = Math.min(Number(req.query.limit) || 100, 500);
 
@@ -44,6 +48,10 @@ router.get("/patients/:patientId/vitals", requireAuth, async (req, res) => {
 router.post("/patients/:patientId/vitals", requireAuth, async (req, res) => {
   try {
     const patientId = Number(req.params.patientId);
+    if (req.user!.role === "patient" && req.user!.id !== patientId) {
+      res.status(403).json({ error: "Forbidden", message: "Access denied" });
+      return;
+    }
     const { heartRate, systolicBp, diastolicBp, spo2, caloriesBurned, temperature, source, recordedAt } = req.body;
 
     const [vitals] = await db
@@ -76,6 +84,10 @@ router.post("/patients/:patientId/vitals", requireAuth, async (req, res) => {
 router.get("/patients/:patientId/vitals/latest", requireAuth, async (req, res) => {
   try {
     const patientId = Number(req.params.patientId);
+    if (req.user!.role === "patient" && req.user!.id !== patientId) {
+      res.status(403).json({ error: "Forbidden", message: "Access denied" });
+      return;
+    }
 
     const [vitals] = await db
       .select()

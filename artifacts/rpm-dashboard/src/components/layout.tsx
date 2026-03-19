@@ -8,10 +8,11 @@ import {
   LogOut,
   Bell,
   Search,
-  Menu
+  Menu,
+  UserCircle
 } from "lucide-react";
-import { useGetMe } from "@workspace/api-client-react";
-import { removeAuthToken, withAuth } from "@/lib/utils";
+import { removeAuthToken } from "@/lib/utils";
+import { useAuth } from "@/lib/auth-context";
 import { Button } from "@/components/ui/button";
 
 interface LayoutProps {
@@ -20,18 +21,26 @@ interface LayoutProps {
 
 export default function Layout({ children }: LayoutProps) {
   const [location, setLocation] = useLocation();
-  const { data: user, isLoading } = useGetMe({ request: withAuth() });
+  const { user, isLoading, isPatient } = useAuth();
 
   const handleLogout = () => {
     removeAuthToken();
     setLocation("/login");
   };
 
-  const navItems = [
+  const providerNavItems = [
     { href: "/", label: "Overview", icon: LayoutDashboard },
     { href: "/patients", label: "Patients", icon: Users },
     { href: "/alerts", label: "Alerts", icon: AlertCircle },
   ];
+
+  const patientNavItems = [
+    { href: "/", label: "My Dashboard", icon: LayoutDashboard },
+    { href: user ? `/patients/${user.id}` : "/", label: "My Profile", icon: UserCircle },
+    { href: "/alerts", label: "My Alerts", icon: AlertCircle },
+  ];
+
+  const navItems = isPatient ? patientNavItems : providerNavItems;
 
   useEffect(() => {
     if (!isLoading && !user) {

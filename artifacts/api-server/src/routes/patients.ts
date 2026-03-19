@@ -35,10 +35,16 @@ router.get("/patients", requireAuth, async (req, res) => {
     let query = db.select().from(patientsTable).$dynamic();
 
     const conditions = [];
-    if (providerId) conditions.push(eq(patientsTable.providerId, Number(providerId)));
-    if (search) {
-      const s = `%${search}%`;
-      conditions.push(or(ilike(patientsTable.name, s), ilike(patientsTable.email, s)));
+
+    // Patients can only see themselves
+    if (req.user!.role === "patient") {
+      conditions.push(eq(patientsTable.id, req.user!.id));
+    } else {
+      if (providerId) conditions.push(eq(patientsTable.providerId, Number(providerId)));
+      if (search) {
+        const s = `%${search}%`;
+        conditions.push(or(ilike(patientsTable.name, s), ilike(patientsTable.email, s)));
+      }
     }
 
     if (conditions.length > 0) {
@@ -143,6 +149,10 @@ router.post("/patients", requireAuth, async (req, res) => {
 router.get("/patients/:patientId", requireAuth, async (req, res) => {
   try {
     const patientId = Number(req.params.patientId);
+    if (req.user!.role === "patient" && req.user!.id !== patientId) {
+      res.status(403).json({ error: "Forbidden", message: "Access denied" });
+      return;
+    }
     const [patient] = await db
       .select()
       .from(patientsTable)

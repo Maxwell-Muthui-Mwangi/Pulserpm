@@ -8,6 +8,10 @@ const router = Router();
 router.get("/patients/:patientId/alerts", requireAuth, async (req, res) => {
   try {
     const patientId = Number(req.params.patientId);
+    if (req.user!.role === "patient" && req.user!.id !== patientId) {
+      res.status(403).json({ error: "Forbidden", message: "Access denied" });
+      return;
+    }
     const status = req.query.status as string | undefined;
     const limit = Math.min(Number(req.query.limit) || 50, 200);
 
@@ -35,6 +39,10 @@ router.get("/alerts", requireAuth, async (req, res) => {
     const limit = Math.min(Number(req.query.limit) || 50, 200);
 
     const conditions = [];
+    // Patients can only see their own alerts
+    if (req.user!.role === "patient") {
+      conditions.push(eq(alertsTable.patientId, req.user!.id));
+    }
     if (status) conditions.push(eq(alertsTable.status, status));
     if (severity) conditions.push(eq(alertsTable.severity, severity));
 

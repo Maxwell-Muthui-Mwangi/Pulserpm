@@ -9,6 +9,10 @@ const router = Router();
 router.get("/patients/:patientId/thresholds", requireAuth, async (req, res) => {
   try {
     const patientId = Number(req.params.patientId);
+    if (req.user!.role === "patient" && req.user!.id !== patientId) {
+      res.status(403).json({ error: "Forbidden", message: "Access denied" });
+      return;
+    }
     const thresholds = await getOrCreateThresholds(patientId);
     res.json(thresholds);
   } catch (err) {
@@ -20,6 +24,10 @@ router.get("/patients/:patientId/thresholds", requireAuth, async (req, res) => {
 router.put("/patients/:patientId/thresholds", requireAuth, async (req, res) => {
   try {
     const patientId = Number(req.params.patientId);
+    if (req.user!.role === "patient" && req.user!.id !== patientId) {
+      res.status(403).json({ error: "Forbidden", message: "Access denied" });
+      return;
+    }
     const updates = req.body;
 
     const existing = await getOrCreateThresholds(patientId);
