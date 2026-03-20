@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useRoute } from "wouter";
+import { QRCodeSVG } from "qrcode.react";
 import Layout from "@/components/layout";
 import { 
   useGetPatient, 
@@ -468,39 +469,68 @@ export default function PatientDetail() {
             <Card className="border-border/50 shadow-sm">
               <CardHeader>
                 <CardTitle className="flex items-center text-lg">
-                  <Wifi className="mr-2 h-5 w-5 text-primary" /> Your Device API Key
+                  <Wifi className="mr-2 h-5 w-5 text-primary" /> Connect Your Device
                 </CardTitle>
                 <CardDescription>
-                  Use this key to send health data from your wearable device or smartphone app directly into PulseRPM.
+                  Scan the QR code with your wearable device or app to automatically configure it and start sending health data to PulseRPM.
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="space-y-5">
                 {deviceApiKey ? (
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-2">
-                      <code className="flex-1 bg-muted rounded-lg px-3 py-2.5 text-sm font-mono text-foreground break-all border border-border/50">
-                        {deviceApiKey}
-                      </code>
-                      <Button variant="outline" size="icon" onClick={handleCopyKey} className="shrink-0">
-                        {keyCopied ? <CheckCircle2 className="h-4 w-4 text-success" /> : <Copy className="h-4 w-4" />}
-                      </Button>
+                  <div className="space-y-5">
+                    <div className="flex flex-col sm:flex-row items-center gap-6">
+                      <div className="flex flex-col items-center gap-3">
+                        <div className="p-4 bg-white rounded-2xl shadow-md border border-border/30">
+                          <QRCodeSVG
+                            value={JSON.stringify({ endpoint: ingestUrl, apiKey: deviceApiKey })}
+                            size={180}
+                            level="M"
+                            includeMargin={false}
+                          />
+                        </div>
+                        <p className="text-xs text-muted-foreground text-center max-w-[200px]">
+                          Scan to configure your device automatically
+                        </p>
+                      </div>
+                      <div className="flex-1 space-y-4 w-full">
+                        <div>
+                          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">API Key</p>
+                          <div className="flex items-center gap-2">
+                            <code className="flex-1 bg-muted rounded-lg px-3 py-2 text-xs font-mono text-foreground break-all border border-border/50">
+                              {deviceApiKey}
+                            </code>
+                            <Button variant="outline" size="icon" onClick={handleCopyKey} className="shrink-0 h-8 w-8">
+                              {keyCopied ? <CheckCircle2 className="h-3.5 w-3.5 text-success" /> : <Copy className="h-3.5 w-3.5" />}
+                            </Button>
+                          </div>
+                        </div>
+                        <div>
+                          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Ingest Endpoint</p>
+                          <code className="block bg-muted rounded-lg px-3 py-2 text-xs font-mono text-foreground break-all border border-border/50">
+                            {ingestUrl}
+                          </code>
+                        </div>
+                        <div className="flex gap-2 pt-1">
+                          <Button variant="outline" size="sm" onClick={handleGenerateKey} disabled={deviceLoading} className="gap-1.5">
+                            <RefreshCw className={`h-4 w-4 ${deviceLoading ? 'animate-spin' : ''}`} /> Regenerate
+                          </Button>
+                          <Button variant="ghost" size="sm" onClick={handleRevokeKey} disabled={deviceLoading} className="gap-1.5 text-destructive hover:bg-destructive/10 hover:text-destructive">
+                            <Trash2 className="h-4 w-4" /> Revoke
+                          </Button>
+                        </div>
+                      </div>
                     </div>
-                    <div className="flex gap-2">
-                      <Button variant="outline" size="sm" onClick={handleGenerateKey} disabled={deviceLoading} className="gap-1.5">
-                        <RefreshCw className={`h-4 w-4 ${deviceLoading ? 'animate-spin' : ''}`} /> Regenerate Key
-                      </Button>
-                      <Button variant="ghost" size="sm" onClick={handleRevokeKey} disabled={deviceLoading} className="gap-1.5 text-destructive hover:bg-destructive/10 hover:text-destructive">
-                        <Trash2 className="h-4 w-4" /> Revoke Key
-                      </Button>
-                    </div>
+                    <p className="text-xs text-muted-foreground bg-muted/50 rounded-lg px-3 py-2 border border-border/30">
+                      The QR code encodes your unique API key and endpoint. Each patient has a different QR code — point your device's scanner at it to pair instantly.
+                    </p>
                   </div>
                 ) : (
-                  <div className="text-center py-6 border border-dashed rounded-xl border-border/50">
+                  <div className="text-center py-8 border border-dashed rounded-xl border-border/50">
                     <Smartphone className="h-10 w-10 text-muted-foreground/50 mx-auto mb-3" />
-                    <p className="text-sm text-muted-foreground mb-4">No device key yet. Generate one to connect your wearable.</p>
+                    <p className="text-sm text-muted-foreground mb-4">Generate a QR code to pair your wearable device.</p>
                     <Button onClick={handleGenerateKey} disabled={deviceLoading}>
                       {deviceLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                      Generate Device Key
+                      Generate QR Code
                     </Button>
                   </div>
                 )}
