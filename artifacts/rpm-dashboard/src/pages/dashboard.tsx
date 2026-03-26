@@ -121,9 +121,9 @@ export default function Dashboard() {
     const overallStatus: "critical" | "average" | "good" = ps.overallStatus ?? "good";
 
     const statusConfig = {
-      critical: { label: "Critical", color: "text-black",        bg: "bg-destructive/5", border: "border-destructive/20", dot: "bg-destructive animate-pulse" },
-      average:  { label: "Average",  color: "text-black", bg: "bg-warning/5",     border: "border-warning/10",    dot: "bg-warning" },
-      good:     { label: "Good",     color: "text-black", bg: "bg-success/5",     border: "border-success/10",    dot: "bg-success" },
+      critical: { label: "Critical", color: "text-red-900",        bg: "bg-destructive/5", border: "border-destructive/20", dot: "bg-destructive animate-pulse" },
+      average:  { label: "Average",  color: "text-orange-800", bg: "bg-warning/5",     border: "border-warning/10",    dot: "bg-warning" },
+      good:     { label: "Good",     color: "text-green-800", bg: "bg-success/5",     border: "border-success/10",    dot: "bg-success" },
     };
     const sc = statusConfig[overallStatus];
 
