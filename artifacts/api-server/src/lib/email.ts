@@ -170,3 +170,34 @@ export async function sendAlertEmail(data: AlertEmailData): Promise<void> {
     console.error("[email] Failed to send alert email:", err);
   }
 }
+
+export async function sendVerificationEmail(to: string, name: string, code: string): Promise<void> {
+  const transport = createTransport();
+  if (!transport) {
+    console.log(`[email] SMTP not configured — verification code for ${to}: ${code}`);
+    return;
+  }
+  try {
+    await transport.sendMail({
+      from: `"PulseRPM" <${process.env.SMTP_USER}>`,
+      to,
+      subject: "Verify your PulseRPM account",
+      html: `
+        <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px 24px;background:#fff;border-radius:12px;border:1px solid #e5e7eb;">
+          <div style="text-align:center;margin-bottom:24px;">
+            <span style="font-size:28px;font-weight:800;color:#0ea5e9;">Pulse<span style="color:#334155;">RPM</span></span>
+          </div>
+          <h2 style="font-size:20px;font-weight:700;color:#0f172a;margin:0 0 8px;">Verify your email address</h2>
+          <p style="color:#64748b;font-size:14px;margin:0 0 24px;">Hi ${name}, welcome to PulseRPM! Use the code below to verify your email address. It expires in 15 minutes.</p>
+          <div style="background:#f1f5f9;border-radius:10px;padding:24px;text-align:center;margin-bottom:24px;">
+            <span style="font-size:36px;font-weight:800;letter-spacing:10px;color:#0ea5e9;">${code}</span>
+          </div>
+          <p style="color:#94a3b8;font-size:12px;text-align:center;">If you didn't create an account with PulseRPM, you can safely ignore this email.</p>
+        </div>
+      `,
+    });
+    console.log(`[email] Verification email sent to ${to}`);
+  } catch (err) {
+    console.error("[email] Failed to send verification email:", err);
+  }
+}

@@ -38,6 +38,30 @@ A full-stack Remote Patient Monitoring platform with role-based access control f
 - Logout: `queryClient.clear()` → `removeAuthToken` → SPA redirect to /login
 - `useGetMe` uses `queryKey: ["me", token]` — token change = fresh cache entry, no stale role data
 
+## Patient Enrollment Flow
+
+### Patient self-signup (3-step)
+1. **Patient signs up** via `/login` → "Sign Up" → "Patient" role → enters name/email/password → `POST /api/auth/patient-signup` → creates row in `pending_patients` table + sends 6-digit verification email (15-min expiry)
+2. **Email verification** → patient enters 6-digit code → `POST /api/auth/verify-email` → marks `email_verified=true`. Resend via `POST /api/auth/resend-code`. If code wrong/expired, patient is prompted to resend.
+3. **Awaiting approval** → patient sees "Your account is awaiting approval" screen. They cannot log into the patient UI until approved.
+
+### Provider approval flow
+- **Badge**: `GET /api/patients/pending/count` (polled every 30s) — count of email-verified pending patients shown as red badge on "Add Patient" button
+- **Modal**: clicking "Add Patient" opens modal → `GET /api/patients/pending` → list of verified patients awaiting approval
+- **Approve**: provider clicks patient → fills Age, Gender, Health Conditions → clicks "Approve" → `POST /api/patients/pending/:id/approve` → creates full patient record in `patients` table with `approval_welcome_pending=true`, deletes from `pending_patients`
+
+### Post-approval welcome
+- On first login after approval, `GET /api/auth/me` returns `approvalWelcomePending: true`
+- Layout shows a one-time "Welcome to PulseRPM!" popup
+- Patient clicks "Get Started" → `POST /api/auth/dismiss-welcome` sets `approval_welcome_pending=false`
+
+### DB tables
+- `pending_patients`: `id, name, email, password_hash, verification_code, verification_expiry, email_verified, created_at`
+- `patients.approval_welcome_pending`: boolean, defaults to `false`, set to `true` when provider approves
+
+### Email
+- `sendVerificationEmail(to, name, code)` in `lib/email.ts` — gracefully skips if SMTP not configured (logs code to console)
+
 ## Device & Wearable Integration
 
 ### Device API Key system (`/api/device/`)

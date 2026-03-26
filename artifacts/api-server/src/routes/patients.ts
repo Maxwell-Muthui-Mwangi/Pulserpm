@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db, patientsTable, vitalsTable, alertsTable, thresholdsTable } from "@workspace/db";
+import { db, patientsTable, vitalsTable, alertsTable, thresholdsTable, pendingPatientsTable } from "@workspace/db";
 import { eq, and, or, ilike, inArray, sql, count, desc } from "drizzle-orm";
 import { hashPassword } from "../lib/auth.js";
 import { requireAuth } from "../middlewares/auth.js";
@@ -27,6 +27,68 @@ async function computeRiskLevel(patientId: number): Promise<"normal" | "warning"
   if (activeAlerts.some((a) => a.severity === "warning")) return "warning";
   return "normal";
 }
+
+router.get("/patients/pending/count", requireAuth, async (req, res) => {
+  try {
+    if (req.user!.role !== "provider") { res.status(403).json({ error: "Forbidden" }); return; }
+    const [row] = await db.select({ count: count() }).from(pendingPatientsTable).where(eq(pendingPatientsTable.emailVerified, true));
+    res.json({ count: Number(row?.count ?? 0) });
+  } catch (err) {
+    console.error("Pending count error:", err);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+router.get("/patients/pending", requireAuth, async (req, res) => {
+  try {
+    if (req.user!.role !== "provider") { res.status(403).json({ error: "Forbidden" }); return; }
+    const rows = await db.select({ id: pendingPatientsTable.id, name: pendingPatientsTable.name, email: pendingPatientsTable.email, createdAt: pendingPatientsTable.createdAt })
+      .from(pendingPatientsTable)
+      .where(eq(pendingPatientsTable.emailVerified, true))
+      .orderBy(desc(pendingPatientsTable.createdAt));
+    res.json(rows);
+  } catch (err) {
+    console.error("Pending patients error:", err);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+router.post("/patients/pending/:id/approve", requireAuth, async (req, res) => {
+  try {
+    if (req.user!.role !== "provider") { res.status(403).json({ error: "Forbidden" }); return; }
+    const pendingId = parseInt(req.params.id, 10);
+    const { age, conditions, gender, dateOfBirth, providerId } = req.body;
+
+    const [pending] = await db.select().from(pendingPatientsTable).where(eq(pendingPatientsTable.id, pendingId)).limit(1);
+    if (!pending) { res.status(404).json({ error: "Not Found", message: "Pending patient not found" }); return; }
+
+    const conditionsArr: string[] = Array.isArray(conditions) ? conditions : (conditions ? [conditions] : []);
+    let dob: string | undefined = dateOfBirth;
+    if (!dob && age) {
+      const year = new Date().getFullYear() - parseInt(age, 10);
+      dob = `${year}-01-01`;
+    }
+
+    const [patient] = await db.insert(patientsTable).values({
+      name: pending.name,
+      email: pending.email,
+      passwordHash: pending.passwordHash,
+      role: "patient",
+      conditions: conditionsArr,
+      deviceType: "manual",
+      gender: gender || null,
+      dateOfBirth: dob || null,
+      providerId: providerId ? parseInt(providerId, 10) : (req.user!.id ?? null),
+      approvalWelcomePending: true,
+    }).returning();
+
+    await db.delete(pendingPatientsTable).where(eq(pendingPatientsTable.id, pendingId));
+    res.status(201).json({ id: patient.id, name: patient.name, email: patient.email });
+  } catch (err) {
+    console.error("Approve patient error:", err);
+    res.status(500).json({ error: "Internal Server Error", message: "Approval failed" });
+  }
+});
 
 router.get("/patients", requireAuth, async (req, res) => {
   try {

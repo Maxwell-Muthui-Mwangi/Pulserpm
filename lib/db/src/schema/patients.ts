@@ -1,4 +1,4 @@
-import { pgTable, serial, text, timestamp, integer, date, uuid } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, timestamp, integer, date, uuid, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { providersTable } from "./providers";
@@ -15,6 +15,7 @@ export const patientsTable = pgTable("patients", {
   deviceType: text("device_type").default("manual"),
   deviceApiKey: uuid("device_api_key"),
   role: text("role").notNull().default("patient"),
+  approvalWelcomePending: boolean("approval_welcome_pending").notNull().default(false),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

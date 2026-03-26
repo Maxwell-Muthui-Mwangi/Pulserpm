@@ -13,15 +13,18 @@ import {
   AlertTriangle,
   X,
   ChevronRight,
+  CheckCircle2,
+  HeartPulse,
 } from "lucide-react";
-import { removeAuthToken } from "@/lib/utils";
+import { removeAuthToken, withAuth, getAuthToken } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 import { useListAlerts } from "@workspace/api-client-react";
-import { withAuth } from "@/lib/utils";
 import { queryClient } from "@/lib/query-client";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
+
+const API_BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 interface LayoutProps {
   children: ReactNode;
@@ -32,6 +35,19 @@ export default function Layout({ children }: LayoutProps) {
   const { user, isLoading, isPatient } = useAuth();
   const [notifOpen, setNotifOpen] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
+  const [welcomeDismissed, setWelcomeDismissed] = useState(false);
+
+  const showWelcomePopup = isPatient && !welcomeDismissed && !!user?.approvalWelcomePending;
+
+  const dismissWelcome = async () => {
+    setWelcomeDismissed(true);
+    try {
+      await fetch(`${API_BASE}/api/auth/dismiss-welcome`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${getAuthToken()}` },
+      });
+    } catch { /* ignore */ }
+  };
 
   const { data: dangerAlerts } = useListAlerts(
     { status: "active", limit: 20 },
@@ -91,6 +107,34 @@ export default function Layout({ children }: LayoutProps) {
 
   return (
     <div className="flex h-screen bg-background overflow-hidden">
+      {/* One-time welcome popup for newly approved patients */}
+      {showWelcomePopup && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="bg-card w-full max-w-sm rounded-2xl shadow-2xl border border-border/50 overflow-hidden">
+            <div className="bg-gradient-to-br from-primary/10 via-primary/5 to-transparent px-6 pt-8 pb-6 text-center">
+              <div className="flex items-center justify-center mb-4">
+                <div className="h-16 w-16 rounded-full bg-success/15 border-2 border-success/30 flex items-center justify-center">
+                  <HeartPulse className="h-8 w-8 text-success" />
+                </div>
+              </div>
+              <h2 className="text-xl font-bold text-foreground">Welcome to PulseRPM!</h2>
+              <p className="text-sm text-muted-foreground mt-2 leading-relaxed">
+                You've been approved as a monitored patient by your healthcare provider. Your health dashboard is now active.
+              </p>
+            </div>
+            <div className="px-6 pb-6 space-y-3">
+              <div className="bg-success/8 border border-success/20 rounded-xl px-4 py-3 flex items-start gap-3">
+                <CheckCircle2 className="h-4 w-4 text-success mt-0.5 shrink-0" />
+                <p className="text-xs text-success-foreground">Your vitals will be monitored and your provider will be alerted if anything needs attention.</p>
+              </div>
+              <Button className="w-full h-11 shadow-md" onClick={dismissWelcome}>
+                Get Started
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+      
       {/* Sidebar */}
       <aside className="hidden md:flex flex-col w-64 border-r border-border bg-card shadow-sm z-10">
         <div className="h-16 flex items-center px-6 border-b border-border/50">
