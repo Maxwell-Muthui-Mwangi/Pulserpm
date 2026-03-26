@@ -410,7 +410,7 @@ export default function Dashboard() {
                     <div className="flex items-center gap-3">
                       <div className="w-3 h-3 rounded-full bg-warning" />
                       <div>
-                        <p className="font-semibold text-warning-foreground">Warning</p>
+                        <p className="font-semibold text-orange-500">Warning</p>
                         <p className="text-xs text-muted-foreground">Needs monitoring</p>
                       </div>
                     </div>
@@ -420,7 +420,7 @@ export default function Dashboard() {
                     <div className="flex items-center gap-3">
                       <div className="w-3 h-3 rounded-full bg-success" />
                       <div>
-                        <p className="font-semibold text-success-foreground">Stable</p>
+                        <p className="font-semibold text-green-600">Stable</p>
                         <p className="text-xs text-muted-foreground">Within normal range</p>
                       </div>
                     </div>
