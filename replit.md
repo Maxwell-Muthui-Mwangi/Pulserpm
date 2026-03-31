@@ -157,11 +157,31 @@ artifacts-monorepo/
 - **Provider**: james.carter@rpmhospital.com / password123 (Internal Medicine)
 - **Patient**: eleanor.thompson@email.com / patient123
 
+## Companion Mobile App (PulseRPM Mobile)
+
+Expo/React Native app at `artifacts/pulserpm-mobile`. Allows patients to sync vitals manually from Oraimo smartwatch.
+
+### Screens
+- **Pair screen** (`/pair`): QR code scanner (expo-camera) + manual API key entry. Auto-redirects here when not paired.
+- **Monitor tab** (`/(tabs)/index`): Sync status, last reading pills (HR/SpO₂/Temp/BP), quick log CTA, recent sync history.
+- **Log tab** (`/(tabs)/log`): Manual vitals entry form with validation. Skip fields that aren't available. Sends to `/api/device/ingest` with `source: "oraimo"`.
+- **Settings tab** (`/(tabs)/settings`): API key display, sync stats, health platform status (Google Fit/Apple Health = APK-only), disconnect.
+
+### State (AppContext)
+- `apiKey`: stored in AsyncStorage; controls paired/unpaired state
+- Pending queue: failed readings stored in AsyncStorage and retried on foreground resume (AppState listener)
+- Sync log: last 50 entries with status, timestamps, alert counts
+
+### Limitations
+- Google Fit / Apple HealthKit auto-sync requires native APK build (not available in Expo Go)
+- Current flow: Open Oraimo app → note readings → enter in Log tab → sync to PulseRPM
+
 ## Wearable Device Support
 
 Supported source types (normalized):
-- `apple_health` (iOS HealthKit)
-- `google_fit` (Android)
+- `oraimo` (manual entry from Oraimo Health app — works now via mobile app Log tab)
+- `apple_health` (iOS HealthKit — auto-sync in native build)
+- `google_fit` (Android — auto-sync in native build)
 - `fitbit`
 - `garmin`
 - `manual`
