@@ -11,12 +11,14 @@ import Dashboard from "@/pages/dashboard";
 import Patients from "@/pages/patients";
 import PatientDetail from "@/pages/patient-detail";
 import Alerts from "@/pages/alerts";
+import Sync from "@/pages/sync";
 
 
 function Router() {
   return (
     <Switch>
       <Route path="/login" component={Login} />
+      <Route path="/sync" component={Sync} />
       <Route path="/" component={Dashboard} />
       <Route path="/patients" component={Patients} />
       <Route path="/patients/:id" component={PatientDetail} />

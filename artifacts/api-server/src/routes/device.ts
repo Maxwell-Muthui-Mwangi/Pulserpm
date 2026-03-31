@@ -133,6 +133,12 @@ router.post("/device/ingest", async (req, res) => {
 
     const recordedAt = body.recordedAt || body.StartDate || body.startDate || body.timestamp || new Date().toISOString();
 
+    // Accept source from body (e.g. "oraimo"), fall back to "wearable"
+    const ALLOWED_SOURCES = ["oraimo", "wearable", "manual", "apple_health", "google_fit", "fitbit"];
+    const source = (typeof body.source === "string" && ALLOWED_SOURCES.includes(body.source))
+      ? body.source
+      : "wearable";
+
     if (!heartRate && !systolicBp && !spo2 && !temperature) {
       res.status(400).json({ error: "Bad Request", message: "No recognizable vital signs in payload" });
       return;
@@ -146,7 +152,7 @@ router.post("/device/ingest", async (req, res) => {
       spo2: spo2 ? Math.round(spo2) : null,
       temperature: temperature ? Number(temperature.toFixed(1)) : null,
       caloriesBurned: caloriesBurned ? Math.round(caloriesBurned) : null,
-      source: "wearable",
+      source,
       recordedAt: new Date(recordedAt),
     }).returning();
 

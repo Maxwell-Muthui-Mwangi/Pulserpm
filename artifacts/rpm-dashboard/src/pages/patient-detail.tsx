@@ -161,6 +161,9 @@ export default function PatientDetail() {
   }).reverse() || [];
 
   const ingestUrl = `${window.location.origin}${API_BASE}/api/device/ingest`;
+  const syncPageUrl = deviceApiKey
+    ? `${window.location.origin}${API_BASE}/sync?apiKey=${deviceApiKey}`
+    : "";
 
   return (
     <Layout>
@@ -469,10 +472,10 @@ export default function PatientDetail() {
             <Card className="border-border/50 shadow-sm">
               <CardHeader>
                 <CardTitle className="flex items-center text-lg">
-                  <Wifi className="mr-2 h-5 w-5 text-primary" /> Connect Your Device
+                  <Wifi className="mr-2 h-5 w-5 text-primary" /> Connect Your Oraimo Watch
                 </CardTitle>
                 <CardDescription>
-                  Scan the QR code with your wearable device or app to automatically configure it and start sending health data to PulseRPM.
+                  Scan the QR code below with your phone to open the Oraimo sync form. Enter your latest readings directly from the Oraimo app — blood pressure and other unavailable readings can be skipped.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-5">
@@ -482,14 +485,14 @@ export default function PatientDetail() {
                       <div className="flex flex-col items-center gap-3">
                         <div className="p-4 bg-white rounded-2xl shadow-md border border-border/30">
                           <QRCodeSVG
-                            value={JSON.stringify({ endpoint: ingestUrl, apiKey: deviceApiKey })}
+                            value={syncPageUrl}
                             size={180}
                             level="M"
                             includeMargin={false}
                           />
                         </div>
                         <p className="text-xs text-muted-foreground text-center max-w-[200px]">
-                          Scan to configure your device automatically
+                          Scan with your phone to open the Oraimo sync form
                         </p>
                       </div>
                       <div className="flex-1 space-y-4 w-full">
@@ -521,7 +524,7 @@ export default function PatientDetail() {
                       </div>
                     </div>
                     <p className="text-xs text-muted-foreground bg-muted/50 rounded-lg px-3 py-2 border border-border/30">
-                      The QR code encodes your unique API key and endpoint. Each patient has a different QR code — point your device's scanner at it to pair instantly.
+                      Scanning this QR code with your phone opens a mobile form where you can enter readings from the Oraimo app. Blood pressure is optional — skip it if your watch doesn't measure it.
                     </p>
                   </div>
                 ) : (
@@ -539,6 +542,38 @@ export default function PatientDetail() {
 
             {/* Integration Instructions */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Oraimo — primary card */}
+              <Card className="border-green-200 bg-green-50/30 shadow-sm md:col-span-2">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Watch className="h-4 w-4 text-green-600" />
+                    <span><span className="font-bold text-green-700">o</span>raimo Smartwatch</span>
+                    <span className="ml-auto text-xs font-normal bg-green-100 text-green-700 px-2 py-0.5 rounded-full border border-green-200">Recommended</span>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="text-sm text-muted-foreground space-y-3">
+                  <p>Sync your Oraimo smartwatch readings directly using the QR code above:</p>
+                  <ol className="list-decimal list-inside space-y-1.5 text-xs">
+                    <li>Generate your QR code above (if you haven't already)</li>
+                    <li>Scan the QR code with your phone camera</li>
+                    <li>The <strong>PulseRPM sync form</strong> opens in your browser</li>
+                    <li>Open the <strong>Oraimo Health app</strong> and note your latest readings</li>
+                    <li>Enter Heart Rate, SpO₂, and Temperature into the form</li>
+                    <li><strong>Skip Blood Pressure</strong> if your Oraimo model doesn't measure it</li>
+                    <li>Tap <em>"Sync to PulseRPM"</em> — your provider is notified instantly</li>
+                  </ol>
+                  <div className="bg-white border border-green-100 rounded-lg p-3 text-xs space-y-1">
+                    <p className="font-semibold text-gray-700">Supported readings from Oraimo:</p>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-gray-600">
+                      <span>✅ Heart Rate (all models)</span>
+                      <span>✅ Blood Oxygen / SpO₂ (most models)</span>
+                      <span>⚠️ Body Temperature (select models)</span>
+                      <span>⚠️ Blood Pressure (select models only)</span>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
               {/* Apple Health */}
               <Card className="border-border/50 shadow-sm">
                 <CardHeader className="pb-3">
