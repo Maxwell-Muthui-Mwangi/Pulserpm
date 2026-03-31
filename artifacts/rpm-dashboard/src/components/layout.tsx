@@ -15,6 +15,7 @@ import {
   ChevronRight,
   CheckCircle2,
   HeartPulse,
+  Shield,
 } from "lucide-react";
 import { removeAuthToken, withAuth, getAuthToken } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
@@ -79,6 +80,7 @@ export default function Layout({ children }: LayoutProps) {
     { href: "/", label: "Overview", icon: LayoutDashboard },
     { href: "/patients", label: "Patients", icon: Users },
     { href: "/alerts", label: "Alerts", icon: AlertCircle },
+    { href: "/security", label: "Audit Log", icon: Shield },
   ];
 
   const patientNavItems = [

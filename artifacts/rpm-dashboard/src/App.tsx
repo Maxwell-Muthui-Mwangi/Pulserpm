@@ -12,6 +12,7 @@ import Patients from "@/pages/patients";
 import PatientDetail from "@/pages/patient-detail";
 import Alerts from "@/pages/alerts";
 import Sync from "@/pages/sync";
+import AuditLog from "@/pages/audit-log";
 
 
 function Router() {
@@ -23,6 +24,7 @@ function Router() {
       <Route path="/patients" component={Patients} />
       <Route path="/patients/:id" component={PatientDetail} />
       <Route path="/alerts" component={Alerts} />
+      <Route path="/security" component={AuditLog} />
       <Route component={NotFound} />
     </Switch>
   );

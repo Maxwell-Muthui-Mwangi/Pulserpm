@@ -8,6 +8,7 @@ import alertsRouter from "./alerts.js";
 import thresholdsRouter from "./thresholds.js";
 import summaryRouter from "./summary.js";
 import deviceRouter from "./device.js";
+import auditRouter from "./audit.js";
 
 const router: IRouter = Router();
 
@@ -20,5 +21,6 @@ router.use(alertsRouter);
 router.use(thresholdsRouter);
 router.use(summaryRouter);
 router.use(deviceRouter);
+router.use(auditRouter);
 
 export default router;

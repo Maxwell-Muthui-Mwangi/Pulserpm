@@ -4,6 +4,8 @@ import { eq } from "drizzle-orm";
 import { hashPassword, verifyPassword, createToken } from "../lib/auth.js";
 import { requireAuth } from "../middlewares/auth.js";
 import { sendVerificationEmail } from "../lib/email.js";
+import { logAuditEvent, getClientIp } from "../middlewares/auditLog.js";
+import { authLimiter } from "../middlewares/rateLimit.js";
 
 const router = Router();
 
@@ -11,9 +13,12 @@ function generateCode(): string {
   return String(Math.floor(100000 + Math.random() * 900000));
 }
 
-router.post("/auth/login", async (req, res) => {
+router.post("/auth/login", authLimiter, async (req, res) => {
   try {
     const { email, password } = req.body;
+    const ip = getClientIp(req);
+    const ua = req.headers["user-agent"];
+
     if (!email || !password) {
       res.status(400).json({ error: "Bad Request", message: "Email and password required" });
       return;
@@ -22,6 +27,7 @@ router.post("/auth/login", async (req, res) => {
     const [provider] = await db.select().from(providersTable).where(eq(providersTable.email, email)).limit(1);
     if (provider && verifyPassword(password, provider.passwordHash)) {
       const token = createToken({ id: provider.id, email: provider.email, role: provider.role });
+      logAuditEvent({ actorId: provider.id, actorEmail: provider.email, actorRole: provider.role, action: "auth.login", resourceType: "auth", ipAddress: ip, userAgent: ua, outcome: "success" });
       res.json({ token, user: { id: provider.id, email: provider.email, name: provider.name, role: provider.role } });
       return;
     }
@@ -29,12 +35,14 @@ router.post("/auth/login", async (req, res) => {
     const [patient] = await db.select().from(patientsTable).where(eq(patientsTable.email, email)).limit(1);
     if (patient && verifyPassword(password, patient.passwordHash)) {
       const token = createToken({ id: patient.id, email: patient.email, role: patient.role });
+      logAuditEvent({ actorId: patient.id, actorEmail: patient.email, actorRole: patient.role, action: "auth.login", resourceType: "auth", ipAddress: ip, userAgent: ua, outcome: "success" });
       res.json({ token, user: { id: patient.id, email: patient.email, name: patient.name, role: patient.role } });
       return;
     }
 
     const [pending] = await db.select().from(pendingPatientsTable).where(eq(pendingPatientsTable.email, email)).limit(1);
     if (pending && verifyPassword(password, pending.passwordHash)) {
+      logAuditEvent({ actorEmail: email, action: "auth.login", resourceType: "auth", ipAddress: ip, userAgent: ua, outcome: "denied", details: JSON.stringify({ reason: pending.emailVerified ? "pending_approval" : "email_unverified" }) });
       if (!pending.emailVerified) {
         res.status(403).json({ error: "Email not verified", status: "email_unverified", message: "Please verify your email before logging in.", email: pending.email });
         return;
@@ -43,6 +51,7 @@ router.post("/auth/login", async (req, res) => {
       return;
     }
 
+    logAuditEvent({ actorEmail: email, action: "auth.login_failed", resourceType: "auth", ipAddress: ip, userAgent: ua, outcome: "failure", details: JSON.stringify({ reason: "invalid_credentials" }) });
     res.status(401).json({ error: "Unauthorized", message: "Invalid email or password" });
   } catch (err) {
     console.error("Login error:", err);
@@ -50,7 +59,7 @@ router.post("/auth/login", async (req, res) => {
   }
 });
 
-router.post("/auth/patient-signup", async (req, res) => {
+router.post("/auth/patient-signup", authLimiter, async (req, res) => {
   try {
     const { name, email, password } = req.body;
     if (!name || !email || !password) {
@@ -89,6 +98,7 @@ router.post("/auth/patient-signup", async (req, res) => {
       });
     }
 
+    logAuditEvent({ actorEmail: email, action: "auth.signup", resourceType: "auth", ipAddress: getClientIp(req), userAgent: req.headers["user-agent"], outcome: "success" });
     setImmediate(() => sendVerificationEmail(email, name, code));
     res.status(201).json({ message: "Verification code sent to your email.", email });
   } catch (err) {
@@ -191,7 +201,7 @@ router.post("/auth/dismiss-welcome", requireAuth, async (req, res) => {
   }
 });
 
-router.post("/auth/signup", async (req, res) => {
+router.post("/auth/signup", authLimiter, async (req, res) => {
   try {
     const { name, email, password, role = "provider", specialty } = req.body;
     if (!name || !email || !password) {
@@ -209,6 +219,7 @@ router.post("/auth/signup", async (req, res) => {
     if (role === "provider") {
       const [provider] = await db.insert(providersTable).values({ name, email, passwordHash: hashPassword(password), specialty: specialty || null, role: "provider" }).returning();
       const token = createToken({ id: provider.id, email: provider.email, role: provider.role });
+      logAuditEvent({ actorId: provider.id, actorEmail: provider.email, actorRole: "provider", action: "auth.signup", resourceType: "auth", ipAddress: getClientIp(req), userAgent: req.headers["user-agent"], outcome: "success" });
       res.status(201).json({ token, user: { id: provider.id, email: provider.email, name: provider.name, role: provider.role } });
     } else {
       res.status(400).json({ error: "Bad Request", message: "Use /api/auth/patient-signup for patient registration" });

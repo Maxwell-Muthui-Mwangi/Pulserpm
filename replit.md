@@ -206,6 +206,28 @@ pnpm --filter @workspace/scripts run seed
 pnpm --filter @workspace/api-spec run codegen
 ```
 
+## Security & HIPAA Compliance
+
+### Security Headers (Helmet)
+- Applied globally via `helmet()` — sets X-Content-Type-Options, X-Frame-Options, Referrer-Policy, and more
+- CORS restricted to `*.replit.dev`, `*.replit.app`, `localhost`
+
+### Rate Limiting
+- **Auth endpoints** (`/api/auth/login`, `/api/auth/signup`, `/api/auth/patient-signup`): 10 requests per 15 minutes per IP
+- **General API**: 200 requests per minute per IP
+- **Device ingest**: 60 requests per minute per IP
+- Returns `429 Too Many Requests` with a clear message
+
+### Audit Logging (HIPAA §164.312(b))
+- **Table**: `audit_logs` — records every significant system event
+- **Fields**: timestamp, actor ID/email/role, action, resource type/ID, IP address, user agent, outcome (success/failure/denied), details JSON
+- **Captured events**: all login attempts (success, failure, denial with reason), all authenticated write operations (thresholds, alerts, patient data, vitals), sign-ups, patient approvals
+- **Auto-middleware**: `auditMiddleware` hooks into all authenticated POST/PUT/DELETE/PATCH requests via `res.on('finish')`
+- **Explicit logging**: `logAuditEvent()` used in auth routes for precise context
+- **API**: `GET /api/audit?limit&offset&outcome&action` — providers only, returns paginated log with total count
+- **UI**: `/security` page in provider sidebar — searchable/filterable table with color-coded outcomes and action badges
+- **Non-blocking**: All writes use `setImmediate()` — never slows down responses
+
 ## Alert Threshold Defaults (per patient, configurable)
 
 | Vital | Warning Min | Warning Max | Critical Min | Critical Max |
