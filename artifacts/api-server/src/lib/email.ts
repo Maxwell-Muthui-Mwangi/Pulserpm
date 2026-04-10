@@ -223,3 +223,110 @@ export async function sendAlertEmail(data: AlertEmailData): Promise<void> {
 export async function sendVerificationEmail(to: string, name: string, code: string): Promise<void> {
   await send(to, "Verify your PulseRPM account", buildVerificationEmailHtml(name, code), `verification code for ${to}: ${code}`);
 }
+
+// ── Patient approved email ────────────────────────────────────────────────────
+function buildPatientApprovedHtml(patientName: string, loginUrl: string): string {
+  const firstName = patientName.split(" ")[0];
+  return `<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f9fafb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+  <div style="max-width:480px;margin:40px auto;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
+    <div style="background:linear-gradient(135deg,#0ea5e9 0%,#0284c7 100%);padding:32px;text-align:center;">
+      <span style="font-size:28px;font-weight:800;color:#ffffff;letter-spacing:-0.5px;">Pulse<span style="color:rgba(255,255,255,0.7);">RPM</span></span>
+    </div>
+    <div style="padding:32px;">
+      <div style="text-align:center;margin-bottom:24px;">
+        <div style="display:inline-flex;align-items:center;justify-content:center;width:56px;height:56px;border-radius:50%;background:#dcfce7;">
+          <span style="font-size:26px;">✓</span>
+        </div>
+      </div>
+      <h2 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#0f172a;text-align:center;">You're approved, ${firstName}!</h2>
+      <p style="color:#64748b;font-size:14px;line-height:1.7;margin:0 0 28px;text-align:center;">
+        Your PulseRPM account has been approved by your care team.<br>
+        You can now log in and start monitoring your health.
+      </p>
+      <div style="text-align:center;margin-bottom:28px;">
+        <a href="${loginUrl}" style="display:inline-block;background:#0ea5e9;color:#ffffff;text-decoration:none;padding:14px 32px;border-radius:8px;font-size:15px;font-weight:600;">Log In to PulseRPM</a>
+      </div>
+      <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:16px 20px;">
+        <p style="margin:0 0 8px;font-size:13px;font-weight:600;color:#475569;">What you can do now:</p>
+        <ul style="margin:0;padding-left:18px;color:#64748b;font-size:13px;line-height:1.8;">
+          <li>View your vitals dashboard and health trends</li>
+          <li>Connect your smartwatch or wearable device</li>
+          <li>Receive personalized health alerts</li>
+          <li>Message your care team</li>
+        </ul>
+      </div>
+    </div>
+    <div style="padding:16px 32px;background:#f8fafc;border-top:1px solid #e2e8f0;">
+      <p style="margin:0;color:#cbd5e1;font-size:11px;text-align:center;">PulseRPM · Remote Patient Monitoring · Secure &amp; HIPAA-Compliant</p>
+    </div>
+  </div>
+</body>
+</html>`;
+}
+
+export async function sendPatientApprovedEmail(to: string, patientName: string, loginUrl: string): Promise<void> {
+  await send(
+    to,
+    "You've been approved — welcome to PulseRPM!",
+    buildPatientApprovedHtml(patientName, loginUrl),
+    `approval notification for ${to}`
+  );
+}
+
+// ── Provider: new patient pending approval ────────────────────────────────────
+function buildNewPatientPendingHtml(providerName: string, patientName: string, patientEmail: string, dashboardUrl: string): string {
+  const lastName = providerName.split(" ").at(-1) ?? providerName;
+  return `<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f9fafb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+  <div style="max-width:480px;margin:40px auto;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
+    <div style="background:linear-gradient(135deg,#0ea5e9 0%,#0284c7 100%);padding:32px;text-align:center;">
+      <span style="font-size:28px;font-weight:800;color:#ffffff;letter-spacing:-0.5px;">Pulse<span style="color:rgba(255,255,255,0.7);">RPM</span></span>
+    </div>
+    <div style="padding:32px;">
+      <h2 style="margin:0 0 8px;font-size:20px;font-weight:700;color:#0f172a;">New patient awaiting approval</h2>
+      <p style="color:#64748b;font-size:14px;line-height:1.7;margin:0 0 24px;">
+        Dear Dr. ${lastName}, a new patient has verified their email and is waiting for your approval to access PulseRPM.
+      </p>
+      <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:16px 20px;margin-bottom:24px;">
+        <table style="width:100%;border-collapse:collapse;">
+          <tr>
+            <td style="padding:6px 0;color:#94a3b8;font-size:13px;width:80px;">Name</td>
+            <td style="padding:6px 0;color:#0f172a;font-size:14px;font-weight:600;">${patientName}</td>
+          </tr>
+          <tr>
+            <td style="padding:6px 0;color:#94a3b8;font-size:13px;">Email</td>
+            <td style="padding:6px 0;color:#0f172a;font-size:14px;">${patientEmail}</td>
+          </tr>
+          <tr>
+            <td style="padding:6px 0;color:#94a3b8;font-size:13px;">Status</td>
+            <td style="padding:6px 0;">
+              <span style="display:inline-block;padding:2px 10px;border-radius:20px;background:#fef9c3;color:#854d0e;font-size:12px;font-weight:600;">Pending Approval</span>
+            </td>
+          </tr>
+        </table>
+      </div>
+      <div style="text-align:center;">
+        <a href="${dashboardUrl}" style="display:inline-block;background:#0ea5e9;color:#ffffff;text-decoration:none;padding:14px 32px;border-radius:8px;font-size:15px;font-weight:600;">Review in Dashboard</a>
+      </div>
+    </div>
+    <div style="padding:16px 32px;background:#f8fafc;border-top:1px solid #e2e8f0;">
+      <p style="margin:0;color:#cbd5e1;font-size:11px;text-align:center;">PulseRPM · Remote Patient Monitoring · Secure &amp; HIPAA-Compliant</p>
+    </div>
+  </div>
+</body>
+</html>`;
+}
+
+export async function sendNewPatientPendingEmail(to: string, providerName: string, patientName: string, patientEmail: string, dashboardUrl: string): Promise<void> {
+  await send(
+    to,
+    `New patient awaiting approval — ${patientName}`,
+    buildNewPatientPendingHtml(providerName, patientName, patientEmail, dashboardUrl),
+    `new patient pending notification to ${to}`
+  );
+}

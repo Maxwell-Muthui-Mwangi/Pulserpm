@@ -3,7 +3,7 @@ import { db, providersTable, patientsTable, pendingPatientsTable } from "@worksp
 import { eq } from "drizzle-orm";
 import { hashPassword, verifyPassword, createToken } from "../lib/auth.js";
 import { requireAuth } from "../middlewares/auth.js";
-import { sendVerificationEmail } from "../lib/email.js";
+import { sendVerificationEmail, sendNewPatientPendingEmail } from "../lib/email.js";
 import { logAuditEvent, getClientIp } from "../middlewares/auditLog.js";
 import { authLimiter } from "../middlewares/rateLimit.js";
 
@@ -134,6 +134,26 @@ router.post("/auth/verify-email", async (req, res) => {
     }
 
     await db.update(pendingPatientsTable).set({ emailVerified: true }).where(eq(pendingPatientsTable.email, email));
+
+    // Notify all providers that a new patient is awaiting approval (non-blocking)
+    setImmediate(async () => {
+      try {
+        const providers = await db.select().from(providersTable);
+        const dashboardOrigin = process.env.DASHBOARD_URL || "https://pulserpm.replit.app";
+        for (const provider of providers) {
+          await sendNewPatientPendingEmail(
+            provider.email,
+            provider.name,
+            pending.name,
+            pending.email,
+            `${dashboardOrigin}/patients`
+          );
+        }
+      } catch (e) {
+        console.error("[auth] Provider pending notification failed:", e);
+      }
+    });
+
     res.json({ message: "Email verified successfully. Your account is now awaiting approval from a healthcare provider." });
   } catch (err) {
     console.error("Verify email error:", err);

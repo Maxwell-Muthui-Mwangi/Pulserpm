@@ -60,7 +60,11 @@ A full-stack Remote Patient Monitoring platform with role-based access control f
 - `patients.approval_welcome_pending`: boolean, defaults to `false`, set to `true` when provider approves
 
 ### Email
-- `sendVerificationEmail(to, name, code)` in `lib/email.ts` — gracefully skips if SMTP not configured (logs code to console)
+- `sendVerificationEmail(to, name, code)` — 6-digit code email on patient signup
+- `sendPatientApprovedEmail(to, name, loginUrl)` — sent to patient immediately after provider approves them
+- `sendNewPatientPendingEmail(to, providerName, patientName, patientEmail, dashboardUrl)` — sent to all providers when a patient verifies their email (pending approval badge triggers)
+- All emails sent non-blocking via `setImmediate()` — never delays API responses
+- Gracefully falls back to console log if RESEND_API_KEY not configured
 
 ## Device & Wearable Integration
 
@@ -68,6 +72,7 @@ A full-stack Remote Patient Monitoring platform with role-based access control f
 - `POST /api/device/generate-key` — patient generates a UUID API key
 - `GET /api/device/key` — fetch current key
 - `DELETE /api/device/key` — revoke key
+- `GET /api/device/status` — validate an API key without ingesting data (used by mobile pair screen); returns `{ valid, patientId, patientName }` or `{ valid: false }`. Validates UUID format before querying to avoid DB cast errors.
 
 ### Data Ingest endpoint (no JWT required)
 - `POST /api/device/ingest` with `X-Device-Api-Key` header
@@ -212,10 +217,15 @@ pnpm --filter @workspace/api-spec run codegen
 - Applied globally via `helmet()` — sets X-Content-Type-Options, X-Frame-Options, Referrer-Policy, and more
 - CORS restricted to `*.replit.dev`, `*.replit.app`, `localhost`
 
+### JWT Token Security
+- Tokens include `iat` (issued at) and `exp` (expires in 7 days) claims
+- `verifyToken()` checks expiry — expired tokens return null, triggering 401
+- Token signing uses HMAC-SHA256 with `JWT_SECRET` env var
+
 ### Rate Limiting
 - **Auth endpoints** (`/api/auth/login`, `/api/auth/signup`, `/api/auth/patient-signup`): 10 requests per 15 minutes per IP
 - **General API**: 200 requests per minute per IP
-- **Device ingest**: 60 requests per minute per IP
+- **Device ingest** (`/api/device/ingest`): 60 requests per minute per IP (dedicated `deviceLimiter` applied before global limiter)
 - Returns `429 Too Many Requests` with a clear message
 
 ### Audit Logging (HIPAA §164.312(b))

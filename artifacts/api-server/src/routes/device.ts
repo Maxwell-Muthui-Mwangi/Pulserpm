@@ -69,6 +69,36 @@ router.delete("/device/key", requireAuth, async (req, res) => {
   }
 });
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// ─── Public key validation endpoint ─────────────────────────────────────────
+// Used by mobile app to verify a scanned/entered API key before saving it.
+router.get("/device/status", async (req, res) => {
+  try {
+    const apiKey = (req.headers["x-device-api-key"] as string) || (req.query.apiKey as string);
+    if (!apiKey || !UUID_REGEX.test(apiKey)) {
+      res.status(401).json({ valid: false, error: "Invalid API key" });
+      return;
+    }
+
+    const [patient] = await db
+      .select({ id: patientsTable.id, name: patientsTable.name })
+      .from(patientsTable)
+      .where(eq(patientsTable.deviceApiKey, apiKey))
+      .limit(1);
+
+    if (!patient) {
+      res.status(401).json({ valid: false, error: "Invalid API key" });
+      return;
+    }
+
+    res.json({ valid: true, patientId: patient.id, patientName: patient.name });
+  } catch (err) {
+    console.error("Device status error:", err);
+    res.status(500).json({ valid: false, error: "Server error" });
+  }
+});
+
 // ─── Public ingest endpoint (no JWT required) ────────────────────────────────
 // Accepts health data from wearables/apps authenticated via device API key.
 // Supports multiple data formats:

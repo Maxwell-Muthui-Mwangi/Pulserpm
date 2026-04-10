@@ -19,6 +19,23 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useApp } from "@/context/AppContext";
 import { useColors } from "@/hooks/useColors";
 
+const DOMAIN = process.env.EXPO_PUBLIC_DOMAIN ?? "";
+
+async function validateApiKey(key: string): Promise<{ valid: boolean; patientName?: string }> {
+  try {
+    const url = DOMAIN
+      ? `https://${DOMAIN}/api/device/status`
+      : "/api/device/status";
+    const res = await fetch(url, {
+      headers: { "X-Device-Api-Key": key },
+    });
+    const data = await res.json();
+    return { valid: !!data.valid, patientName: data.patientName };
+  } catch {
+    return { valid: false };
+  }
+}
+
 export default function PairScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
@@ -30,8 +47,23 @@ export default function PairScreen() {
   const [error, setError] = useState("");
   const scanned = useRef(false);
 
+  async function connectWithKey(key: string) {
+    setSaving(true);
+    setError("");
+    const { valid, patientName } = await validateApiKey(key);
+    if (!valid) {
+      setSaving(false);
+      setError("Invalid API key. Please check and try again, or generate a new QR code from the dashboard.");
+      return;
+    }
+    await setApiKey(key);
+    setSaving(false);
+    console.log(`[pair] Connected as ${patientName ?? "patient"}`);
+    router.replace("/(tabs)");
+  }
+
   async function handleQrScan({ data }: { data: string }) {
-    if (scanned.current) return;
+    if (scanned.current || saving) return;
     scanned.current = true;
     await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     let key: string | null = null;
@@ -47,8 +79,9 @@ export default function PairScreen() {
       }
     }
     if (key) {
-      await setApiKey(key);
-      router.replace("/(tabs)");
+      setMode("choose");
+      await connectWithKey(key);
+      if (saving === false) scanned.current = false;
     } else {
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       setError("QR code not recognized. Try entering the API key manually.");
@@ -60,10 +93,7 @@ export default function PairScreen() {
   async function handleManualSave() {
     const key = manualKey.trim();
     if (!key) { setError("Please enter your API key."); return; }
-    setSaving(true);
-    setError("");
-    await setApiKey(key);
-    router.replace("/(tabs)");
+    await connectWithKey(key);
   }
 
   async function openCamera() {
@@ -88,6 +118,12 @@ export default function PairScreen() {
           barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
           onBarcodeScanned={handleQrScan}
         />
+        {saving && (
+          <View style={s.cameraValidating}>
+            <ActivityIndicator color="#fff" size="large" />
+            <Text style={s.cameraValidatingText}>Validating key…</Text>
+          </View>
+        )}
         <View style={s.cameraOverlay}>
           <View style={[s.cameraCornerBox, { marginTop: insets.top + 20 }]}>
             <View style={[s.corner, s.cornerTL]} />
@@ -123,9 +159,15 @@ export default function PairScreen() {
 
           {mode === "choose" && (
             <View style={s.btnGroup}>
-              <Pressable onPress={openCamera} style={({ pressed }) => [s.primaryBtn, pressed && s.pressed]}>
-                <Feather name="camera" size={20} color="#fff" />
-                <Text style={s.primaryBtnText}>Scan QR Code</Text>
+              <Pressable onPress={openCamera} disabled={saving} style={({ pressed }) => [s.primaryBtn, pressed && s.pressed]}>
+                {saving ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <>
+                    <Feather name="camera" size={20} color="#fff" />
+                    <Text style={s.primaryBtnText}>Scan QR Code</Text>
+                  </>
+                )}
               </Pressable>
               <Pressable onPress={() => { setMode("manual"); setError(""); }} style={({ pressed }) => [s.ghostBtn, pressed && s.pressed]}>
                 <Text style={s.ghostBtnText}>Enter API Key Manually</Text>
@@ -171,8 +213,8 @@ export default function PairScreen() {
           <Text style={s.howTitle}>How to get your QR code</Text>
           {[
             "Sign in to PulseRPM on your desktop",
-            "Go to My Profile → Connect Device",
-            "Tap \"Generate QR Code\"",
+            "Go to My Profile → Connect Device tab",
+            'Tap "Generate QR Code"',
             "Scan with this app — done!",
           ].map((step, i) => (
             <View key={i} style={s.howStep}>
@@ -236,10 +278,10 @@ function styles(colors: ReturnType<typeof useColors>, insets: { top: number; bot
       borderWidth: 1, borderColor: colors.border,
     },
     errorBox: {
-      flexDirection: "row", alignItems: "center", gap: 6,
+      flexDirection: "row", alignItems: "flex-start", gap: 6,
       backgroundColor: "#fef2f2", borderRadius: 8, padding: 10, marginTop: 4,
     },
-    errorText: { flex: 1, fontSize: 13, color: "#ef4444", fontFamily: "Inter_400Regular" },
+    errorText: { flex: 1, fontSize: 13, color: "#ef4444", fontFamily: "Inter_400Regular", lineHeight: 18 },
     howCard: {
       backgroundColor: colors.card, borderRadius: colors.radius,
       padding: 20, gap: 12,
@@ -255,6 +297,15 @@ function styles(colors: ReturnType<typeof useColors>, insets: { top: number; bot
     howBulletText: { fontSize: 11, fontWeight: "700", color: colors.primary, fontFamily: "Inter_700Bold" },
     howStepText: { flex: 1, fontSize: 14, color: colors.foreground, lineHeight: 20, fontFamily: "Inter_400Regular" },
     cameraContainer: { flex: 1, backgroundColor: "#000" },
+    cameraValidating: {
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor: "rgba(0,0,0,0.6)",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 12,
+      zIndex: 10,
+    },
+    cameraValidatingText: { color: "#fff", fontSize: 16, fontFamily: "Inter_500Medium" },
     cameraOverlay: {
       ...StyleSheet.absoluteFillObject,
       alignItems: "center",

@@ -4,6 +4,7 @@ import { eq, and, or, ilike, inArray, sql, count, desc } from "drizzle-orm";
 import { hashPassword } from "../lib/auth.js";
 import { requireAuth } from "../middlewares/auth.js";
 import { getOrCreateThresholds } from "../lib/alertEngine.js";
+import { sendPatientApprovedEmail } from "../lib/email.js";
 
 const router = Router();
 
@@ -83,6 +84,17 @@ router.post("/patients/pending/:id/approve", requireAuth, async (req, res) => {
     }).returning();
 
     await db.delete(pendingPatientsTable).where(eq(pendingPatientsTable.id, pendingId));
+
+    // Send approval email to patient (non-blocking)
+    setImmediate(async () => {
+      try {
+        const dashboardOrigin = process.env.DASHBOARD_URL || "https://pulserpm.replit.app";
+        await sendPatientApprovedEmail(patient.email, patient.name, `${dashboardOrigin}/login`);
+      } catch (e) {
+        console.error("[patients] Approval email failed:", e);
+      }
+    });
+
     res.status(201).json({ id: patient.id, name: patient.name, email: patient.email });
   } catch (err) {
     console.error("Approve patient error:", err);

@@ -3,7 +3,7 @@ import cors from "cors";
 import helmet from "helmet";
 import router from "./routes/index.js";
 import { auditMiddleware } from "./middlewares/auditLog.js";
-import { apiLimiter } from "./middlewares/rateLimit.js";
+import { apiLimiter, deviceLimiter } from "./middlewares/rateLimit.js";
 
 const ALLOWED_ORIGINS = [
   /\.replit\.dev$/,
@@ -49,6 +49,7 @@ app.use(express.json({ limit: "1mb" }));
 app.use(express.urlencoded({ extended: true, limit: "1mb" }));
 
 app.use("/api", apiLimiter);
+app.use("/api/device/ingest", deviceLimiter);
 app.use("/api", auditMiddleware);
 app.use("/api", router);
 
