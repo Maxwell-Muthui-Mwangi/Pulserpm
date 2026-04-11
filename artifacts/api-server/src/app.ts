@@ -1,6 +1,7 @@
 import express, { type Express } from "express";
 import cors from "cors";
 import helmet from "helmet";
+import cookieParser from "cookie-parser";
 import router from "./routes/index.js";
 import { auditMiddleware } from "./middlewares/auditLog.js";
 import { apiLimiter, deviceLimiter } from "./middlewares/rateLimit.js";
@@ -45,6 +46,7 @@ app.use(
   })
 );
 
+app.use(cookieParser());
 app.use(express.json({ limit: "1mb" }));
 app.use(express.urlencoded({ extended: true, limit: "1mb" }));
 

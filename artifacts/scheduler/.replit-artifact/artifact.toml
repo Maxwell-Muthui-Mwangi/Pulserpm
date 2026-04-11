@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/scheduler/"
+title = "Academic Assignment Scheduler"
+version = "1.0.0"
+id = "artifacts/scheduler"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/scheduler/" ]
+localPort = 24916
+
+[services.development]
+run = "pnpm --filter @workspace/scheduler run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/scheduler", "run", "build" ]
+publicDir = "artifacts/scheduler/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "24916"
+BASE_PATH = "/scheduler/"

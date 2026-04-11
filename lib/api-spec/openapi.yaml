@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: Api
   version: 1.0.0
-  description: Remote Patient Monitoring API
+  description: Remote Patient Monitoring API + Academic Assignment Scheduler API
 servers:
   - url: /api
     description: Base API path
@@ -23,6 +23,20 @@ tags:
     description: Threshold configuration
   - name: summary
     description: Summary and analytics
+  - name: scheduler-auth
+    description: Tutor authentication
+  - name: scheduler-students
+    description: Student management
+  - name: scheduler-classes
+    description: Class management
+  - name: scheduler-assignments
+    description: Assignment management
+  - name: scheduler-payments
+    description: Payment tracking
+  - name: scheduler-dashboard
+    description: Dashboard & analytics
+  - name: scheduler-search
+    description: Search & export
 
 paths:
   /healthz:
@@ -548,6 +562,756 @@ paths:
               schema:
                 $ref: "#/components/schemas/DashboardStats"
 
+  # ===== ACADEMIC SCHEDULER ENDPOINTS =====
+
+  /scheduler/auth/signup:
+    post:
+      operationId: schedulerSignup
+      tags: [scheduler-auth]
+      summary: Register a new tutor account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SchedulerSignupRequest"
+      responses:
+        "201":
+          description: Tutor account created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SchedulerAuthResponse"
+        "409":
+          description: Email already in use
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /scheduler/auth/login:
+    post:
+      operationId: schedulerLogin
+      tags: [scheduler-auth]
+      summary: Login as tutor
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SchedulerLoginRequest"
+      responses:
+        "200":
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SchedulerAuthResponse"
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /scheduler/auth/me:
+    get:
+      operationId: schedulerGetMe
+      tags: [scheduler-auth]
+      summary: Get current tutor info
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Current tutor
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SchedulerTutor"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /scheduler/students:
+    get:
+      operationId: listSchedulerStudents
+      tags: [scheduler-students]
+      summary: List all students
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: search
+          in: query
+          schema:
+            type: string
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [active, archived]
+        - name: paymentStatus
+          in: query
+          schema:
+            type: string
+            enum: [paid, pending, overdue]
+      responses:
+        "200":
+          description: List of students
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SchedulerStudent"
+    post:
+      operationId: createSchedulerStudent
+      tags: [scheduler-students]
+      summary: Create a new student
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSchedulerStudentRequest"
+      responses:
+        "201":
+          description: Student created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SchedulerStudent"
+
+  /scheduler/students/{studentId}:
+    get:
+      operationId: getSchedulerStudent
+      tags: [scheduler-students]
+      summary: Get student profile with assignments and stats
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: studentId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Student profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SchedulerStudentProfile"
+        "404":
+          description: Student not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      operationId: updateSchedulerStudent
+      tags: [scheduler-students]
+      summary: Update a student
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: studentId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateSchedulerStudentRequest"
+      responses:
+        "200":
+          description: Student updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SchedulerStudent"
+    delete:
+      operationId: deleteSchedulerStudent
+      tags: [scheduler-students]
+      summary: Archive a student
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: studentId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Student archived
+
+  /scheduler/classes:
+    get:
+      operationId: listSchedulerClasses
+      tags: [scheduler-classes]
+      summary: List all classes
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: studentId
+          in: query
+          schema:
+            type: integer
+        - name: search
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of classes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SchedulerClass"
+    post:
+      operationId: createSchedulerClass
+      tags: [scheduler-classes]
+      summary: Create a new class (semester-long recurring)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSchedulerClassRequest"
+      responses:
+        "201":
+          description: Class created with recurring assignments
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SchedulerClass"
+
+  /scheduler/classes/{classId}:
+    get:
+      operationId: getSchedulerClass
+      tags: [scheduler-classes]
+      summary: Get a class by ID
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: classId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Class details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SchedulerClass"
+        "404":
+          description: Class not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      operationId: updateSchedulerClass
+      tags: [scheduler-classes]
+      summary: Update a class
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: classId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateSchedulerClassRequest"
+      responses:
+        "200":
+          description: Class updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SchedulerClass"
+    delete:
+      operationId: deleteSchedulerClass
+      tags: [scheduler-classes]
+      summary: Delete a class
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: classId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Class deleted
+
+  /scheduler/assignments:
+    get:
+      operationId: listSchedulerAssignments
+      tags: [scheduler-assignments]
+      summary: List assignments with filters
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: studentId
+          in: query
+          schema:
+            type: integer
+        - name: classId
+          in: query
+          schema:
+            type: integer
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [not_started, in_progress, completed, submitted]
+        - name: priority
+          in: query
+          schema:
+            type: string
+            enum: [low, medium, high, urgent]
+        - name: dateFrom
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: dateTo
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: search
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of assignments
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SchedulerAssignment"
+    post:
+      operationId: createSchedulerAssignment
+      tags: [scheduler-assignments]
+      summary: Create a new assignment
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSchedulerAssignmentRequest"
+      responses:
+        "201":
+          description: Assignment created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SchedulerAssignment"
+
+  /scheduler/assignments/{assignmentId}:
+    get:
+      operationId: getSchedulerAssignment
+      tags: [scheduler-assignments]
+      summary: Get an assignment by ID
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: assignmentId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Assignment details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SchedulerAssignment"
+        "404":
+          description: Assignment not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      operationId: updateSchedulerAssignment
+      tags: [scheduler-assignments]
+      summary: Update an assignment
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: assignmentId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateSchedulerAssignmentRequest"
+      responses:
+        "200":
+          description: Assignment updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SchedulerAssignment"
+    delete:
+      operationId: deleteSchedulerAssignment
+      tags: [scheduler-assignments]
+      summary: Delete an assignment
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: assignmentId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Assignment deleted
+
+  /scheduler/assignments/{assignmentId}/status:
+    patch:
+      operationId: updateSchedulerAssignmentStatus
+      tags: [scheduler-assignments]
+      summary: Update assignment status
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: assignmentId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateAssignmentStatusRequest"
+      responses:
+        "200":
+          description: Status updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SchedulerAssignment"
+
+  /scheduler/assignments/{assignmentId}/reschedule:
+    patch:
+      operationId: rescheduleAssignment
+      tags: [scheduler-assignments]
+      summary: Reschedule an assignment (drag-and-drop)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: assignmentId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RescheduleAssignmentRequest"
+      responses:
+        "200":
+          description: Assignment rescheduled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SchedulerAssignment"
+
+  /scheduler/payments:
+    get:
+      operationId: listSchedulerPayments
+      tags: [scheduler-payments]
+      summary: List all payment records
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: studentId
+          in: query
+          schema:
+            type: integer
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [pending, paid, overdue]
+      responses:
+        "200":
+          description: List of payments
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SchedulerPayment"
+    post:
+      operationId: createSchedulerPayment
+      tags: [scheduler-payments]
+      summary: Create a payment record
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSchedulerPaymentRequest"
+      responses:
+        "201":
+          description: Payment created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SchedulerPayment"
+
+  /scheduler/payments/{paymentId}:
+    put:
+      operationId: updateSchedulerPayment
+      tags: [scheduler-payments]
+      summary: Update a payment record
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: paymentId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateSchedulerPaymentRequest"
+      responses:
+        "200":
+          description: Payment updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SchedulerPayment"
+    delete:
+      operationId: deleteSchedulerPayment
+      tags: [scheduler-payments]
+      summary: Delete a payment record
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: paymentId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Payment deleted
+
+  /scheduler/dashboard:
+    get:
+      operationId: getSchedulerDashboard
+      tags: [scheduler-dashboard]
+      summary: Get dashboard data (stats, today, upcoming, urgent)
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Dashboard data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SchedulerDashboard"
+
+  /scheduler/dashboard/heatmap:
+    get:
+      operationId: getSchedulerHeatmap
+      tags: [scheduler-dashboard]
+      summary: Get workload heatmap data (daily assignment counts)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: weeks
+          in: query
+          schema:
+            type: integer
+            default: 16
+      responses:
+        "200":
+          description: Heatmap data
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/HeatmapDay"
+
+  /scheduler/search:
+    get:
+      operationId: schedulerSearch
+      tags: [scheduler-search]
+      summary: Global search across students and assignments
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Search results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SchedulerSearchResults"
+
+  /scheduler/export/assignments:
+    get:
+      operationId: exportSchedulerAssignments
+      tags: [scheduler-search]
+      summary: Export assignments as CSV
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: studentId
+          in: query
+          schema:
+            type: integer
+        - name: status
+          in: query
+          schema:
+            type: string
+        - name: dateFrom
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: dateTo
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        "200":
+          description: CSV file
+          content:
+            text/csv:
+              schema:
+                type: string
+
+  /scheduler/calendar:
+    get:
+      operationId: getSchedulerCalendar
+      tags: [scheduler-assignments]
+      summary: Get assignments for calendar view (monthly range)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: year
+          in: query
+          required: true
+          schema:
+            type: integer
+        - name: month
+          in: query
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Calendar assignments
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SchedulerAssignment"
+
+  /scheduler/weekly:
+    get:
+      operationId: getSchedulerWeekly
+      tags: [scheduler-assignments]
+      summary: Get assignments for weekly planner view
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: weekStart
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+      responses:
+        "200":
+          description: Weekly assignments
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SchedulerAssignment"
+
+  /scheduler/earnings:
+    get:
+      operationId: getSchedulerEarnings
+      tags: [scheduler-payments]
+      summary: Get earnings summary
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: month
+          in: query
+          schema:
+            type: integer
+        - name: year
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Earnings summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SchedulerEarnings"
+
 components:
   securitySchemes:
     bearerAuth:
@@ -845,25 +1609,30 @@ components:
         patientId:
           type: integer
         heartRate:
-          type: number
+          type: ["number", "null"]
           description: BPM
         systolicBp:
-          type: number
+          type: ["number", "null"]
           description: mmHg
         diastolicBp:
-          type: number
+          type: ["number", "null"]
           description: mmHg
         spo2:
-          type: number
+          type: ["number", "null"]
           description: Oxygen saturation percentage
         caloriesBurned:
-          type: number
+          type: ["number", "null"]
+        steps:
+          type: ["integer", "null"]
+        glucoseLevel:
+          type: ["number", "null"]
+        weight:
+          type: ["number", "null"]
         temperature:
-          type: number
-          description: Celsius
+          type: ["number", "null"]
         source:
           type: string
-          enum: [apple_health, google_fit, fitbit, garmin, manual, simulated]
+          enum: [apple_health, google_fit, fitbit, garmin, manual]
         recordedAt:
           type: string
           format: date-time
@@ -875,50 +1644,50 @@ components:
         - patientId
         - recordedAt
         - createdAt
-        - source
 
     VitalsSnapshot:
       type: object
       properties:
         heartRate:
-          type: number
+          type: ["number", "null"]
         systolicBp:
-          type: number
+          type: ["number", "null"]
         diastolicBp:
-          type: number
+          type: ["number", "null"]
         spo2:
-          type: number
-        caloriesBurned:
-          type: number
-        temperature:
-          type: number
+          type: ["number", "null"]
         recordedAt:
-          type: string
+          type: ["string", "null"]
           format: date-time
 
     IngestVitalsRequest:
       type: object
       properties:
         heartRate:
-          type: number
+          type: ["number", "null"]
         systolicBp:
-          type: number
+          type: ["number", "null"]
         diastolicBp:
-          type: number
+          type: ["number", "null"]
         spo2:
-          type: number
+          type: ["number", "null"]
         caloriesBurned:
-          type: number
+          type: ["number", "null"]
+        steps:
+          type: ["integer", "null"]
+        glucoseLevel:
+          type: ["number", "null"]
+        weight:
+          type: ["number", "null"]
         temperature:
-          type: number
+          type: ["number", "null"]
         source:
           type: string
-          enum: [apple_health, google_fit, fitbit, garmin, manual, simulated]
+          enum: [apple_health, google_fit, fitbit, garmin, manual]
+          default: manual
         recordedAt:
           type: string
           format: date-time
-      required:
-        - source
 
     IngestVitalsResponse:
       type: object
@@ -926,16 +1695,176 @@ components:
         vitals:
           $ref: "#/components/schemas/VitalsReading"
         alertsTriggered:
+          type: integer
+        newAlerts:
           type: array
           items:
             $ref: "#/components/schemas/Alert"
-        riskLevel:
-          type: string
-          enum: [normal, warning, critical]
       required:
         - vitals
         - alertsTriggered
-        - riskLevel
+        - newAlerts
+
+    Alert:
+      type: object
+      properties:
+        id:
+          type: integer
+        patientId:
+          type: integer
+        vitalsReadingId:
+          type: ["integer", "null"]
+        alertType:
+          type: string
+          enum:
+            [
+              heart_rate_high,
+              heart_rate_low,
+              bp_high,
+              bp_low,
+              spo2_low,
+              glucose_high,
+              glucose_low,
+            ]
+        severity:
+          type: string
+          enum: [warning, critical]
+        status:
+          type: string
+          enum: [active, acknowledged, resolved]
+        value:
+          type: number
+        threshold:
+          type: number
+        message:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        acknowledgedAt:
+          type: ["string", "null"]
+          format: date-time
+        resolvedAt:
+          type: ["string", "null"]
+          format: date-time
+      required:
+        - id
+        - patientId
+        - alertType
+        - severity
+        - status
+        - value
+        - threshold
+        - message
+        - createdAt
+
+    AlertWithPatient:
+      type: object
+      properties:
+        id:
+          type: integer
+        patientId:
+          type: integer
+        patientName:
+          type: string
+        alertType:
+          type: string
+        severity:
+          type: string
+          enum: [warning, critical]
+        status:
+          type: string
+          enum: [active, acknowledged, resolved]
+        value:
+          type: number
+        threshold:
+          type: number
+        message:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - patientId
+        - patientName
+        - alertType
+        - severity
+        - status
+        - value
+        - threshold
+        - message
+        - createdAt
+
+    VitalThresholds:
+      type: object
+      properties:
+        patientId:
+          type: integer
+        heartRateMin:
+          type: number
+        heartRateMax:
+          type: number
+        systolicBpMax:
+          type: number
+        diastolicBpMax:
+          type: number
+        spo2Min:
+          type: number
+        glucoseMin:
+          type: number
+        glucoseMax:
+          type: number
+      required:
+        - patientId
+
+    UpdateThresholdsRequest:
+      type: object
+      properties:
+        heartRateMin:
+          type: number
+        heartRateMax:
+          type: number
+        systolicBpMax:
+          type: number
+        diastolicBpMax:
+          type: number
+        spo2Min:
+          type: number
+        glucoseMin:
+          type: number
+        glucoseMax:
+          type: number
+
+    PatientDailySummary:
+      type: object
+      properties:
+        patientId:
+          type: integer
+        date:
+          type: string
+          format: date
+        avgHeartRate:
+          type: ["number", "null"]
+        avgSystolicBp:
+          type: ["number", "null"]
+        avgDiastolicBp:
+          type: ["number", "null"]
+        avgSpo2:
+          type: ["number", "null"]
+        totalSteps:
+          type: ["integer", "null"]
+        totalCalories:
+          type: ["number", "null"]
+        readingCount:
+          type: integer
+        alertCount:
+          type: integer
+      required:
+        - patientId
+        - date
+        - readingCount
+        - alertCount
 
     BatchIngestRequest:
       type: object
@@ -949,9 +1878,6 @@ components:
                 type: integer
               vitals:
                 $ref: "#/components/schemas/IngestVitalsRequest"
-            required:
-              - patientId
-              - vitals
       required:
         - readings
 
@@ -960,199 +1886,14 @@ components:
       properties:
         processed:
           type: integer
-        alertsTriggered:
-          type: integer
         errors:
-          type: array
-          items:
-            type: string
+          type: integer
+        totalAlertsTriggered:
+          type: integer
       required:
         - processed
-        - alertsTriggered
         - errors
-
-    Alert:
-      type: object
-      properties:
-        id:
-          type: integer
-        patientId:
-          type: integer
-        vitalType:
-          type: string
-          enum: [heart_rate, blood_pressure, spo2, temperature]
-        severity:
-          type: string
-          enum: [warning, critical]
-        message:
-          type: string
-        value:
-          type: number
-        threshold:
-          type: number
-        status:
-          type: string
-          enum: [active, acknowledged, resolved]
-        suggestedAction:
-          type: string
-        triggeredAt:
-          type: string
-          format: date-time
-        acknowledgedAt:
-          type: string
-          format: date-time
-        resolvedAt:
-          type: string
-          format: date-time
-      required:
-        - id
-        - patientId
-        - vitalType
-        - severity
-        - message
-        - status
-        - triggeredAt
-
-    AlertWithPatient:
-      allOf:
-        - $ref: "#/components/schemas/Alert"
-        - type: object
-          properties:
-            patientName:
-              type: string
-            patientEmail:
-              type: string
-          required:
-            - patientName
-            - patientEmail
-
-    VitalThresholds:
-      type: object
-      properties:
-        patientId:
-          type: integer
-        heartRateMin:
-          type: number
-          default: 50
-        heartRateMax:
-          type: number
-          default: 100
-        heartRateCriticalMin:
-          type: number
-          default: 40
-        heartRateCriticalMax:
-          type: number
-          default: 120
-        systolicBpMin:
-          type: number
-          default: 90
-        systolicBpMax:
-          type: number
-          default: 140
-        systolicBpCriticalMin:
-          type: number
-          default: 80
-        systolicBpCriticalMax:
-          type: number
-          default: 180
-        diastolicBpMin:
-          type: number
-          default: 60
-        diastolicBpMax:
-          type: number
-          default: 90
-        diastolicBpCriticalMax:
-          type: number
-          default: 120
-        spo2Min:
-          type: number
-          default: 95
-        spo2CriticalMin:
-          type: number
-          default: 90
-        temperatureMin:
-          type: number
-          default: 36.0
-        temperatureMax:
-          type: number
-          default: 37.5
-        temperatureCriticalMax:
-          type: number
-          default: 39.0
-      required:
-        - patientId
-
-    UpdateThresholdsRequest:
-      type: object
-      properties:
-        heartRateMin:
-          type: number
-        heartRateMax:
-          type: number
-        heartRateCriticalMin:
-          type: number
-        heartRateCriticalMax:
-          type: number
-        systolicBpMin:
-          type: number
-        systolicBpMax:
-          type: number
-        systolicBpCriticalMin:
-          type: number
-        systolicBpCriticalMax:
-          type: number
-        diastolicBpMin:
-          type: number
-        diastolicBpMax:
-          type: number
-        diastolicBpCriticalMax:
-          type: number
-        spo2Min:
-          type: number
-        spo2CriticalMin:
-          type: number
-        temperatureMin:
-          type: number
-        temperatureMax:
-          type: number
-        temperatureCriticalMax:
-          type: number
-
-    PatientDailySummary:
-      type: object
-      properties:
-        patientId:
-          type: integer
-        date:
-          type: string
-          format: date
-        avgHeartRate:
-          type: number
-        minHeartRate:
-          type: number
-        maxHeartRate:
-          type: number
-        avgSystolicBp:
-          type: number
-        avgDiastolicBp:
-          type: number
-        avgSpo2:
-          type: number
-        totalCalories:
-          type: number
-        readingsCount:
-          type: integer
-        alertsCount:
-          type: integer
-        riskLevel:
-          type: string
-          enum: [normal, warning, critical]
-      required:
-        - patientId
-        - date
-        - readingsCount
-        - alertsCount
-        - riskLevel
+        - totalAlertsTriggered
 
     DashboardStats:
       type: object
@@ -1161,18 +1902,641 @@ components:
           type: integer
         activeAlerts:
           type: integer
-        criticalPatients:
+        criticalAlerts:
           type: integer
-        warningPatients:
-          type: integer
-        normalPatients:
-          type: integer
-        todaysReadings:
+        avgHeartRate:
+          type: ["number", "null"]
+        avgSpo2:
+          type: ["number", "null"]
+        readingsToday:
           type: integer
       required:
         - totalPatients
         - activeAlerts
-        - criticalPatients
-        - warningPatients
-        - normalPatients
-        - todaysReadings
+        - criticalAlerts
+        - readingsToday
+
+    # ===== SCHEDULER SCHEMAS =====
+
+    SchedulerSignupRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+      required:
+        - name
+        - email
+        - password
+
+    SchedulerLoginRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+        rememberMe:
+          type: boolean
+      required:
+        - email
+        - password
+
+    SchedulerTutor:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        email:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - name
+        - email
+        - createdAt
+
+    SchedulerAuthResponse:
+      type: object
+      properties:
+        token:
+          type: string
+        tutor:
+          $ref: "#/components/schemas/SchedulerTutor"
+      required:
+        - token
+        - tutor
+
+    SchedulerStudent:
+      type: object
+      properties:
+        id:
+          type: integer
+        tutorId:
+          type: integer
+        name:
+          type: string
+        email:
+          type: ["string", "null"]
+        phone:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum: [active, archived]
+        color:
+          type: string
+        paymentStatus:
+          type: string
+          enum: [paid, pending, overdue]
+        totalAssignments:
+          type: integer
+        completedAssignments:
+          type: integer
+        completionRate:
+          type: number
+        totalOwed:
+          type: number
+        totalPaid:
+          type: number
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - tutorId
+        - name
+        - status
+        - color
+        - paymentStatus
+        - totalAssignments
+        - completedAssignments
+        - completionRate
+        - totalOwed
+        - totalPaid
+        - createdAt
+
+    SchedulerStudentProfile:
+      type: object
+      properties:
+        student:
+          $ref: "#/components/schemas/SchedulerStudent"
+        assignments:
+          type: array
+          items:
+            $ref: "#/components/schemas/SchedulerAssignment"
+        classes:
+          type: array
+          items:
+            $ref: "#/components/schemas/SchedulerClass"
+        payments:
+          type: array
+          items:
+            $ref: "#/components/schemas/SchedulerPayment"
+      required:
+        - student
+        - assignments
+        - classes
+        - payments
+
+    CreateSchedulerStudentRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        email:
+          type: ["string", "null"]
+        phone:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+        color:
+          type: string
+      required:
+        - name
+
+    UpdateSchedulerStudentRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        email:
+          type: ["string", "null"]
+        phone:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum: [active, archived]
+        color:
+          type: string
+        paymentStatus:
+          type: string
+          enum: [paid, pending, overdue]
+
+    SchedulerClass:
+      type: object
+      properties:
+        id:
+          type: integer
+        tutorId:
+          type: integer
+        studentId:
+          type: integer
+        studentName:
+          type: string
+        courseName:
+          type: string
+        subject:
+          type: ["string", "null"]
+        semesterStart:
+          type: string
+          format: date
+        semesterEnd:
+          type: string
+          format: date
+        recurringDays:
+          type: array
+          items:
+            type: integer
+          description: "Days of week: 0=Sun, 1=Mon, ..., 6=Sat"
+        meetingTime:
+          type: ["string", "null"]
+        estimatedHoursPerSession:
+          type: ["number", "null"]
+        agreedAmount:
+          type: ["number", "null"]
+        notes:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - tutorId
+        - studentId
+        - studentName
+        - courseName
+        - semesterStart
+        - semesterEnd
+        - recurringDays
+        - createdAt
+
+    CreateSchedulerClassRequest:
+      type: object
+      properties:
+        studentId:
+          type: integer
+        courseName:
+          type: string
+        subject:
+          type: ["string", "null"]
+        semesterStart:
+          type: string
+          format: date
+        semesterEnd:
+          type: string
+          format: date
+        recurringDays:
+          type: array
+          items:
+            type: integer
+        meetingTime:
+          type: ["string", "null"]
+        estimatedHoursPerSession:
+          type: ["number", "null"]
+        agreedAmount:
+          type: ["number", "null"]
+        notes:
+          type: ["string", "null"]
+      required:
+        - studentId
+        - courseName
+        - semesterStart
+        - semesterEnd
+        - recurringDays
+
+    UpdateSchedulerClassRequest:
+      type: object
+      properties:
+        courseName:
+          type: string
+        subject:
+          type: ["string", "null"]
+        semesterStart:
+          type: string
+          format: date
+        semesterEnd:
+          type: string
+          format: date
+        recurringDays:
+          type: array
+          items:
+            type: integer
+        meetingTime:
+          type: ["string", "null"]
+        estimatedHoursPerSession:
+          type: ["number", "null"]
+        agreedAmount:
+          type: ["number", "null"]
+        notes:
+          type: ["string", "null"]
+
+    SchedulerAssignment:
+      type: object
+      properties:
+        id:
+          type: integer
+        tutorId:
+          type: integer
+        studentId:
+          type: integer
+        studentName:
+          type: string
+        studentColor:
+          type: string
+        classId:
+          type: ["integer", "null"]
+        className:
+          type: ["string", "null"]
+        title:
+          type: string
+        subject:
+          type: ["string", "null"]
+        dueDate:
+          type: string
+          format: date-time
+        estimatedHours:
+          type: ["number", "null"]
+        priority:
+          type: string
+          enum: [low, medium, high, urgent]
+        status:
+          type: string
+          enum: [not_started, in_progress, completed, submitted]
+        notes:
+          type: ["string", "null"]
+        isRecurring:
+          type: boolean
+        agreedAmount:
+          type: ["number", "null"]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - tutorId
+        - studentId
+        - studentName
+        - studentColor
+        - title
+        - dueDate
+        - priority
+        - status
+        - isRecurring
+        - createdAt
+        - updatedAt
+
+    CreateSchedulerAssignmentRequest:
+      type: object
+      properties:
+        studentId:
+          type: integer
+        classId:
+          type: ["integer", "null"]
+        title:
+          type: string
+        subject:
+          type: ["string", "null"]
+        dueDate:
+          type: string
+          format: date-time
+        estimatedHours:
+          type: ["number", "null"]
+        priority:
+          type: string
+          enum: [low, medium, high, urgent]
+          default: medium
+        notes:
+          type: ["string", "null"]
+        agreedAmount:
+          type: ["number", "null"]
+      required:
+        - studentId
+        - title
+        - dueDate
+
+    UpdateSchedulerAssignmentRequest:
+      type: object
+      properties:
+        studentId:
+          type: integer
+        classId:
+          type: ["integer", "null"]
+        title:
+          type: string
+        subject:
+          type: ["string", "null"]
+        dueDate:
+          type: string
+          format: date-time
+        estimatedHours:
+          type: ["number", "null"]
+        priority:
+          type: string
+          enum: [low, medium, high, urgent]
+        status:
+          type: string
+          enum: [not_started, in_progress, completed, submitted]
+        notes:
+          type: ["string", "null"]
+        agreedAmount:
+          type: ["number", "null"]
+
+    UpdateAssignmentStatusRequest:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [not_started, in_progress, completed, submitted]
+      required:
+        - status
+
+    RescheduleAssignmentRequest:
+      type: object
+      properties:
+        dueDate:
+          type: string
+          format: date-time
+      required:
+        - dueDate
+
+    SchedulerPayment:
+      type: object
+      properties:
+        id:
+          type: integer
+        tutorId:
+          type: integer
+        studentId:
+          type: integer
+        studentName:
+          type: string
+        assignmentId:
+          type: ["integer", "null"]
+        classId:
+          type: ["integer", "null"]
+        description:
+          type: string
+        agreedAmount:
+          type: number
+        paidAmount:
+          type: number
+        status:
+          type: string
+          enum: [pending, paid, overdue]
+        paymentDate:
+          type: ["string", "null"]
+          format: date
+        dueDate:
+          type: ["string", "null"]
+          format: date
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - tutorId
+        - studentId
+        - studentName
+        - description
+        - agreedAmount
+        - paidAmount
+        - status
+        - createdAt
+
+    CreateSchedulerPaymentRequest:
+      type: object
+      properties:
+        studentId:
+          type: integer
+        assignmentId:
+          type: ["integer", "null"]
+        classId:
+          type: ["integer", "null"]
+        description:
+          type: string
+        agreedAmount:
+          type: number
+        paidAmount:
+          type: number
+        status:
+          type: string
+          enum: [pending, paid, overdue]
+          default: pending
+        paymentDate:
+          type: ["string", "null"]
+          format: date
+        dueDate:
+          type: ["string", "null"]
+          format: date
+      required:
+        - studentId
+        - description
+        - agreedAmount
+
+    UpdateSchedulerPaymentRequest:
+      type: object
+      properties:
+        description:
+          type: string
+        agreedAmount:
+          type: number
+        paidAmount:
+          type: number
+        status:
+          type: string
+          enum: [pending, paid, overdue]
+        paymentDate:
+          type: ["string", "null"]
+          format: date
+        dueDate:
+          type: ["string", "null"]
+          format: date
+
+    SchedulerDashboard:
+      type: object
+      properties:
+        stats:
+          $ref: "#/components/schemas/SchedulerStats"
+        todaysAssignments:
+          type: array
+          items:
+            $ref: "#/components/schemas/SchedulerAssignment"
+        upcomingAssignments:
+          type: array
+          items:
+            $ref: "#/components/schemas/SchedulerAssignment"
+        urgentAssignments:
+          type: array
+          items:
+            $ref: "#/components/schemas/SchedulerAssignment"
+        overdueAssignments:
+          type: array
+          items:
+            $ref: "#/components/schemas/SchedulerAssignment"
+      required:
+        - stats
+        - todaysAssignments
+        - upcomingAssignments
+        - urgentAssignments
+        - overdueAssignments
+
+    SchedulerStats:
+      type: object
+      properties:
+        totalStudents:
+          type: integer
+        activeAssignments:
+          type: integer
+        completionRate:
+          type: number
+        weeklyEarnings:
+          type: number
+        overdueCount:
+          type: integer
+        urgentCount:
+          type: integer
+      required:
+        - totalStudents
+        - activeAssignments
+        - completionRate
+        - weeklyEarnings
+        - overdueCount
+        - urgentCount
+
+    HeatmapDay:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+        count:
+          type: integer
+        level:
+          type: integer
+          description: "0-4 intensity level"
+      required:
+        - date
+        - count
+        - level
+
+    SchedulerSearchResults:
+      type: object
+      properties:
+        students:
+          type: array
+          items:
+            $ref: "#/components/schemas/SchedulerStudent"
+        assignments:
+          type: array
+          items:
+            $ref: "#/components/schemas/SchedulerAssignment"
+      required:
+        - students
+        - assignments
+
+    SchedulerEarnings:
+      type: object
+      properties:
+        totalEarned:
+          type: number
+        totalPending:
+          type: number
+        totalOverdue:
+          type: number
+        monthlyRevenue:
+          type: number
+        byStudent:
+          type: array
+          items:
+            type: object
+            properties:
+              studentId:
+                type: integer
+              studentName:
+                type: string
+              earned:
+                type: number
+              pending:
+                type: number
+            required:
+              - studentId
+              - studentName
+              - earned
+              - pending
+        recentTransactions:
+          type: array
+          items:
+            $ref: "#/components/schemas/SchedulerPayment"
+      required:
+        - totalEarned
+        - totalPending
+        - totalOverdue
+        - monthlyRevenue
+        - byStudent
+        - recentTransactions

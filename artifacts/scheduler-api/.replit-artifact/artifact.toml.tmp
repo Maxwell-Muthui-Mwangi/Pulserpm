@@ -1,0 +1,23 @@
+kind = "api"
+  previewPath = "/scheduler/api"
+  title = "Scheduler API"
+  version = "1.0.0"
+  id = "artifacts/scheduler-api"
+
+  [[services]]
+  localPort = 3001
+  name = "Scheduler API"
+  paths = ["/scheduler/api"]
+
+  [services.development]
+  run = "pnpm --filter @workspace/scheduler-api run dev"
+
+  [services.production.run]
+  args = ["node", "artifacts/scheduler-api/dist/index.cjs"]
+
+  [services.production.run.env]
+  PORT = "3001"
+
+  [services.production.health.startup]
+  path = "/scheduler/api/healthz"
+  
