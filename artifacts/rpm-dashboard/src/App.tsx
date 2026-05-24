@@ -12,6 +12,7 @@ import Patients from "@/pages/patients";
 import PatientDetail from "@/pages/patient-detail";
 import Alerts from "@/pages/alerts";
 import Sync from "@/pages/sync";
+import SyncHealthwear from "@/pages/sync-healthwear";
 import AuditLog from "@/pages/audit-log";
 
 
@@ -20,6 +21,7 @@ function Router() {
     <Switch>
       <Route path="/login" component={Login} />
       <Route path="/sync" component={Sync} />
+      <Route path="/sync-healthwear" component={SyncHealthwear} />
       <Route path="/" component={Dashboard} />
       <Route path="/patients" component={Patients} />
       <Route path="/patients/:id" component={PatientDetail} />

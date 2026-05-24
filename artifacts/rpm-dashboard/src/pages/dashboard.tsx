@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import { Link } from "wouter";
 import { QRCodeSVG } from "qrcode.react";
@@ -146,6 +146,178 @@ function useWatchKey(isPatient: boolean) {
   };
 
   return { apiKey, loading, keyLoaded, generate, revoke, reload: load };
+}
+
+type WatchDevice = "healthwear" | "oraimo";
+
+interface SmartWatchCardProps {
+  watch: ReturnType<typeof useWatchKey>;
+  userId?: number;
+  apiBase: string;
+}
+
+function SmartWatchCard({ watch, userId, apiBase }: SmartWatchCardProps) {
+  const [activeDevice, setActiveDevice] = useState<WatchDevice>("healthwear");
+
+  const devices: { id: WatchDevice; label: string; tagline: string; syncPath: string; accent: string; accentBg: string; accentRing: string; dot: string; steps: { icon: React.ReactNode; title: string; desc: string }[] }[] = [
+    {
+      id: "healthwear",
+      label: "Healthwear",
+      tagline: "Full vitals — all readings supported",
+      syncPath: "/sync-healthwear",
+      accent: "text-emerald-600",
+      accentBg: "bg-emerald-500",
+      accentRing: "ring-emerald-200",
+      dot: "bg-emerald-500",
+      steps: [
+        { icon: <ScanLine className="h-4 w-4 text-emerald-600" />, title: "Scan this QR code", desc: "Use your phone camera — no app needed" },
+        { icon: <Watch className="h-4 w-4 text-emerald-600" />, title: "Open Healthwear app", desc: "Go to Live Vitals or Health Data" },
+        { icon: <Wifi className="h-4 w-4 text-emerald-600" />, title: "Enter all readings & sync", desc: "Heart Rate, SpO₂, BP, Temperature, Calories" },
+      ],
+    },
+    {
+      id: "oraimo",
+      label: "Oraimo",
+      tagline: "Heart Rate, SpO₂, Temperature",
+      syncPath: "/sync",
+      accent: "text-sky-600",
+      accentBg: "bg-sky-500",
+      accentRing: "ring-sky-200",
+      dot: "bg-sky-500",
+      steps: [
+        { icon: <ScanLine className="h-4 w-4 text-sky-600" />, title: "Scan this QR code", desc: "Use your phone camera — no app needed" },
+        { icon: <Watch className="h-4 w-4 text-sky-600" />, title: "Open Oraimo app", desc: "Check Heart Rate, SpO₂, and Temperature" },
+        { icon: <Wifi className="h-4 w-4 text-sky-600" />, title: "Enter readings & sync", desc: "Skip Blood Pressure if your model doesn't support it" },
+      ],
+    },
+  ];
+
+  const current = devices.find((d) => d.id === activeDevice)!;
+  const syncUrl = watch.apiKey ? `${window.location.origin}${apiBase}${current.syncPath}?apiKey=${watch.apiKey}` : "";
+
+  return (
+    <Card className="border-border/50 shadow-sm overflow-hidden relative">
+      <div className="absolute inset-0 bg-gradient-to-br from-primary/3 via-transparent to-transparent pointer-events-none" />
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <CardTitle className="text-lg flex items-center gap-2">
+            <div className="h-8 w-8 rounded-xl bg-primary/10 flex items-center justify-center">
+              <Watch className="h-4 w-4 text-primary" />
+            </div>
+            Connect Your Smartwatch
+          </CardTitle>
+          {watch.apiKey && (
+            <div className="flex items-center gap-1.5 bg-success/10 border border-success/20 rounded-full px-3 py-1">
+              <div className="h-2 w-2 rounded-full bg-success animate-pulse" />
+              <span className="text-xs font-medium text-success-foreground">Device Paired</span>
+            </div>
+          )}
+        </div>
+        {/* Device selector tabs */}
+        <div className="flex gap-2 mt-3">
+          {devices.map((d) => (
+            <button
+              key={d.id}
+              onClick={() => setActiveDevice(d.id)}
+              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-sm font-medium border transition-all ${
+                activeDevice === d.id
+                  ? `bg-card border-border shadow-sm text-foreground`
+                  : "bg-transparent border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50"
+              }`}
+            >
+              <div className={`h-2 w-2 rounded-full ${d.dot} ${activeDevice === d.id ? "opacity-100" : "opacity-40"}`} />
+              {d.label}
+              {d.id === "healthwear" && (
+                <span className="text-[10px] bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-full px-1.5 py-0.5 font-semibold leading-none">NEW</span>
+              )}
+            </button>
+          ))}
+        </div>
+        <p className="text-xs text-muted-foreground mt-1">{current.tagline}</p>
+      </CardHeader>
+
+      <CardContent>
+        {!watch.keyLoaded ? (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          </div>
+        ) : watch.apiKey ? (
+          <div className="flex flex-col md:flex-row gap-6 items-start">
+            {/* QR Code */}
+            <div className="flex flex-col items-center gap-3 shrink-0">
+              <div className="relative">
+                <div className={`p-4 bg-white rounded-2xl shadow-lg border border-border/30 ring-2 ${current.accentRing}`}>
+                  <QRCodeSVG
+                    value={syncUrl}
+                    size={156}
+                    level="M"
+                    includeMargin={false}
+                    fgColor={activeDevice === "healthwear" ? "#059669" : "#0284c7"}
+                  />
+                </div>
+                <div className={`absolute -top-2 -right-2 h-6 w-6 ${current.accentBg} rounded-full flex items-center justify-center shadow-md`}>
+                  <ScanLine className="h-3 w-3 text-white" />
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground text-center max-w-[160px]">
+                Scan with your phone camera
+              </p>
+            </div>
+
+            {/* Steps */}
+            <div className="flex-1 space-y-2.5">
+              <p className="text-sm font-semibold text-foreground">How to sync your readings:</p>
+              {current.steps.map((step, i) => (
+                <div key={i} className="flex items-start gap-3 p-3 rounded-xl bg-muted/40 border border-border/30">
+                  <div className="h-7 w-7 rounded-lg bg-background border border-border/50 flex items-center justify-center shrink-0 shadow-sm">
+                    {step.icon}
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-foreground">{step.title}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{step.desc}</p>
+                  </div>
+                </div>
+              ))}
+              <div className="flex items-center gap-2 pt-1">
+                <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={watch.generate} disabled={watch.loading}>
+                  {watch.loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                  Regenerate QR
+                </Button>
+                <Button variant="ghost" size="sm" className="gap-1.5 text-xs text-muted-foreground" asChild>
+                  <Link href={`/patients/${userId}?tab=device`}>
+                    <Smartphone className="h-3.5 w-3.5" /> Advanced Setup
+                  </Link>
+                </Button>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="flex flex-col sm:flex-row items-center gap-6">
+            <div className="flex flex-col items-center gap-3 text-center sm:w-44 shrink-0">
+              <div className="h-20 w-20 rounded-2xl border-2 border-dashed border-border/50 bg-muted/30 flex items-center justify-center">
+                <Watch className="h-9 w-9 text-muted-foreground/40" />
+              </div>
+              <p className="text-xs text-muted-foreground">No device paired yet</p>
+            </div>
+            <div className="flex-1 space-y-3">
+              <p className="text-sm text-muted-foreground">
+                Generate one QR code that works with both <strong>Healthwear</strong> and <strong>Oraimo</strong> — or any other wearable. Scan once, sync anytime.
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {["Healthwear", "Oraimo", "Apple Watch", "Samsung Health", "Fitbit"].map((brand) => (
+                  <span key={brand} className={`text-xs border rounded-full px-2.5 py-0.5 ${brand === "Healthwear" ? "bg-emerald-50 text-emerald-700 border-emerald-200 font-medium" : "bg-muted text-muted-foreground border-border/50"}`}>{brand}</span>
+                ))}
+              </div>
+              <Button onClick={watch.generate} disabled={watch.loading} className="gap-2 shadow-sm">
+                {watch.loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
+                Generate My QR Code
+              </Button>
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
 }
 
 export default function Dashboard() {
@@ -330,112 +502,7 @@ export default function Dashboard() {
 
           {/* ── Smartwatch QR Pairing ─────────────────────────────────────────── */}
           <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
-            <Card className="border-primary/20 shadow-sm overflow-hidden relative">
-              <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-transparent pointer-events-none" />
-              <CardHeader className="pb-4">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-lg flex items-center gap-2">
-                    <div className="h-8 w-8 rounded-xl bg-primary/10 flex items-center justify-center">
-                      <Watch className="h-4 w-4 text-primary" />
-                    </div>
-                    Connect Your Smartwatch
-                  </CardTitle>
-                  {watch.apiKey && (
-                    <div className="flex items-center gap-1.5 bg-success/10 border border-success/20 rounded-full px-3 py-1">
-                      <div className="h-2 w-2 rounded-full bg-success animate-pulse" />
-                      <span className="text-xs font-medium text-success-foreground">Paired</span>
-                    </div>
-                  )}
-                </div>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Scan the QR code with your phone to sync readings from your Oraimo or any smartwatch directly to PulseRPM.
-                </p>
-              </CardHeader>
-              <CardContent>
-                {!watch.keyLoaded ? (
-                  <div className="flex items-center justify-center py-8">
-                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                  </div>
-                ) : watch.apiKey ? (
-                  <div className="flex flex-col md:flex-row gap-6 items-start">
-                    {/* QR Code */}
-                    <div className="flex flex-col items-center gap-3 shrink-0">
-                      <div className="relative">
-                        <div className="p-4 bg-white rounded-2xl shadow-lg border border-border/30 ring-2 ring-primary/10">
-                          <QRCodeSVG
-                            value={`${window.location.origin}${API_BASE}/sync?apiKey=${watch.apiKey}`}
-                            size={160}
-                            level="M"
-                            includeMargin={false}
-                          />
-                        </div>
-                        <div className="absolute -top-2 -right-2 h-6 w-6 bg-primary rounded-full flex items-center justify-center shadow-md">
-                          <ScanLine className="h-3 w-3 text-white" />
-                        </div>
-                      </div>
-                      <p className="text-xs text-muted-foreground text-center max-w-[160px]">
-                        Scan with phone camera to open the sync form
-                      </p>
-                    </div>
-
-                    {/* Steps */}
-                    <div className="flex-1 space-y-3">
-                      <p className="text-sm font-semibold text-foreground mb-3">How to sync your readings:</p>
-                      {[
-                        { icon: <ScanLine className="h-4 w-4 text-primary" />, title: "Scan the QR code", desc: "Use your phone camera — no app needed" },
-                        { icon: <Watch className="h-4 w-4 text-green-600" />, title: "Open your Oraimo app", desc: "Check your latest Heart Rate, SpO₂, and Temperature readings" },
-                        { icon: <Wifi className="h-4 w-4 text-blue-500" />, title: "Enter & submit readings", desc: 'Tap "Sync to PulseRPM" — your provider is notified instantly' },
-                      ].map((step, i) => (
-                        <div key={i} className="flex items-start gap-3 p-3 rounded-xl bg-muted/40 border border-border/30">
-                          <div className="h-7 w-7 rounded-lg bg-background border border-border/50 flex items-center justify-center shrink-0 shadow-sm">
-                            {step.icon}
-                          </div>
-                          <div>
-                            <p className="text-sm font-medium text-foreground">{step.title}</p>
-                            <p className="text-xs text-muted-foreground mt-0.5">{step.desc}</p>
-                          </div>
-                        </div>
-                      ))}
-
-                      <div className="flex items-center gap-2 pt-1">
-                        <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={watch.generate} disabled={watch.loading}>
-                          {watch.loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-                          Regenerate QR
-                        </Button>
-                        <Button variant="ghost" size="sm" className="gap-1.5 text-xs text-muted-foreground" asChild>
-                          <Link href={`/patients/${user?.id}?tab=device`}>
-                            <Smartphone className="h-3.5 w-3.5" /> Advanced Setup
-                          </Link>
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex flex-col sm:flex-row items-center gap-6">
-                    <div className="flex flex-col items-center gap-3 text-center sm:w-48 shrink-0">
-                      <div className="h-20 w-20 rounded-2xl border-2 border-dashed border-border/50 bg-muted/30 flex items-center justify-center">
-                        <Watch className="h-9 w-9 text-muted-foreground/40" />
-                      </div>
-                      <p className="text-xs text-muted-foreground">No smartwatch paired yet</p>
-                    </div>
-                    <div className="flex-1 space-y-3">
-                      <p className="text-sm text-muted-foreground">
-                        Generate a personal QR code to link your Oraimo smartwatch (or any wearable) to PulseRPM. Scan once — sync anytime.
-                      </p>
-                      <div className="flex flex-wrap gap-2">
-                        {["Oraimo","Apple Watch","Samsung Health","Fitbit","Google Fit"].map((brand) => (
-                          <span key={brand} className="text-xs bg-muted border border-border/50 rounded-full px-2.5 py-0.5 text-muted-foreground">{brand}</span>
-                        ))}
-                      </div>
-                      <Button onClick={watch.generate} disabled={watch.loading} className="gap-2 shadow-sm mt-1">
-                        {watch.loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
-                        Generate My QR Code
-                      </Button>
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+            <SmartWatchCard watch={watch} userId={user?.id} apiBase={API_BASE} />
           </motion.div>
         </div>
       </Layout>

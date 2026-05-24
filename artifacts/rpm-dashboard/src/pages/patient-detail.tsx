@@ -469,75 +469,127 @@ export default function PatientDetail() {
         {/* Connect Device Tab (patients only) */}
         {activeTab === "device" && isPatient && (
           <div className="space-y-6 max-w-3xl">
-            {/* API Key Card */}
-            <Card className="border-border/50 shadow-sm">
-              <CardHeader>
-                <CardTitle className="flex items-center text-lg">
-                  <Wifi className="mr-2 h-5 w-5 text-primary" /> Connect Your Oraimo Watch
-                </CardTitle>
-                <CardDescription>
-                  Scan the QR code below with your phone to open the Oraimo sync form. Enter your latest readings directly from the Oraimo app — blood pressure and other unavailable readings can be skipped.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-5">
-                {deviceApiKey ? (
-                  <div className="space-y-5">
-                    <div className="flex flex-col sm:flex-row items-center gap-6">
-                      <div className="flex flex-col items-center gap-3">
-                        <div className="p-4 bg-white rounded-2xl shadow-md border border-border/30">
-                          <QRCodeSVG
-                            value={syncPageUrl}
-                            size={180}
-                            level="M"
-                            includeMargin={false}
-                          />
+            {/* QR Code Pair Cards — Healthwear + Oraimo side by side */}
+            {deviceApiKey ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* ── Healthwear QR ── */}
+                <Card className="border-emerald-200 bg-gradient-to-br from-emerald-50/60 to-transparent shadow-sm">
+                  <CardHeader className="pb-3">
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-base flex items-center gap-2">
+                        <div className="h-7 w-7 rounded-lg bg-emerald-100 flex items-center justify-center">
+                          <Watch className="h-4 w-4 text-emerald-600" />
                         </div>
-                        <p className="text-xs text-muted-foreground text-center max-w-[200px]">
-                          Scan with your phone to open the Oraimo sync form
-                        </p>
-                      </div>
-                      <div className="flex-1 space-y-4 w-full">
-                        <div>
-                          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">API Key</p>
-                          <div className="flex items-center gap-2">
-                            <code className="flex-1 bg-muted rounded-lg px-3 py-2 text-xs font-mono text-foreground break-all border border-border/50">
-                              {deviceApiKey}
-                            </code>
-                            <Button variant="outline" size="icon" onClick={handleCopyKey} className="shrink-0 h-8 w-8">
-                              {keyCopied ? <CheckCircle2 className="h-3.5 w-3.5 text-success" /> : <Copy className="h-3.5 w-3.5" />}
-                            </Button>
-                          </div>
-                        </div>
-                        <div>
-                          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Ingest Endpoint</p>
-                          <code className="block bg-muted rounded-lg px-3 py-2 text-xs font-mono text-foreground break-all border border-border/50">
-                            {ingestUrl}
-                          </code>
-                        </div>
-                        <div className="flex gap-2 pt-1">
-                          <Button variant="outline" size="sm" onClick={handleGenerateKey} disabled={deviceLoading} className="gap-1.5">
-                            <RefreshCw className={`h-4 w-4 ${deviceLoading ? 'animate-spin' : ''}`} /> Regenerate
-                          </Button>
-                          <Button variant="ghost" size="sm" onClick={handleRevokeKey} disabled={deviceLoading} className="gap-1.5 text-destructive hover:bg-destructive/10 hover:text-destructive">
-                            <Trash2 className="h-4 w-4" /> Revoke
-                          </Button>
-                        </div>
-                      </div>
+                        <span><span className="font-extrabold text-emerald-600">Health</span><span className="font-extrabold text-teal-700">wear</span></span>
+                      </CardTitle>
+                      <span className="text-[10px] bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-full px-2 py-0.5 font-semibold">All vitals</span>
                     </div>
-                    <p className="text-xs text-muted-foreground bg-muted/50 rounded-lg px-3 py-2 border border-border/30">
-                      Scanning this QR code with your phone opens a mobile form where you can enter readings from the Oraimo app. Blood pressure is optional — skip it if your watch doesn't measure it.
-                    </p>
-                  </div>
-                ) : (
+                    <CardDescription className="text-xs">Heart Rate, SpO₂, BP, Temperature, Calories — all fully supported</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <div className="flex flex-col items-center gap-2">
+                      <div className="p-3 bg-white rounded-xl shadow-md border border-emerald-100 ring-2 ring-emerald-100">
+                        <QRCodeSVG
+                          value={`${window.location.origin}${API_BASE}/sync-healthwear?apiKey=${deviceApiKey}`}
+                          size={150}
+                          level="M"
+                          includeMargin={false}
+                          fgColor="#059669"
+                        />
+                      </div>
+                      <p className="text-[11px] text-muted-foreground text-center">Scan to open Healthwear sync form</p>
+                    </div>
+                    <ol className="text-xs text-muted-foreground space-y-1 list-decimal list-inside">
+                      <li>Scan QR with your phone camera</li>
+                      <li>Open <strong>Healthwear app → Live Vitals</strong></li>
+                      <li>Enter all readings and tap <em>Sync</em></li>
+                    </ol>
+                  </CardContent>
+                </Card>
+
+                {/* ── Oraimo QR ── */}
+                <Card className="border-sky-200 bg-gradient-to-br from-sky-50/60 to-transparent shadow-sm">
+                  <CardHeader className="pb-3">
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-base flex items-center gap-2">
+                        <div className="h-7 w-7 rounded-lg bg-sky-100 flex items-center justify-center">
+                          <Watch className="h-4 w-4 text-sky-600" />
+                        </div>
+                        <span><span className="font-bold text-green-600">o</span><span className="font-bold text-sky-700">raimo</span></span>
+                      </CardTitle>
+                      <span className="text-[10px] bg-sky-50 text-sky-700 border border-sky-200 rounded-full px-2 py-0.5">HR, SpO₂, Temp</span>
+                    </div>
+                    <CardDescription className="text-xs">Skip Blood Pressure if your model doesn't support it</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <div className="flex flex-col items-center gap-2">
+                      <div className="p-3 bg-white rounded-xl shadow-md border border-sky-100 ring-2 ring-sky-100">
+                        <QRCodeSVG
+                          value={syncPageUrl}
+                          size={150}
+                          level="M"
+                          includeMargin={false}
+                          fgColor="#0284c7"
+                        />
+                      </div>
+                      <p className="text-[11px] text-muted-foreground text-center">Scan to open Oraimo sync form</p>
+                    </div>
+                    <ol className="text-xs text-muted-foreground space-y-1 list-decimal list-inside">
+                      <li>Scan QR with your phone camera</li>
+                      <li>Open <strong>Oraimo app → Heart Rate</strong></li>
+                      <li>Enter readings, skip unavailable ones</li>
+                    </ol>
+                  </CardContent>
+                </Card>
+              </div>
+            ) : (
+              <Card className="border-border/50 shadow-sm">
+                <CardContent className="pt-6">
                   <div className="text-center py-8 border border-dashed rounded-xl border-border/50">
-                    <Smartphone className="h-10 w-10 text-muted-foreground/50 mx-auto mb-3" />
-                    <p className="text-sm text-muted-foreground mb-4">Generate a QR code to pair your wearable device.</p>
+                    <Watch className="h-10 w-10 text-muted-foreground/50 mx-auto mb-3" />
+                    <p className="text-sm font-medium text-foreground mb-1">No device paired yet</p>
+                    <p className="text-sm text-muted-foreground mb-4">Generate QR codes for your Healthwear and Oraimo devices.</p>
                     <Button onClick={handleGenerateKey} disabled={deviceLoading}>
                       {deviceLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                      Generate QR Code
+                      Generate QR Codes
                     </Button>
                   </div>
-                )}
+                </CardContent>
+              </Card>
+            )}
+
+            {/* API Key management */}
+            <Card className="border-border/50 shadow-sm">
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center text-base">
+                  <Wifi className="mr-2 h-4 w-4 text-primary" /> Device API Key
+                </CardTitle>
+                <CardDescription>Your personal key that authenticates both QR codes above. Keep it private.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {deviceApiKey ? (
+                  <>
+                    <div className="flex items-center gap-2">
+                      <code className="flex-1 bg-muted rounded-lg px-3 py-2 text-xs font-mono text-foreground break-all border border-border/50">
+                        {deviceApiKey}
+                      </code>
+                      <Button variant="outline" size="icon" onClick={handleCopyKey} className="shrink-0 h-8 w-8">
+                        {keyCopied ? <CheckCircle2 className="h-3.5 w-3.5 text-success" /> : <Copy className="h-3.5 w-3.5" />}
+                      </Button>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button variant="outline" size="sm" onClick={handleGenerateKey} disabled={deviceLoading} className="gap-1.5">
+                        <RefreshCw className={`h-4 w-4 ${deviceLoading ? 'animate-spin' : ''}`} /> Regenerate
+                      </Button>
+                      <Button variant="ghost" size="sm" onClick={handleRevokeKey} disabled={deviceLoading} className="gap-1.5 text-destructive hover:bg-destructive/10 hover:text-destructive">
+                        <Trash2 className="h-4 w-4" /> Revoke
+                      </Button>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Regenerating creates a new key and <strong>invalidates both QR codes</strong> — you'll need to re-scan them.
+                    </p>
+                  </>
+                ) : null}
               </CardContent>
             </Card>
 

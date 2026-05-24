@@ -164,7 +164,7 @@ router.post("/device/ingest", async (req, res) => {
     const recordedAt = body.recordedAt || body.StartDate || body.startDate || body.timestamp || new Date().toISOString();
 
     // Accept source from body (e.g. "oraimo"), fall back to "wearable"
-    const ALLOWED_SOURCES = ["oraimo", "wearable", "manual", "apple_health", "google_fit", "fitbit"];
+    const ALLOWED_SOURCES = ["oraimo", "healthwear", "wearable", "manual", "apple_health", "google_fit", "fitbit"];
     const source = (typeof body.source === "string" && ALLOWED_SOURCES.includes(body.source))
       ? body.source
       : "wearable";
