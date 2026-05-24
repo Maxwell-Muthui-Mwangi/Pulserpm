@@ -99,8 +99,13 @@ router.post("/auth/patient-signup", authLimiter, async (req, res) => {
     }
 
     logAuditEvent({ actorEmail: email, action: "auth.signup", resourceType: "auth", ipAddress: getClientIp(req), userAgent: req.headers["user-agent"], outcome: "success" });
-    setImmediate(() => sendVerificationEmail(email, name, code));
-    res.status(201).json({ message: "Verification code sent to your email.", email });
+
+    // Send email — if delivery fails, include the code in the response so the
+    // patient can still complete verification (Resend free tier / no verified domain).
+    const emailSent = await sendVerificationEmail(email, name, code);
+    const responseBody: Record<string, unknown> = { message: emailSent ? "Verification code sent to your email." : "We could not deliver your verification email. Use the code shown on screen.", email, emailSent };
+    if (!emailSent) responseBody.fallbackCode = code;
+    res.status(201).json(responseBody);
   } catch (err) {
     console.error("Patient signup error:", err);
     res.status(500).json({ error: "Internal Server Error", message: "Signup failed" });
@@ -182,8 +187,10 @@ router.post("/auth/resend-code", async (req, res) => {
     const code = generateCode();
     const expiry = new Date(Date.now() + 15 * 60 * 1000);
     await db.update(pendingPatientsTable).set({ verificationCode: code, verificationExpiry: expiry }).where(eq(pendingPatientsTable.email, email));
-    setImmediate(() => sendVerificationEmail(email, pending.name, code));
-    res.json({ message: "A new verification code has been sent to your email." });
+    const emailSent = await sendVerificationEmail(email, pending.name, code);
+    const responseBody: Record<string, unknown> = { message: emailSent ? "A new verification code has been sent to your email." : "We could not deliver your verification email. Use the code shown on screen.", emailSent };
+    if (!emailSent) responseBody.fallbackCode = code;
+    res.json(responseBody);
   } catch (err) {
     console.error("Resend code error:", err);
     res.status(500).json({ error: "Internal Server Error", message: "Failed to resend code" });

@@ -52,6 +52,7 @@ export default function Login() {
 
   const [code, setCode] = useState(["", "", "", "", "", ""]);
   const codeRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const [fallbackCode, setFallbackCode] = useState<string | null>(null);
 
   const [loading, setLoading] = useState(false);
   const [resendLoading, setResendLoading] = useState(false);
@@ -132,6 +133,7 @@ export default function Login() {
       setPendingEmail(email);
       setPendingName(name);
       setCode(["", "", "", "", "", ""]);
+      setFallbackCode(data.fallbackCode ?? null);
       setScreen("verify");
     } catch {
       toast({ title: "Signup failed", description: "Network error. Please try again.", variant: "destructive" });
@@ -177,6 +179,8 @@ export default function Login() {
         body: JSON.stringify({ email: pendingEmail }),
       });
       if (res.ok) {
+        const d = await res.json();
+        setFallbackCode(d.fallbackCode ?? null);
         setResendSent(true);
         setCode(["", "", "", "", "", ""]);
         codeRefs.current[0]?.focus();
@@ -263,6 +267,21 @@ export default function Login() {
                     <Mail className="h-7 w-7 text-primary" />
                   </div>
                 </div>
+
+                {/* Fallback banner shown when email could not be delivered */}
+                {fallbackCode ? (
+                  <div className="mb-5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-center space-y-1">
+                    <p className="text-xs font-semibold text-amber-700 uppercase tracking-wide">Email delivery unavailable</p>
+                    <p className="text-xs text-amber-600">We couldn't send the email. Use this code instead:</p>
+                    <p className="text-3xl font-extrabold tracking-[0.25em] text-amber-800 font-mono py-1">{fallbackCode}</p>
+                    <p className="text-[11px] text-amber-500">Expires in 15 minutes — enter it in the boxes below</p>
+                  </div>
+                ) : (
+                  <p className="text-center text-sm text-muted-foreground mb-5">
+                    We sent a 6-digit code to <strong>{pendingEmail}</strong>. Check your inbox (and spam folder).
+                  </p>
+                )}
+
                 <form onSubmit={handleVerify} className="space-y-6">
                   <div>
                     <Label className="text-center block text-sm text-muted-foreground mb-3">Verification code</Label>

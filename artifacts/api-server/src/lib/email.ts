@@ -72,22 +72,23 @@ async function sendViaSmtp(to: string, subject: string, html: string, from: stri
 }
 
 // ── Unified sender ───────────────────────────────────────────────────────────
-async function send(to: string, subject: string, html: string, fallbackLog: string): Promise<void> {
+async function send(to: string, subject: string, html: string, fallbackLog: string): Promise<boolean> {
   // Try Resend first
   if (process.env.RESEND_API_KEY) {
     const ok = await sendViaResend(to, subject, html);
-    if (ok) { console.log(`[email] Sent via Resend → ${to}`); return; }
+    if (ok) { console.log(`[email] Sent via Resend → ${to}`); return true; }
   }
 
   // Try SMTP
   if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) {
     const fromAddress = `"PulseRPM" <${process.env.SMTP_USER}>`;
     const ok = await sendViaSmtp(to, subject, html, fromAddress);
-    if (ok) { console.log(`[email] Sent via SMTP → ${to}`); return; }
+    if (ok) { console.log(`[email] Sent via SMTP → ${to}`); return true; }
   }
 
   // No transport configured — log to console so dev can still test
-  console.warn(`[email] No email transport configured — ${fallbackLog}`);
+  console.warn(`[email] Email delivery failed — ${fallbackLog}`);
+  return false;
 }
 
 // ── HTML helpers ─────────────────────────────────────────────────────────────
@@ -220,8 +221,8 @@ export async function sendAlertEmail(data: AlertEmailData): Promise<void> {
   await send(data.providerEmail, subject, buildAlertEmailHtml(data), `skipping alert for ${data.patientName}`);
 }
 
-export async function sendVerificationEmail(to: string, name: string, code: string): Promise<void> {
-  await send(to, "Verify your PulseRPM account", buildVerificationEmailHtml(name, code), `verification code for ${to}: ${code}`);
+export async function sendVerificationEmail(to: string, name: string, code: string): Promise<boolean> {
+  return send(to, "Verify your PulseRPM account", buildVerificationEmailHtml(name, code), `verification code for ${to}: ${code}`);
 }
 
 // ── Patient approved email ────────────────────────────────────────────────────
