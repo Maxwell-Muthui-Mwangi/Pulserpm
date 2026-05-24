@@ -1,6 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import { Link } from "wouter";
+import { QRCodeSVG } from "qrcode.react";
 import { 
   Users, 
   AlertTriangle, 
@@ -15,6 +16,13 @@ import {
   Heart,
   Clock,
   ChevronRight,
+  Watch,
+  Loader2,
+  RefreshCw,
+  Zap,
+  Smartphone,
+  ScanLine,
+  Wifi,
 } from "lucide-react";
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend
@@ -90,6 +98,56 @@ function useTrends() {
   return { trend, patientStatus, loading };
 }
 
+function useWatchKey(isPatient: boolean) {
+  const [apiKey, setApiKey] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [keyLoaded, setKeyLoaded] = useState(false);
+
+  const load = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/device/key`, {
+        headers: { Authorization: `Bearer ${getAuthToken()}` },
+      });
+      if (res.ok) {
+        const d = await res.json();
+        setApiKey(d.apiKey || null);
+      }
+    } catch { /* ignore */ }
+    finally { setKeyLoaded(true); }
+  }, []);
+
+  useEffect(() => { if (isPatient) load(); }, [isPatient, load]);
+
+  const generate = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/device/generate-key`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${getAuthToken()}` },
+      });
+      if (res.ok) {
+        const d = await res.json();
+        setApiKey(d.apiKey);
+      }
+    } catch { /* ignore */ }
+    finally { setLoading(false); }
+  };
+
+  const revoke = async () => {
+    setLoading(true);
+    try {
+      await fetch(`${API_BASE}/api/device/key`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${getAuthToken()}` },
+      });
+      setApiKey(null);
+    } catch { /* ignore */ }
+    finally { setLoading(false); }
+  };
+
+  return { apiKey, loading, keyLoaded, generate, revoke, reload: load };
+}
+
 export default function Dashboard() {
   const { isPatient, user } = useAuth();
   const { data: stats, isLoading: statsLoading } = useGetDashboardStats({ request: withAuth() });
@@ -102,6 +160,7 @@ export default function Dashboard() {
     { query: { enabled: !isPatient } as any, request: withAuth() }
   );
   const { trend, patientStatus, loading: trendsLoading } = useTrends();
+  const watch = useWatchKey(!!isPatient);
 
   const isLoading = statsLoading || alertsLoading || (!isPatient && patientsLoading);
 
@@ -268,6 +327,116 @@ export default function Dashboard() {
               </CardContent>
             </Card>
           </div>
+
+          {/* ── Smartwatch QR Pairing ─────────────────────────────────────────── */}
+          <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
+            <Card className="border-primary/20 shadow-sm overflow-hidden relative">
+              <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-transparent pointer-events-none" />
+              <CardHeader className="pb-4">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <div className="h-8 w-8 rounded-xl bg-primary/10 flex items-center justify-center">
+                      <Watch className="h-4 w-4 text-primary" />
+                    </div>
+                    Connect Your Smartwatch
+                  </CardTitle>
+                  {watch.apiKey && (
+                    <div className="flex items-center gap-1.5 bg-success/10 border border-success/20 rounded-full px-3 py-1">
+                      <div className="h-2 w-2 rounded-full bg-success animate-pulse" />
+                      <span className="text-xs font-medium text-success-foreground">Paired</span>
+                    </div>
+                  )}
+                </div>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Scan the QR code with your phone to sync readings from your Oraimo or any smartwatch directly to PulseRPM.
+                </p>
+              </CardHeader>
+              <CardContent>
+                {!watch.keyLoaded ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                  </div>
+                ) : watch.apiKey ? (
+                  <div className="flex flex-col md:flex-row gap-6 items-start">
+                    {/* QR Code */}
+                    <div className="flex flex-col items-center gap-3 shrink-0">
+                      <div className="relative">
+                        <div className="p-4 bg-white rounded-2xl shadow-lg border border-border/30 ring-2 ring-primary/10">
+                          <QRCodeSVG
+                            value={`${window.location.origin}${API_BASE}/sync?apiKey=${watch.apiKey}`}
+                            size={160}
+                            level="M"
+                            includeMargin={false}
+                          />
+                        </div>
+                        <div className="absolute -top-2 -right-2 h-6 w-6 bg-primary rounded-full flex items-center justify-center shadow-md">
+                          <ScanLine className="h-3 w-3 text-white" />
+                        </div>
+                      </div>
+                      <p className="text-xs text-muted-foreground text-center max-w-[160px]">
+                        Scan with phone camera to open the sync form
+                      </p>
+                    </div>
+
+                    {/* Steps */}
+                    <div className="flex-1 space-y-3">
+                      <p className="text-sm font-semibold text-foreground mb-3">How to sync your readings:</p>
+                      {[
+                        { icon: <ScanLine className="h-4 w-4 text-primary" />, title: "Scan the QR code", desc: "Use your phone camera — no app needed" },
+                        { icon: <Watch className="h-4 w-4 text-green-600" />, title: "Open your Oraimo app", desc: "Check your latest Heart Rate, SpO₂, and Temperature readings" },
+                        { icon: <Wifi className="h-4 w-4 text-blue-500" />, title: "Enter & submit readings", desc: 'Tap "Sync to PulseRPM" — your provider is notified instantly' },
+                      ].map((step, i) => (
+                        <div key={i} className="flex items-start gap-3 p-3 rounded-xl bg-muted/40 border border-border/30">
+                          <div className="h-7 w-7 rounded-lg bg-background border border-border/50 flex items-center justify-center shrink-0 shadow-sm">
+                            {step.icon}
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium text-foreground">{step.title}</p>
+                            <p className="text-xs text-muted-foreground mt-0.5">{step.desc}</p>
+                          </div>
+                        </div>
+                      ))}
+
+                      <div className="flex items-center gap-2 pt-1">
+                        <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={watch.generate} disabled={watch.loading}>
+                          {watch.loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                          Regenerate QR
+                        </Button>
+                        <Button variant="ghost" size="sm" className="gap-1.5 text-xs text-muted-foreground" asChild>
+                          <Link href={`/patients/${user?.id}?tab=device`}>
+                            <Smartphone className="h-3.5 w-3.5" /> Advanced Setup
+                          </Link>
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex flex-col sm:flex-row items-center gap-6">
+                    <div className="flex flex-col items-center gap-3 text-center sm:w-48 shrink-0">
+                      <div className="h-20 w-20 rounded-2xl border-2 border-dashed border-border/50 bg-muted/30 flex items-center justify-center">
+                        <Watch className="h-9 w-9 text-muted-foreground/40" />
+                      </div>
+                      <p className="text-xs text-muted-foreground">No smartwatch paired yet</p>
+                    </div>
+                    <div className="flex-1 space-y-3">
+                      <p className="text-sm text-muted-foreground">
+                        Generate a personal QR code to link your Oraimo smartwatch (or any wearable) to PulseRPM. Scan once — sync anytime.
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        {["Oraimo","Apple Watch","Samsung Health","Fitbit","Google Fit"].map((brand) => (
+                          <span key={brand} className="text-xs bg-muted border border-border/50 rounded-full px-2.5 py-0.5 text-muted-foreground">{brand}</span>
+                        ))}
+                      </div>
+                      <Button onClick={watch.generate} disabled={watch.loading} className="gap-2 shadow-sm mt-1">
+                        {watch.loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
+                        Generate My QR Code
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </motion.div>
         </div>
       </Layout>
     );

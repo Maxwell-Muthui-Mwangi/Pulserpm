@@ -39,7 +39,8 @@ export default function PatientDetail() {
   const { toast } = useToast();
   const { isPatient } = useAuth();
   
-  const defaultTab = isPatient ? "overview" : "overview";
+  const urlTab = new URLSearchParams(window.location.search).get("tab") as "overview" | "charts" | "thresholds" | "device" | null;
+  const defaultTab = (isPatient && urlTab) ? urlTab : "overview";
   const [activeTab, setActiveTab] = useState<"overview" | "charts" | "thresholds" | "device">(defaultTab);
   const [period, setPeriod] = useState<"day" | "week" | "month">("day");
 

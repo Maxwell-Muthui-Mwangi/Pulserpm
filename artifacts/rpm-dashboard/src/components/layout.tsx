@@ -87,6 +87,7 @@ export default function Layout({ children }: LayoutProps) {
     { href: "/", label: "My Dashboard", icon: LayoutDashboard },
     { href: user ? `/patients/${user.id}` : "/", label: "My Profile", icon: UserCircle },
     { href: "/alerts", label: "My Alerts", icon: AlertCircle },
+    { href: user ? `/patients/${user.id}?tab=device` : "/", label: "Connect Smartwatch", icon: HeartPulse },
   ];
 
   const navItems = isPatient ? patientNavItems : providerNavItems;
