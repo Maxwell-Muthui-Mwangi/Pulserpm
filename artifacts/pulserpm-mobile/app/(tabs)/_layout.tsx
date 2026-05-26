@@ -20,6 +20,10 @@ function NativeTabLayout() {
         <Icon sf={{ default: "plus.circle", selected: "plus.circle.fill" }} />
         <Label>Log</Label>
       </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="health-connect">
+        <Icon sf={{ default: "heart.text.square", selected: "heart.text.square.fill" }} />
+        <Label>Health</Label>
+      </NativeTabs.Trigger>
       <NativeTabs.Trigger name="settings">
         <Icon sf={{ default: "gearshape", selected: "gearshape.fill" }} />
         <Label>Settings</Label>
@@ -86,6 +90,18 @@ function ClassicTabLayout() {
               <SymbolView name="plus.circle" tintColor={color} size={22} />
             ) : (
               <Feather name="plus-circle" size={22} color={color} />
+            ),
+        }}
+      />
+      <Tabs.Screen
+        name="health-connect"
+        options={{
+          title: "Health Connect",
+          tabBarIcon: ({ color }) =>
+            isIOS ? (
+              <SymbolView name="heart.text.square" tintColor={color} size={22} />
+            ) : (
+              <Feather name="heart" size={22} color={color} />
             ),
         }}
       />

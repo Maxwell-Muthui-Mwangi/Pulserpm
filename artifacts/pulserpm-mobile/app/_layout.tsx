@@ -6,7 +6,8 @@ import {
   useFonts,
 } from "@expo-google-fonts/inter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Stack } from "expo-router";
+import * as Linking from "expo-linking";
+import { router, Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
@@ -14,18 +15,57 @@ import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
-import { AppProvider } from "@/context/AppContext";
+import { AppProvider, useApp } from "@/context/AppContext";
 
 SplashScreen.preventAutoHideAsync();
 
 const queryClient = new QueryClient();
 
+function parseApiKeyFromUrl(url: string): string | null {
+  try {
+    const parsed = new URL(url);
+    return parsed.searchParams.get("apiKey");
+  } catch {
+    return null;
+  }
+}
+
+function DeepLinkHandler() {
+  const { setApiKey, loading } = useApp();
+
+  useEffect(() => {
+    if (loading) return;
+
+    async function handleUrl(url: string) {
+      const key = parseApiKeyFromUrl(url);
+      if (key) {
+        await setApiKey(key);
+        router.replace("/(tabs)");
+      }
+    }
+
+    Linking.getInitialURL().then((url) => {
+      if (url) handleUrl(url);
+    });
+
+    const sub = Linking.addEventListener("url", ({ url }) => {
+      handleUrl(url);
+    });
+    return () => sub.remove();
+  }, [loading, setApiKey]);
+
+  return null;
+}
+
 function RootLayoutNav() {
   return (
-    <Stack>
-      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-      <Stack.Screen name="pair" options={{ headerShown: false }} />
-    </Stack>
+    <>
+      <DeepLinkHandler />
+      <Stack>
+        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen name="pair" options={{ headerShown: false }} />
+      </Stack>
+    </>
   );
 }
 

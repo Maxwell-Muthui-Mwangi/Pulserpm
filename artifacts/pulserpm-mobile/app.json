@@ -16,7 +16,21 @@
     "ios": {
       "supportsTablet": false
     },
-    "android": {},
+    "android": {
+      "permissions": [
+        "android.permission.health.READ_HEART_RATE",
+        "android.permission.health.READ_OXYGEN_SATURATION",
+        "android.permission.health.READ_BLOOD_PRESSURE",
+        "android.permission.health.READ_BODY_TEMPERATURE"
+      ],
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "data": { "scheme": "pulserpm-mobile" },
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
+      ]
+    },
     "web": {
       "favicon": "./assets/images/icon.png"
     },
@@ -28,7 +42,8 @@
         }
       ],
       "expo-font",
-      "expo-web-browser"
+      "expo-web-browser",
+      "react-native-health-connect"
     ],
     "experiments": {
       "typedRoutes": true,

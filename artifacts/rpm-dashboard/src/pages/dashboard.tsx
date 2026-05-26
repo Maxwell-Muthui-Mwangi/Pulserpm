@@ -148,7 +148,7 @@ function useWatchKey(isPatient: boolean) {
   return { apiKey, loading, keyLoaded, generate, revoke, reload: load };
 }
 
-type WatchDevice = "healthwear" | "oraimo";
+type WatchDevice = "healthwear" | "oraimo" | "mobile";
 
 interface SmartWatchCardProps {
   watch: ReturnType<typeof useWatchKey>;
@@ -159,13 +159,25 @@ interface SmartWatchCardProps {
 function SmartWatchCard({ watch, userId, apiBase }: SmartWatchCardProps) {
   const [activeDevice, setActiveDevice] = useState<WatchDevice>("healthwear");
 
-  const devices: { id: WatchDevice; label: string; tagline: string; syncPath: string; accent: string; accentBg: string; accentRing: string; dot: string; steps: { icon: React.ReactNode; title: string; desc: string }[] }[] = [
+  const devices: {
+    id: WatchDevice;
+    label: string;
+    badge?: string;
+    tagline: string;
+    buildUrl: (key: string, origin: string, base: string) => string;
+    fgColor: string;
+    accentBg: string;
+    accentRing: string;
+    dot: string;
+    steps: { icon: React.ReactNode; title: string; desc: string }[];
+  }[] = [
     {
       id: "healthwear",
       label: "Healthwear",
+      badge: "NEW",
       tagline: "Full vitals — all readings supported",
-      syncPath: "/sync-healthwear",
-      accent: "text-emerald-600",
+      buildUrl: (key, origin, base) => `${origin}${base}/sync-healthwear?apiKey=${key}`,
+      fgColor: "#059669",
       accentBg: "bg-emerald-500",
       accentRing: "ring-emerald-200",
       dot: "bg-emerald-500",
@@ -179,8 +191,8 @@ function SmartWatchCard({ watch, userId, apiBase }: SmartWatchCardProps) {
       id: "oraimo",
       label: "Oraimo",
       tagline: "Heart Rate, SpO₂, Temperature",
-      syncPath: "/sync",
-      accent: "text-sky-600",
+      buildUrl: (key, origin, base) => `${origin}${base}/sync?apiKey=${key}`,
+      fgColor: "#0284c7",
       accentBg: "bg-sky-500",
       accentRing: "ring-sky-200",
       dot: "bg-sky-500",
@@ -190,10 +202,26 @@ function SmartWatchCard({ watch, userId, apiBase }: SmartWatchCardProps) {
         { icon: <Wifi className="h-4 w-4 text-sky-600" />, title: "Enter readings & sync", desc: "Skip Blood Pressure if your model doesn't support it" },
       ],
     },
+    {
+      id: "mobile",
+      label: "PulseRPM App",
+      badge: "HC",
+      tagline: "Auto-sync via Android Health Connect",
+      buildUrl: (key) => `pulserpm-mobile://connect?apiKey=${key}`,
+      fgColor: "#7c3aed",
+      accentBg: "bg-violet-600",
+      accentRing: "ring-violet-200",
+      dot: "bg-violet-500",
+      steps: [
+        { icon: <Smartphone className="h-4 w-4 text-violet-600" />, title: "Install PulseRPM on Android", desc: "Open Expo Go, then scan this QR with the Expo Go camera" },
+        { icon: <ScanLine className="h-4 w-4 text-violet-600" />, title: "QR auto-connects the app", desc: "Your patient account is linked instantly — no manual key entry" },
+        { icon: <Zap className="h-4 w-4 text-violet-600" />, title: "Enable Health Connect sync", desc: "Open the Health tab → grant permissions → tap Sync Now" },
+      ],
+    },
   ];
 
   const current = devices.find((d) => d.id === activeDevice)!;
-  const syncUrl = watch.apiKey ? `${window.location.origin}${apiBase}${current.syncPath}?apiKey=${watch.apiKey}` : "";
+  const syncUrl = watch.apiKey ? current.buildUrl(watch.apiKey, window.location.origin, apiBase) : "";
 
   return (
     <Card className="border-border/50 shadow-sm overflow-hidden relative">
@@ -219,7 +247,7 @@ function SmartWatchCard({ watch, userId, apiBase }: SmartWatchCardProps) {
             <button
               key={d.id}
               onClick={() => setActiveDevice(d.id)}
-              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-sm font-medium border transition-all ${
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium border transition-all ${
                 activeDevice === d.id
                   ? `bg-card border-border shadow-sm text-foreground`
                   : "bg-transparent border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50"
@@ -227,8 +255,12 @@ function SmartWatchCard({ watch, userId, apiBase }: SmartWatchCardProps) {
             >
               <div className={`h-2 w-2 rounded-full ${d.dot} ${activeDevice === d.id ? "opacity-100" : "opacity-40"}`} />
               {d.label}
-              {d.id === "healthwear" && (
-                <span className="text-[10px] bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-full px-1.5 py-0.5 font-semibold leading-none">NEW</span>
+              {d.badge && (
+                <span className={`text-[10px] rounded-full px-1.5 py-0.5 font-semibold leading-none ${
+                  d.id === "healthwear" ? "bg-emerald-100 text-emerald-700 border border-emerald-200"
+                  : d.id === "mobile" ? "bg-violet-100 text-violet-700 border border-violet-200"
+                  : "bg-muted text-muted-foreground border border-border"
+                }`}>{d.badge}</span>
               )}
             </button>
           ))}
@@ -252,7 +284,7 @@ function SmartWatchCard({ watch, userId, apiBase }: SmartWatchCardProps) {
                     size={156}
                     level="M"
                     includeMargin={false}
-                    fgColor={activeDevice === "healthwear" ? "#059669" : "#0284c7"}
+                    fgColor={current.fgColor}
                   />
                 </div>
                 <div className={`absolute -top-2 -right-2 h-6 w-6 ${current.accentBg} rounded-full flex items-center justify-center shadow-md`}>

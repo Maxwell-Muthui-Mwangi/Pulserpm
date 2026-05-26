@@ -471,7 +471,7 @@ export default function PatientDetail() {
           <div className="space-y-6 max-w-3xl">
             {/* QR Code Pair Cards — Healthwear + Oraimo side by side */}
             {deviceApiKey ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                 {/* ── Healthwear QR ── */}
                 <Card className="border-emerald-200 bg-gradient-to-br from-emerald-50/60 to-transparent shadow-sm">
                   <CardHeader className="pb-3">
@@ -538,6 +538,41 @@ export default function PatientDetail() {
                       <li>Scan QR with your phone camera</li>
                       <li>Open <strong>Oraimo app → Heart Rate</strong></li>
                       <li>Enter readings, skip unavailable ones</li>
+                    </ol>
+                  </CardContent>
+                </Card>
+
+                {/* ── PulseRPM Mobile App QR ── */}
+                <Card className="border-violet-200 bg-gradient-to-br from-violet-50/60 to-transparent shadow-sm">
+                  <CardHeader className="pb-3">
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-base flex items-center gap-2">
+                        <div className="h-7 w-7 rounded-lg bg-violet-100 flex items-center justify-center">
+                          <Smartphone className="h-4 w-4 text-violet-600" />
+                        </div>
+                        <span className="font-extrabold text-violet-700">PulseRPM App</span>
+                      </CardTitle>
+                      <span className="text-[10px] bg-violet-100 text-violet-700 border border-violet-200 rounded-full px-2 py-0.5 font-semibold">Health Connect</span>
+                    </div>
+                    <CardDescription className="text-xs">Auto-sync via Android Health Connect — Heart Rate, SpO₂, BP, Temperature</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <div className="flex flex-col items-center gap-2">
+                      <div className="p-3 bg-white rounded-xl shadow-md border border-violet-100 ring-2 ring-violet-100">
+                        <QRCodeSVG
+                          value={`pulserpm-mobile://connect?apiKey=${deviceApiKey}`}
+                          size={150}
+                          level="M"
+                          includeMargin={false}
+                          fgColor="#7c3aed"
+                        />
+                      </div>
+                      <p className="text-[11px] text-muted-foreground text-center">Scan with Expo Go to open PulseRPM app</p>
+                    </div>
+                    <ol className="text-xs text-muted-foreground space-y-1 list-decimal list-inside">
+                      <li>Open <strong>Expo Go</strong> → scan this QR</li>
+                      <li>App auto-connects with your account</li>
+                      <li>Go to <strong>Health tab</strong> → grant permissions → Sync</li>
                     </ol>
                   </CardContent>
                 </Card>
