@@ -47,6 +47,7 @@ export default function PatientDetail() {
   const [deviceApiKey, setDeviceApiKey] = useState<string | null>(null);
   const [deviceLoading, setDeviceLoading] = useState(false);
   const [keyCopied, setKeyCopied] = useState(false);
+  const [expoDevUrl, setExpoDevUrl] = useState<string | null>(null);
 
   const { data: patient, isLoading: pLoading } = useGetPatient(patientId, { request: withAuth(), query: { enabled: !!patientId } as any });
   const { data: vitals, isLoading: vLoading } = useGetPatientVitals(patientId, { period, limit: 100 }, { request: withAuth(), query: { enabled: !!patientId && activeTab === "charts" } as any });
@@ -70,6 +71,14 @@ export default function PatientDetail() {
       // ignore
     }
   }, []);
+
+  useEffect(() => {
+    if (activeTab !== "device" || !isPatient) return;
+    fetch(`${API_BASE}/api/device/expo-dev-url`)
+      .then((r) => r.ok ? r.json() : null)
+      .then((d) => { if (d?.url) setExpoDevUrl(d.url); })
+      .catch(() => {});
+  }, [activeTab, isPatient]);
 
   useEffect(() => {
     if (activeTab === "device" && isPatient) {
@@ -560,14 +569,16 @@ export default function PatientDetail() {
                     <div className="flex flex-col items-center gap-2">
                       <div className="p-3 bg-white rounded-xl shadow-md border border-violet-100 ring-2 ring-violet-100">
                         <QRCodeSVG
-                          value={`pulserpm-mobile://connect?apiKey=${deviceApiKey}`}
+                          value={expoDevUrl
+                            ? `${expoDevUrl}?apiKey=${deviceApiKey}`
+                            : `pulserpm-mobile://connect?apiKey=${deviceApiKey}`}
                           size={150}
                           level="M"
                           includeMargin={false}
                           fgColor="#7c3aed"
                         />
                       </div>
-                      <p className="text-[11px] text-muted-foreground text-center">Scan with Expo Go to open PulseRPM app</p>
+                      <p className="text-[11px] text-muted-foreground text-center">Scan with Expo Go — opens & links automatically</p>
                     </div>
                     <ol className="text-xs text-muted-foreground space-y-1 list-decimal list-inside">
                       <li>Open <strong>Expo Go</strong> → scan this QR</li>

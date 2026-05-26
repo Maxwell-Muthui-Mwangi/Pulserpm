@@ -158,6 +158,15 @@ interface SmartWatchCardProps {
 
 function SmartWatchCard({ watch, userId, apiBase }: SmartWatchCardProps) {
   const [activeDevice, setActiveDevice] = useState<WatchDevice>("healthwear");
+  const [expoDevUrl, setExpoDevUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (activeDevice !== "mobile") return;
+    fetch(`${apiBase}/api/device/expo-dev-url`)
+      .then((r) => r.ok ? r.json() : null)
+      .then((d) => { if (d?.url) setExpoDevUrl(d.url); })
+      .catch(() => {});
+  }, [activeDevice, apiBase]);
 
   const devices: {
     id: WatchDevice;
@@ -207,14 +216,16 @@ function SmartWatchCard({ watch, userId, apiBase }: SmartWatchCardProps) {
       label: "PulseRPM App",
       badge: "HC",
       tagline: "Auto-sync via Android Health Connect",
-      buildUrl: (key) => `pulserpm-mobile://connect?apiKey=${key}`,
+      buildUrl: (key) => expoDevUrl
+        ? `${expoDevUrl}?apiKey=${key}`
+        : `pulserpm-mobile://connect?apiKey=${key}`,
       fgColor: "#7c3aed",
       accentBg: "bg-violet-600",
       accentRing: "ring-violet-200",
       dot: "bg-violet-500",
       steps: [
-        { icon: <Smartphone className="h-4 w-4 text-violet-600" />, title: "Install PulseRPM on Android", desc: "Open Expo Go, then scan this QR with the Expo Go camera" },
-        { icon: <ScanLine className="h-4 w-4 text-violet-600" />, title: "QR auto-connects the app", desc: "Your patient account is linked instantly — no manual key entry" },
+        { icon: <Smartphone className="h-4 w-4 text-violet-600" />, title: "Open Expo Go on your Android phone", desc: "Tap the QR code icon in the top-right corner of Expo Go" },
+        { icon: <ScanLine className="h-4 w-4 text-violet-600" />, title: "Scan this QR with Expo Go", desc: "The app opens and your account links automatically — no typing needed" },
         { icon: <Zap className="h-4 w-4 text-violet-600" />, title: "Enable Health Connect sync", desc: "Open the Health tab → grant permissions → tap Sync Now" },
       ],
     },

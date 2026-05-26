@@ -218,4 +218,14 @@ function normalizeField(body: Record<string, unknown>, keys: string[], ...fallba
   return null;
 }
 
+// Expose the current Expo Go development URL so the dashboard can generate
+// a scannable QR code that opens directly in Expo Go.
+// REPLIT_EXPO_DEV_DOMAIN is injected by the Expo workflow environment.
+router.get("/device/expo-dev-url", (_req, res) => {
+  const expoDomain = process.env.REPLIT_EXPO_DEV_DOMAIN;
+  res.json({
+    url: expoDomain ? `exp://${expoDomain}/--/pair` : null,
+  });
+});
+
 export default router;
