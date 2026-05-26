@@ -23,7 +23,7 @@ import { format } from "date-fns";
 import { 
   Heart, Activity, Droplets, Thermometer, ArrowLeft, Settings, Bell, 
   CheckCircle2, XCircle, Loader2, Smartphone, Copy, RefreshCw, Trash2,
-  Wifi, Apple, Watch
+  Wifi, Apple, Watch, Printer
 } from "lucide-react";
 import { Link } from "wouter";
 import { 
@@ -48,6 +48,7 @@ export default function PatientDetail() {
   const [deviceLoading, setDeviceLoading] = useState(false);
   const [keyCopied, setKeyCopied] = useState(false);
   const [expoDevUrl, setExpoDevUrl] = useState<string | null>(null);
+  const [printing, setPrinting] = useState(false);
 
   const { data: patient, isLoading: pLoading } = useGetPatient(patientId, { request: withAuth(), query: { enabled: !!patientId } as any });
   const { data: vitals, isLoading: vLoading } = useGetPatientVitals(patientId, { period, limit: 100 }, { request: withAuth(), query: { enabled: !!patientId && activeTab === "charts" } as any });
@@ -131,6 +132,199 @@ export default function PatientDetail() {
     }
   };
 
+  const handlePrint = async () => {
+    if (!patient) return;
+    setPrinting(true);
+    try {
+      const vitalsRes = await fetch(
+        `${API_BASE}/api/patients/${patientId}/vitals?period=week&limit=200`,
+        { headers: { Authorization: `Bearer ${getAuthToken()}` } }
+      );
+      const weekVitals: Array<{
+        recordedAt?: string;
+        heartRate?: number;
+        systolicBp?: number;
+        diastolicBp?: number;
+        spo2?: number;
+        temperature?: number;
+        source?: string;
+      }> = vitalsRes.ok ? await vitalsRes.json() : [];
+
+      const { jsPDF } = await import("jspdf");
+      const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+      const W = 210;
+      const MARGIN = 15;
+      const contentWidth = W - MARGIN * 2;
+      let y = 0;
+
+      // ── Blue header bar ──
+      doc.setFillColor(37, 99, 235);
+      doc.rect(0, 0, W, 32, "F");
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(20);
+      doc.setFont("helvetica", "bold");
+      doc.text("PulseRPM", MARGIN, 14);
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "normal");
+      doc.text("Remote Patient Monitoring — Health Report", MARGIN, 22);
+      doc.setFontSize(8);
+      doc.text(`Generated: ${format(new Date(), "dd MMM yyyy, HH:mm")}`, W - MARGIN, 22, { align: "right" });
+
+      y = 42;
+
+      // ── Patient demographics ──
+      doc.setTextColor(15, 23, 42);
+      doc.setFontSize(14);
+      doc.setFont("helvetica", "bold");
+      doc.text(patient.name, MARGIN, y); y += 7;
+
+      doc.setFontSize(8.5);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(71, 85, 105);
+      const demo = [`ID: ${patient.id}`, `Age: ${patient.age}`, `Gender: ${patient.gender}`, `DOB: ${patient.dateOfBirth}`].join("   •   ");
+      doc.text(demo, MARGIN, y); y += 5;
+      if (patient.email) { doc.text(`Email: ${patient.email}`, MARGIN, y); y += 5; }
+      if (patient.conditions?.length) {
+        doc.text(`Conditions: ${patient.conditions.join(", ")}`, MARGIN, y); y += 5;
+      }
+      const riskColors: Record<string, [number, number, number]> = { critical: [220, 38, 38], warning: [217, 119, 6], normal: [22, 163, 74] };
+      const rc = riskColors[patient.riskLevel ?? "normal"] ?? [22, 163, 74];
+      doc.setTextColor(...rc);
+      doc.setFont("helvetica", "bold");
+      doc.text(`Risk Level: ${(patient.riskLevel ?? "normal").toUpperCase()}`, MARGIN, y); y += 5;
+
+      doc.setDrawColor(203, 213, 225);
+      doc.setLineWidth(0.3);
+      doc.line(MARGIN, y + 2, W - MARGIN, y + 2); y += 10;
+
+      // ── Latest Readings ──
+      doc.setTextColor(15, 23, 42);
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "bold");
+      doc.text("LATEST READINGS", MARGIN, y); y += 7;
+
+      const boxW = (contentWidth - 9) / 4;
+      const readingBoxes = [
+        { label: "Heart Rate", value: patient.latestVitals?.heartRate ? `${patient.latestVitals.heartRate} bpm` : "—", accent: [239, 68, 68] as [number, number, number] },
+        { label: "Blood Pressure", value: patient.latestVitals?.systolicBp ? `${patient.latestVitals.systolicBp}/${patient.latestVitals.diastolicBp} mmHg` : "—", accent: [59, 130, 246] as [number, number, number] },
+        { label: "SpO\u2082", value: patient.latestVitals?.spo2 ? `${patient.latestVitals.spo2} %` : "—", accent: [6, 182, 212] as [number, number, number] },
+        { label: "Temperature", value: patient.latestVitals?.temperature ? `${patient.latestVitals.temperature} \u00b0C` : "—", accent: [245, 158, 11] as [number, number, number] },
+      ];
+      readingBoxes.forEach((box, i) => {
+        const bx = MARGIN + i * (boxW + 3);
+        doc.setFillColor(248, 250, 252);
+        doc.setDrawColor(226, 232, 240);
+        doc.setLineWidth(0.3);
+        doc.roundedRect(bx, y, boxW, 22, 2, 2, "FD");
+        doc.setFillColor(...box.accent);
+        doc.roundedRect(bx, y, boxW, 3.5, 1, 1, "F");
+        doc.setTextColor(100, 116, 139);
+        doc.setFontSize(7);
+        doc.setFont("helvetica", "normal");
+        doc.text(box.label, bx + boxW / 2, y + 11, { align: "center" });
+        doc.setTextColor(15, 23, 42);
+        doc.setFontSize(9.5);
+        doc.setFont("helvetica", "bold");
+        doc.text(box.value, bx + boxW / 2, y + 18, { align: "center" });
+      });
+      y += 30;
+
+      doc.setDrawColor(203, 213, 225);
+      doc.setLineWidth(0.3);
+      doc.line(MARGIN, y, W - MARGIN, y); y += 8;
+
+      // ── Vitals History ──
+      doc.setTextColor(15, 23, 42);
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "bold");
+      doc.text("VITALS HISTORY — PAST 7 DAYS", MARGIN, y); y += 7;
+
+      if (weekVitals.length === 0) {
+        doc.setFontSize(8.5);
+        doc.setFont("helvetica", "italic");
+        doc.setTextColor(100, 116, 139);
+        doc.text("No vitals recorded in the past 7 days.", MARGIN, y); y += 8;
+      } else {
+        const cols = [
+          { header: "Date & Time", w: 38 },
+          { header: "Heart Rate", w: 24 },
+          { header: "BP (sys/dia)", w: 30 },
+          { header: "SpO\u2082 %", w: 20 },
+          { header: "Temp \u00b0C", w: 20 },
+          { header: "Source", w: contentWidth - 38 - 24 - 30 - 20 - 20 },
+        ];
+
+        // Header row
+        doc.setFillColor(37, 99, 235);
+        doc.rect(MARGIN, y, contentWidth, 7, "F");
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(7.5);
+        doc.setFont("helvetica", "bold");
+        let cx = MARGIN + 2;
+        cols.forEach((c) => { doc.text(c.header, cx, y + 5); cx += c.w; });
+        y += 7;
+
+        const sorted = [...weekVitals].reverse();
+        sorted.forEach((v, idx) => {
+          if (y > 272) {
+            doc.addPage(); y = 20;
+            doc.setFillColor(37, 99, 235);
+            doc.rect(MARGIN, y, contentWidth, 7, "F");
+            doc.setTextColor(255, 255, 255);
+            doc.setFontSize(7.5);
+            doc.setFont("helvetica", "bold");
+            cx = MARGIN + 2;
+            cols.forEach((c) => { doc.text(c.header, cx, y + 5); cx += c.w; });
+            y += 7;
+          }
+          const bg: [number, number, number] = idx % 2 === 0 ? [248, 250, 252] : [255, 255, 255];
+          doc.setFillColor(...bg);
+          doc.setDrawColor(226, 232, 240);
+          doc.setLineWidth(0.15);
+          doc.rect(MARGIN, y, contentWidth, 6, "FD");
+
+          const d = v.recordedAt ? new Date(v.recordedAt) : null;
+          const vals = [
+            d && !isNaN(d.getTime()) ? format(d, "dd MMM yyyy HH:mm") : "—",
+            v.heartRate ? `${v.heartRate} bpm` : "—",
+            v.systolicBp ? `${v.systolicBp}/${v.diastolicBp}` : "—",
+            v.spo2 ? `${v.spo2}%` : "—",
+            v.temperature ? `${v.temperature}\u00b0C` : "—",
+            (v.source ?? "manual").replace(/_/g, " "),
+          ];
+          doc.setTextColor(30, 41, 59);
+          doc.setFontSize(7);
+          doc.setFont("helvetica", "normal");
+          cx = MARGIN + 2;
+          cols.forEach((c, ci) => { doc.text(vals[ci], cx, y + 4.3); cx += c.w; });
+          y += 6;
+        });
+      }
+
+      // ── Footer on every page ──
+      const pageCount = (doc as any).internal.getNumberOfPages();
+      for (let p = 1; p <= pageCount; p++) {
+        doc.setPage(p);
+        doc.setFillColor(241, 245, 249);
+        doc.rect(0, 285, W, 12, "F");
+        doc.setFontSize(7);
+        doc.setTextColor(148, 163, 184);
+        doc.setFont("helvetica", "normal");
+        doc.text("PulseRPM — Confidential Patient Health Report", MARGIN, 291);
+        doc.text(`Page ${p} of ${pageCount}`, W - MARGIN, 291, { align: "right" });
+      }
+
+      const fileName = `PulseRPM_${patient.name.replace(/\s+/g, "_")}_${format(new Date(), "yyyy-MM-dd")}.pdf`;
+      doc.save(fileName);
+      toast({ title: "Report downloaded", description: fileName });
+    } catch (err) {
+      console.error(err);
+      toast({ title: "Failed to generate report", variant: "destructive" });
+    } finally {
+      setPrinting(false);
+    }
+  };
+
   const handleAction = (action: 'ack' | 'resolve', alertId: number) => {
     const mutation = action === 'ack' ? ackAlert : resAlert;
     mutation.mutate({ alertId }, {
@@ -183,7 +377,7 @@ export default function PatientDetail() {
           <Button variant="ghost" size="icon" asChild className="rounded-full">
             <Link href={isPatient ? "/" : "/patients"}><ArrowLeft className="h-5 w-5" /></Link>
           </Button>
-          <div>
+          <div className="flex-1">
             <h1 className="text-3xl font-display font-bold text-foreground flex items-center">
               {isPatient ? "My Health Profile" : patient.name}
               {patient.riskLevel === 'critical' && <Badge variant="critical" className="ml-3">Critical</Badge>}
@@ -194,6 +388,20 @@ export default function PatientDetail() {
               {isPatient ? patient.email : `ID: ${patient.id} • ${patient.gender} • ${patient.age} yrs • DOB: ${patient.dateOfBirth}`}
             </p>
           </div>
+          {!isPatient && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handlePrint}
+              disabled={printing}
+              className="gap-2 shrink-0"
+            >
+              {printing
+                ? <Loader2 className="h-4 w-4 animate-spin" />
+                : <Printer className="h-4 w-4" />}
+              {printing ? "Generating…" : "Print Report"}
+            </Button>
+          )}
         </div>
 
         {/* Tab Navigation */}
