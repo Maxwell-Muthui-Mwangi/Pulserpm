@@ -1,0 +1,190 @@
+Below is a practical step-by-step process to connect Android Health Connect to PulseRPM so smartwatch data can sync automatically to your monitoring dashboard.
+
+Step-by-step process
+
+1. Confirm the data flow
+
+Use this structure:
+
+Smartwatch app → Health Connect → PulseRPM mobile app → PulseRPM backend → provider dashboard → email alert
+
+Health Connect acts as the Android health-data hub. With user permission, it lets apps read and share health/fitness data across Android devices.
+
+2. Choose the correct integration approach
+
+For Android, use Health Connect API. For iOS, use Apple HealthKit separately because Health Connect is Android-focused. PulseRPM should therefore have two mobile sync modules:
+
+Android: Health Connect
+iOS: Apple HealthKit
+
+3. Add Health Connect dependencies
+
+In your Android project, add the Health Connect Jetpack dependency in Gradle. Then create a HealthConnectManager class responsible for checking availability, requesting permissions, reading data, and sending it to your backend.
+
+4. Declare required permissions
+
+In AndroidManifest.xml, declare read permissions for the data PulseRPM needs:
+
+Heart rate
+Blood pressure
+Oxygen saturation
+Calories burned
+Body temperature, if needed later
+Blood glucose, if added later
+
+Health Connect requires apps to declare permissions in the manifest and request user approval before reading sensitive health data.
+
+5. Request user consent inside PulseRPM
+
+When the patient opens PulseRPM for the first time, show a simple consent screen:
+
+“PulseRPM needs permission to read health data from Health Connect so your assigned healthcare provider can monitor your condition remotely.”
+
+Then launch the Health Connect permission request screen.
+
+6. Read the health records
+
+Use Health Connect record types such as:
+
+HeartRateRecord
+BloodPressureRecord
+OxygenSaturationRecord
+TotalCaloriesBurnedRecord
+BodyTemperatureRecord
+
+Health Connect supports vitals such as heart rate, blood pressure, oxygen saturation, body temperature, blood glucose, and respiratory rate.
+
+7. Create automatic background sync
+
+Use Android WorkManager to run a periodic sync task. For example:
+
+Every 15–30 minutes for normal monitoring
+More frequently for high-risk patients, where allowed
+Immediate sync when new critical data is detected
+
+The sync worker should:
+
+Read new Health Connect data since the last sync time
+Convert it into PulseRPM’s standard format
+Upload it securely to the backend
+Save the latest sync timestamp
+
+8. Normalize the data before upload
+
+Create one standard PulseRPM format:
+
+{
+  "patientId": "P001",
+  "deviceSource": "Health Connect",
+  "metricType": "heart_rate",
+  "value": 92,
+  "unit": "bpm",
+  "recordedAt": "2026-05-26T10:30:00Z"
+}
+
+This makes dashboard charts easier because all devices send data in the same structure.
+
+9. Build backend API endpoints
+
+PulseRPM backend should include endpoints such as:
+
+POST /api/vitals/sync
+GET /api/providers/patients
+GET /api/patients/{id}/vitals
+GET /api/patients/{id}/alerts
+POST /api/alerts/email
+
+Use Node.js/Express, FastAPI, or Firebase Cloud Functions. For the database, use PostgreSQL, Firebase Firestore, or Supabase.
+
+10. Store data securely
+
+Store:
+
+Patients
+Providers
+Device connections
+Vital readings
+Alert thresholds
+Alert history
+Sync logs
+
+Use encrypted HTTPS, authenticated API calls, role-based access, and audit logs because health data is sensitive.
+
+11. Add provider dashboard
+
+The dashboard should allow providers to:
+
+View all assigned patients
+See latest readings
+Open a patient profile
+View graphs for heart rate, blood pressure, oxygen, and calories
+See red/yellow/green risk status
+Review alert history
+
+12. Add alert rules
+
+Create threshold rules such as:
+
+Heart rate too high
+Heart rate too low
+Blood pressure too high
+Blood oxygen below safe threshold
+No data received for several hours
+
+Do not hard-code medical decisions as final diagnoses. Let providers configure thresholds per patient.
+
+13. Send email notifications
+
+Use SendGrid, Firebase Extensions, AWS SES, or SMTP.
+
+Email should include:
+
+Patient name
+Metric type
+Reading value
+Time recorded
+Severity level
+Dashboard link
+
+Example:
+
+Subject: Critical PulseRPM Alert: Low Oxygen Reading
+
+Patient: Mary Johnson
+Reading: Oxygen saturation 88%
+Time: May 26, 2026, 10:30 AM
+Action: Please review the patient dashboard.
+
+14. Test with simulated data first
+
+Before using real smartwatch data, create fake readings in Health Connect or mock sample data in PulseRPM. Test:
+
+Permission request
+Data reading
+Background sync
+Backend upload
+Dashboard display
+Email alert trigger
+
+15. Then test with real devices
+
+Recommended testing path:
+
+Android phone with Health Connect installed/enabled
+Smartwatch app writing data into Health Connect
+PulseRPM reading from Health Connect
+PulseRPM backend receiving readings
+Provider dashboard updating automatically
+Recommended setup
+
+For your case, the cleanest stack is:
+
+Android: Kotlin + Health Connect + WorkManager
+iOS: Swift/React Native bridge + Apple HealthKit
+Mobile app: React Native or Flutter
+Backend: Node.js/Express or FastAPI
+Database: Supabase PostgreSQL or Firebase Firestore
+Dashboard: React + Recharts
+Email alerts: SendGrid or Firebase email extension
+
+For PulseRPM, Health Connect should be the Android data bridge, not the final storage system. Your own backend should remain the main system where patient readings, provider access, alerts, and dashboard history are managed.

@@ -68,7 +68,7 @@ const vr = StyleSheet.create({
 export default function HealthConnectScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { syncReading, paired } = useApp();
+  const { syncReading, syncFromHealthConnect, paired, lastHCSyncTime } = useApp();
 
   const [hcStatus, setHcStatus] = useState<HCStatus | null>(null);
   const [permissions, setPermissions] = useState<HCPermissions | null>(null);
@@ -76,6 +76,13 @@ export default function HealthConnectScreen() {
   const [syncState, setSyncState] = useState<SyncState>("idle");
   const [lastSyncTime, setLastSyncTime] = useState<string | null>(null);
   const [permLoading, setPermLoading] = useState(false);
+  const [bgSyncRegistered, setBgSyncRegistered] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    import("@/services/BackgroundSync").then(({ isBackgroundSyncRegistered }) => {
+      isBackgroundSyncRegistered().then(setBgSyncRegistered);
+    });
+  }, []);
 
   const loadStatus = useCallback(async () => {
     const status = await getHCStatus();
@@ -100,6 +107,8 @@ export default function HealthConnectScreen() {
     if (perms.heartRate || perms.spo2 || perms.bloodPressure || perms.temperature) {
       const v = await readLatestVitals();
       setLatestVitals(v);
+      // Trigger an immediate auto-sync now that we have permissions
+      syncFromHealthConnect();
     }
     setPermLoading(false);
   };
@@ -286,13 +295,26 @@ export default function HealthConnectScreen() {
       {/* Sync */}
       <Text style={[s.sectionTitle, { color: colors.mutedForeground }]}>Sync to PulseRPM</Text>
       <View style={[s.card, { backgroundColor: colors.card }]}>
+        {/* Last manual sync */}
         {lastSyncTime && (
-          <Text style={[s.lastSync, { color: colors.mutedForeground }]}>
-            Last synced: {new Date(lastSyncTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-          </Text>
+          <View style={[s.lastSyncRow, { borderBottomColor: colors.border }]}>
+            <Feather name="zap" size={12} color={colors.success} />
+            <Text style={[s.lastSync, { color: colors.mutedForeground }]}>
+              Last manual sync: {new Date(lastSyncTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+            </Text>
+          </View>
+        )}
+        {/* Last background sync */}
+        {lastHCSyncTime && (
+          <View style={[s.lastSyncRow, { borderBottomColor: colors.border }]}>
+            <Feather name="refresh-cw" size={12} color={colors.primary} />
+            <Text style={[s.lastSync, { color: colors.mutedForeground }]}>
+              Last auto-sync: {new Date(lastHCSyncTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+            </Text>
+          </View>
         )}
         <Text style={[s.syncInfo, { color: colors.mutedForeground }]}>
-          Tap the button to read your latest vitals from Health Connect and push them to your PulseRPM provider dashboard instantly.
+          Tap to read the latest 24h of vitals from Health Connect and push them to your provider dashboard immediately.
         </Text>
         <Pressable
           style={[s.syncBtn, { backgroundColor: syncBtnColor }, (!anyGranted || !paired || syncState !== "idle") && { opacity: 0.6 }]}
@@ -311,11 +333,40 @@ export default function HealthConnectScreen() {
         )}
       </View>
 
-      {/* Auto-sync note */}
+      {/* Background sync status */}
+      <Text style={[s.sectionTitle, { color: colors.mutedForeground }]}>Background Auto-Sync</Text>
+      <View style={[s.card, { backgroundColor: colors.card }]}>
+        <View style={s.bgSyncRow}>
+          <View style={[s.bgSyncDot, {
+            backgroundColor: bgSyncRegistered === true
+              ? colors.success
+              : bgSyncRegistered === false
+              ? colors.warning
+              : colors.mutedForeground
+          }]} />
+          <View style={{ flex: 1 }}>
+            <Text style={[s.bgSyncTitle, { color: colors.foreground }]}>
+              {bgSyncRegistered === true
+                ? "Background sync active — every 15 min"
+                : bgSyncRegistered === false
+                ? "Background sync pending (dev build required)"
+                : "Checking status…"}
+            </Text>
+            <Text style={[s.bgSyncSub, { color: colors.mutedForeground }]}>
+              {bgSyncRegistered === true
+                ? "Vitals sync automatically even when the app is closed."
+                : "Automatic background sync requires a standalone or development build of the PulseRPM app. In Expo Go, sync runs each time you open the app."}
+            </Text>
+          </View>
+        </View>
+      </View>
+
+      {/* Flow diagram note */}
       <View style={[s.noteBox, { backgroundColor: colors.muted + "60", borderColor: colors.border }]}>
         <Feather name="info" size={14} color={colors.mutedForeground} />
         <Text style={[s.noteText, { color: colors.mutedForeground }]}>
-          <Text style={{ fontWeight: "600" }}>Auto-sync:</Text> The app syncs pending readings whenever it returns to the foreground. For continuous monitoring, keep the app installed and sync regularly.
+          <Text style={{ fontWeight: "600" }}>Data flow: </Text>
+          Smartwatch app → Health Connect → PulseRPM → Provider dashboard → Email alert
         </Text>
       </View>
     </ScrollView>
@@ -354,8 +405,16 @@ function styles(colors: ReturnType<typeof useColors>, insets: ReturnType<typeof 
       justifyContent: "center", marginVertical: 8,
     },
     permBtnText: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: "#fff" },
-    lastSync: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 10, marginBottom: 2 },
-    syncInfo: { fontSize: 13, fontFamily: "Inter_400Regular", lineHeight: 20, marginBottom: 12 },
+    lastSyncRow: {
+      flexDirection: "row" as const, alignItems: "center" as const, gap: 6,
+      paddingVertical: 8, borderBottomWidth: StyleSheet.hairlineWidth,
+    },
+    lastSync: { fontSize: 12, fontFamily: "Inter_400Regular" },
+    syncInfo: { fontSize: 13, fontFamily: "Inter_400Regular", lineHeight: 20, marginBottom: 12, marginTop: 10 },
+    bgSyncRow: { flexDirection: "row" as const, alignItems: "flex-start" as const, gap: 10, paddingVertical: 14 },
+    bgSyncDot: { width: 10, height: 10, borderRadius: 5, marginTop: 3 },
+    bgSyncTitle: { fontSize: 14, fontFamily: "Inter_600SemiBold", marginBottom: 3 },
+    bgSyncSub: { fontSize: 12, fontFamily: "Inter_400Regular", lineHeight: 18 },
     syncBtn: {
       flexDirection: "row", alignItems: "center", justifyContent: "center",
       gap: 8, borderRadius: 10, paddingVertical: 14, marginBottom: 8,

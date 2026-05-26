@@ -1,3 +1,7 @@
+// Must be imported before any React component renders so TaskManager.defineTask
+// runs at module scope and registers the Health Connect background sync task.
+import "@/services/BackgroundSync";
+
 import {
   Inter_400Regular,
   Inter_500Medium,
