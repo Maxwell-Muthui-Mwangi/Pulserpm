@@ -17,6 +17,8 @@
       "supportsTablet": false
     },
     "android": {
+      "package": "com.wgeorge.pulserpm",
+      "versionCode": 1,
       "permissions": [
         "android.permission.health.READ_HEART_RATE",
         "android.permission.health.READ_OXYGEN_SATURATION",
