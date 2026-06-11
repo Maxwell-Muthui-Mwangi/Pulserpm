@@ -1,8 +1,13 @@
 uploads = []
-outputs = []
 
 [[generated]]
 id = "kg7w_h--wHlZYkzHMNVPA"
 uri = "file://artifacts/pulserpm-mobile/assets/images/icon.png"
 type = "image"
 title = "pulserpm app icon"
+
+[[outputs]]
+id = "H7CCUYlPOMQ7ikruU_tnl"
+uri = "file://PulseRPM_MLNN_Blockchain_Code.pdf"
+type = "pdf"
+title = "PulseRPM — MLNN & Blockchain Code Reference"
