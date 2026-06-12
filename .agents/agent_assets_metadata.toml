@@ -11,3 +11,9 @@ id = "H7CCUYlPOMQ7ikruU_tnl"
 uri = "file://PulseRPM_MLNN_Blockchain_Code.pdf"
 type = "pdf"
 title = "PulseRPM — MLNN & Blockchain Code Reference"
+
+[[outputs]]
+id = "YBuXkndwYtYUEztXELaqJ"
+uri = "file://PulseRPM_Full_Codebase.pdf"
+type = "pdf"
+title = "PulseRPM Full Codebase Reference"
