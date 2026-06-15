@@ -179,14 +179,119 @@ export default function HealthConnectScreen() {
 
   if (hcStatus === "unavailable") {
     return (
-      <View style={s.center}>
-        <Feather name="alert-circle" size={40} color={colors.mutedForeground} />
-        <Text style={[s.unavailTitle, { color: colors.foreground }]}>Not Available in Expo Go</Text>
-        <Text style={[s.unavailMsg, { color: colors.mutedForeground }]}>
-          Health Connect requires a development build of the PulseRPM app.{"\n\n"}
-          Use the <Text style={{ fontWeight: "700" }}>Log Reading</Text> tab to enter vitals manually in the meantime.
-        </Text>
-      </View>
+      <ScrollView
+        style={{ flex: 1, backgroundColor: colors.background }}
+        contentContainerStyle={{ padding: 20, gap: 16, paddingBottom: insets.bottom + 40 }}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Header */}
+        <View style={{ alignItems: "center", paddingTop: 12, paddingBottom: 8, gap: 10 }}>
+          <View style={{ width: 64, height: 64, borderRadius: 32, backgroundColor: colors.warning + "20", alignItems: "center", justifyContent: "center" }}>
+            <Feather name="package" size={30} color={colors.warning} />
+          </View>
+          <Text style={{ fontSize: 18, fontFamily: "Inter_700Bold", color: colors.foreground, textAlign: "center" }}>
+            Native Build Required
+          </Text>
+          <Text style={{ fontSize: 13, fontFamily: "Inter_400Regular", color: colors.mutedForeground, textAlign: "center", lineHeight: 20 }}>
+            Health Connect is a native Android API. It works in a real APK but{" "}
+            <Text style={{ fontWeight: "700" }}>not inside Expo Go</Text>, which sandboxes native modules.
+          </Text>
+        </View>
+
+        {/* Why explanation */}
+        <View style={{ borderRadius: 14, padding: 14, backgroundColor: colors.warning + "12", borderWidth: 1, borderColor: colors.warning + "30" }}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 6 }}>
+            <Feather name="info" size={14} color={colors.warning} />
+            <Text style={{ fontSize: 13, fontFamily: "Inter_600SemiBold", color: colors.warning }}>Why does this happen?</Text>
+          </View>
+          <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: colors.foreground, lineHeight: 18 }}>
+            Expo Go is a generic app shell. Native modules like{" "}
+            <Text style={{ fontFamily: "Inter_600SemiBold" }}>react-native-health-connect</Text> must be compiled
+            into the APK during the build step. Once you install a standalone APK of PulseRPM, Health Connect will work fully.
+          </Text>
+        </View>
+
+        {/* Option 1: EAS Build */}
+        <View style={{ borderRadius: 14, backgroundColor: colors.card, overflow: "hidden", elevation: 2 }}>
+          <View style={{ backgroundColor: colors.primary, paddingHorizontal: 14, paddingVertical: 10, flexDirection: "row", alignItems: "center", gap: 8 }}>
+            <Feather name="cloud" size={15} color="#fff" />
+            <Text style={{ fontSize: 13, fontFamily: "Inter_700Bold", color: "#fff" }}>Option 1 — EAS Cloud Build (Recommended)</Text>
+          </View>
+          <View style={{ padding: 14, gap: 10 }}>
+            <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: colors.mutedForeground, lineHeight: 18 }}>
+              Build a real APK in the cloud (~10 min). No Android Studio needed.
+            </Text>
+            {[
+              { step: "1", cmd: "npm install -g eas-cli", label: "Install EAS CLI" },
+              { step: "2", cmd: "eas login", label: "Log in to expo.dev (free)" },
+              { step: "3", cmd: "cd artifacts/pulserpm-mobile", label: "Navigate to mobile app" },
+              { step: "4", cmd: "eas build --profile preview --platform android", label: "Build APK (~10 min)" },
+              { step: "5", cmd: "Scan QR code from EAS to install APK", label: "Install on your phone" },
+            ].map(({ step, cmd, label }) => (
+              <View key={step} style={{ flexDirection: "row", gap: 10, alignItems: "flex-start" }}>
+                <View style={{ width: 20, height: 20, borderRadius: 10, backgroundColor: colors.primary, alignItems: "center", justifyContent: "center", marginTop: 1 }}>
+                  <Text style={{ fontSize: 10, fontFamily: "Inter_700Bold", color: "#fff" }}>{step}</Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 11, fontFamily: "Inter_400Regular", color: colors.mutedForeground }}>{label}</Text>
+                  <View style={{ marginTop: 3, backgroundColor: "#1e1e2e", borderRadius: 6, paddingHorizontal: 8, paddingVertical: 5 }}>
+                    <Text style={{ fontSize: 11, fontFamily: "Courier", color: "#cdd6f4" }}>{cmd}</Text>
+                  </View>
+                </View>
+              </View>
+            ))}
+          </View>
+        </View>
+
+        {/* Option 2: Android Studio */}
+        <View style={{ borderRadius: 14, backgroundColor: colors.card, overflow: "hidden", elevation: 2 }}>
+          <View style={{ backgroundColor: "#374151", paddingHorizontal: 14, paddingVertical: 10, flexDirection: "row", alignItems: "center", gap: 8 }}>
+            <Feather name="smartphone" size={15} color="#fff" />
+            <Text style={{ fontSize: 13, fontFamily: "Inter_700Bold", color: "#fff" }}>Option 2 — Android Studio Local Build</Text>
+          </View>
+          <View style={{ padding: 14, gap: 8 }}>
+            {[
+              "cd artifacts/pulserpm-mobile",
+              "npx expo prebuild --platform android --clean",
+              "Open  android/  folder in Android Studio",
+              "Run on connected device or emulator (API 33+)",
+            ].map((step, i) => (
+              <View key={i} style={{ flexDirection: "row", gap: 8, alignItems: "flex-start" }}>
+                <Text style={{ fontSize: 11, fontFamily: "Inter_600SemiBold", color: colors.mutedForeground, marginTop: 1 }}>{i + 1}.</Text>
+                <View style={{ flex: 1, backgroundColor: "#1e1e2e", borderRadius: 6, paddingHorizontal: 8, paddingVertical: 5 }}>
+                  <Text style={{ fontSize: 11, fontFamily: "Courier", color: "#cdd6f4" }}>{step}</Text>
+                </View>
+              </View>
+            ))}
+            <Text style={{ fontSize: 11, fontFamily: "Inter_400Regular", color: colors.mutedForeground, marginTop: 4, lineHeight: 16 }}>
+              Package: <Text style={{ fontFamily: "Inter_600SemiBold" }}>com.wgeorge.pulserpm</Text>
+            </Text>
+          </View>
+        </View>
+
+        {/* After installing */}
+        <View style={{ borderRadius: 12, padding: 12, backgroundColor: colors.success + "12", borderWidth: 1, borderColor: colors.success + "30" }}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 4 }}>
+            <Feather name="check-circle" size={13} color={colors.success} />
+            <Text style={{ fontSize: 12, fontFamily: "Inter_600SemiBold", color: colors.success }}>After installing the APK</Text>
+          </View>
+          <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: colors.foreground, lineHeight: 18 }}>
+            Open the PulseRPM app → Health Connect tab → Grant permissions → Tap Sync Now. Background auto-sync every 15 min will also activate.
+          </Text>
+        </View>
+
+        {/* Fallback: Log Reading */}
+        <View style={{ borderRadius: 12, padding: 12, backgroundColor: colors.accent, borderWidth: 1, borderColor: colors.primary + "30" }}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 4 }}>
+            <Feather name="edit-3" size={13} color={colors.primary} />
+            <Text style={{ fontSize: 12, fontFamily: "Inter_600SemiBold", color: colors.primary }}>In the meantime — Log Reading tab</Text>
+          </View>
+          <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: colors.foreground, lineHeight: 18 }}>
+            Open your Oraimo / smartwatch app, read the values, and enter them manually in the{" "}
+            <Text style={{ fontFamily: "Inter_700Bold" }}>Log Reading</Text> tab. They sync to your provider instantly.
+          </Text>
+        </View>
+      </ScrollView>
     );
   }
 
