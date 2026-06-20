@@ -17,3 +17,9 @@ id = "YBuXkndwYtYUEztXELaqJ"
 uri = "file://PulseRPM_Full_Codebase.pdf"
 type = "pdf"
 title = "PulseRPM Full Codebase Reference"
+
+[[outputs]]
+id = "LkWTpou0xOCz5a9xgSfS3"
+uri = "file://PulseRPM_Build_Prompt.pdf"
+type = "pdf"
+title = "PulseRPM — Complete Build Prompt & Technical Specification"
