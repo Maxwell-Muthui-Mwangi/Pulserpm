@@ -23,3 +23,9 @@ id = "LkWTpou0xOCz5a9xgSfS3"
 uri = "file://PulseRPM_Build_Prompt.pdf"
 type = "pdf"
 title = "PulseRPM — Complete Build Prompt & Technical Specification"
+
+[[outputs]]
+id = "dotCHu6Cv36Ml8A5MYZ1P"
+uri = "file://PulseRPM_Mobile.tar.gz"
+type = "unspecified"
+title = "PulseRPM Mobile App — Source Code"
