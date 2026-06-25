@@ -35,3 +35,9 @@ id = "O3dEDW6l5Ui2T2kiZWyUw"
 uri = "file://PulseRPM_Workspace.tar.gz"
 type = "unspecified"
 title = "PulseRPM — Full Workspace Source Code"
+
+[[outputs]]
+id = "DBm0Db5e2yP7FphmW8KwT"
+uri = "file://PulseRPM_API_Dashboard.tar.gz"
+type = "unspecified"
+title = "PulseRPM — API Server & Dashboard Source Code"
