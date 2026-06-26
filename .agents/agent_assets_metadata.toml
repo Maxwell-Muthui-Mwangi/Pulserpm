@@ -41,3 +41,9 @@ id = "DBm0Db5e2yP7FphmW8KwT"
 uri = "file://PulseRPM_API_Dashboard.tar.gz"
 type = "unspecified"
 title = "PulseRPM — API Server & Dashboard Source Code"
+
+[[outputs]]
+id = "iUGUbemt5898jYnDCFatV"
+uri = "file://PulseRPM_api-client-react.tar.gz"
+type = "unspecified"
+title = "@workspace/api-client-react — package.json & library"
