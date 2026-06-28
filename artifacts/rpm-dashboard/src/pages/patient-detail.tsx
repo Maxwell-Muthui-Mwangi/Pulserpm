@@ -685,144 +685,48 @@ export default function PatientDetail() {
 
         {/* Connect Device Tab (patients only) */}
         {activeTab === "device" && isPatient && (
-          <div className="space-y-6 max-w-3xl">
-            {/* QR Code Pair Cards — Healthwear + Oraimo side by side */}
+          <div className="space-y-6 max-w-md mx-auto">
             {deviceApiKey ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                {/* ── Healthwear QR ── */}
-                <Card className="border-emerald-200 bg-gradient-to-br from-emerald-50/60 to-transparent shadow-sm">
-                  <CardHeader className="pb-3">
-                    <div className="flex items-center justify-between">
-                      <CardTitle className="text-base flex items-center gap-2">
-                        <div className="h-7 w-7 rounded-lg bg-emerald-100 flex items-center justify-center">
-                          <Watch className="h-4 w-4 text-emerald-600" />
-                        </div>
-                        <span><span className="font-extrabold text-emerald-600">Health</span><span className="font-extrabold text-teal-700">wear</span></span>
-                      </CardTitle>
-                      <span className="text-[10px] bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-full px-2 py-0.5 font-semibold">All vitals</span>
-                    </div>
-                    <CardDescription className="text-xs">Heart Rate, SpO₂, BP, Temperature, Calories — all fully supported</CardDescription>
+              <>
+                {/* Single QR Code */}
+                <Card className="border-violet-200 bg-gradient-to-br from-violet-50/60 to-transparent shadow-md">
+                  <CardHeader className="pb-2 text-center">
+                    <CardTitle className="text-xl font-bold flex items-center justify-center gap-2 text-violet-700">
+                      <Smartphone className="h-5 w-5" /> Connect PulseRPM App
+                    </CardTitle>
+                    <CardDescription className="text-sm">
+                      Scan this QR code with the PulseRPM mobile app to link your account and start syncing automatically.
+                    </CardDescription>
                   </CardHeader>
-                  <CardContent className="space-y-3">
-                    <div className="flex flex-col items-center gap-2">
-                      <div className="p-3 bg-white rounded-xl shadow-md border border-emerald-100 ring-2 ring-emerald-100">
-                        <QRCodeSVG
-                          value={`${window.location.origin}${API_BASE}/sync-healthwear?apiKey=${deviceApiKey}`}
-                          size={150}
-                          level="M"
-                          includeMargin={false}
-                          fgColor="#059669"
-                        />
-                      </div>
-                      <p className="text-[11px] text-muted-foreground text-center">Scan to open Healthwear sync form</p>
+                  <CardContent className="flex flex-col items-center gap-5 pt-2">
+                    <div className="p-4 bg-white rounded-2xl shadow-lg border border-violet-100 ring-2 ring-violet-200">
+                      <QRCodeSVG
+                        value={expoDevUrl
+                          ? `${expoDevUrl}?apiKey=${deviceApiKey}`
+                          : `pulserpm-mobile://connect?apiKey=${deviceApiKey}`}
+                        size={220}
+                        level="M"
+                        includeMargin={false}
+                        fgColor="#7c3aed"
+                      />
                     </div>
-                    <ol className="text-xs text-muted-foreground space-y-1 list-decimal list-inside">
-                      <li>Scan QR with your phone camera</li>
-                      <li>Open <strong>Healthwear app → Live Vitals</strong></li>
-                      <li>Enter all readings and tap <em>Sync</em></li>
+                    <ol className="text-sm text-muted-foreground space-y-2 list-decimal list-inside w-full">
+                      <li>Open the <strong>PulseRPM</strong> app on your phone</li>
+                      <li>Tap <strong>"Scan QR Code"</strong> on the connect screen</li>
+                      <li>Point at this QR — the app links and syncs instantly</li>
                     </ol>
                   </CardContent>
                 </Card>
 
-                {/* ── Oraimo QR ── */}
-                <Card className="border-sky-200 bg-gradient-to-br from-sky-50/60 to-transparent shadow-sm">
+                {/* API Key management */}
+                <Card className="border-border/50 shadow-sm">
                   <CardHeader className="pb-3">
-                    <div className="flex items-center justify-between">
-                      <CardTitle className="text-base flex items-center gap-2">
-                        <div className="h-7 w-7 rounded-lg bg-sky-100 flex items-center justify-center">
-                          <Watch className="h-4 w-4 text-sky-600" />
-                        </div>
-                        <span><span className="font-bold text-green-600">o</span><span className="font-bold text-sky-700">raimo</span></span>
-                      </CardTitle>
-                      <span className="text-[10px] bg-sky-50 text-sky-700 border border-sky-200 rounded-full px-2 py-0.5">HR, SpO₂, Temp</span>
-                    </div>
-                    <CardDescription className="text-xs">Skip Blood Pressure if your model doesn't support it</CardDescription>
+                    <CardTitle className="flex items-center text-base">
+                      <Wifi className="mr-2 h-4 w-4 text-primary" /> Your API Key
+                    </CardTitle>
+                    <CardDescription>This key is embedded in the QR code above. Keep it private.</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-3">
-                    <div className="flex flex-col items-center gap-2">
-                      <div className="p-3 bg-white rounded-xl shadow-md border border-sky-100 ring-2 ring-sky-100">
-                        <QRCodeSVG
-                          value={syncPageUrl}
-                          size={150}
-                          level="M"
-                          includeMargin={false}
-                          fgColor="#0284c7"
-                        />
-                      </div>
-                      <p className="text-[11px] text-muted-foreground text-center">Scan to open Oraimo sync form</p>
-                    </div>
-                    <ol className="text-xs text-muted-foreground space-y-1 list-decimal list-inside">
-                      <li>Scan QR with your phone camera</li>
-                      <li>Open <strong>Oraimo app → Heart Rate</strong></li>
-                      <li>Enter readings, skip unavailable ones</li>
-                    </ol>
-                  </CardContent>
-                </Card>
-
-                {/* ── PulseRPM Mobile App QR ── */}
-                <Card className="border-violet-200 bg-gradient-to-br from-violet-50/60 to-transparent shadow-sm">
-                  <CardHeader className="pb-3">
-                    <div className="flex items-center justify-between">
-                      <CardTitle className="text-base flex items-center gap-2">
-                        <div className="h-7 w-7 rounded-lg bg-violet-100 flex items-center justify-center">
-                          <Smartphone className="h-4 w-4 text-violet-600" />
-                        </div>
-                        <span className="font-extrabold text-violet-700">PulseRPM App</span>
-                      </CardTitle>
-                      <span className="text-[10px] bg-violet-100 text-violet-700 border border-violet-200 rounded-full px-2 py-0.5 font-semibold">Health Connect</span>
-                    </div>
-                    <CardDescription className="text-xs">Auto-sync via Android Health Connect — Heart Rate, SpO₂, BP, Temperature</CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    <div className="flex flex-col items-center gap-2">
-                      <div className="p-3 bg-white rounded-xl shadow-md border border-violet-100 ring-2 ring-violet-100">
-                        <QRCodeSVG
-                          value={expoDevUrl
-                            ? `${expoDevUrl}?apiKey=${deviceApiKey}`
-                            : `pulserpm-mobile://connect?apiKey=${deviceApiKey}`}
-                          size={150}
-                          level="M"
-                          includeMargin={false}
-                          fgColor="#7c3aed"
-                        />
-                      </div>
-                      <p className="text-[11px] text-muted-foreground text-center">Scan with Expo Go — opens & links automatically</p>
-                    </div>
-                    <ol className="text-xs text-muted-foreground space-y-1 list-decimal list-inside">
-                      <li>Open <strong>Expo Go</strong> → scan this QR</li>
-                      <li>App auto-connects with your account</li>
-                      <li>Go to <strong>Health tab</strong> → grant permissions → Sync</li>
-                    </ol>
-                  </CardContent>
-                </Card>
-              </div>
-            ) : (
-              <Card className="border-border/50 shadow-sm">
-                <CardContent className="pt-6">
-                  <div className="text-center py-8 border border-dashed rounded-xl border-border/50">
-                    <Watch className="h-10 w-10 text-muted-foreground/50 mx-auto mb-3" />
-                    <p className="text-sm font-medium text-foreground mb-1">No device paired yet</p>
-                    <p className="text-sm text-muted-foreground mb-4">Generate QR codes for your Healthwear and Oraimo devices.</p>
-                    <Button onClick={handleGenerateKey} disabled={deviceLoading}>
-                      {deviceLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                      Generate QR Codes
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* API Key management */}
-            <Card className="border-border/50 shadow-sm">
-              <CardHeader className="pb-3">
-                <CardTitle className="flex items-center text-base">
-                  <Wifi className="mr-2 h-4 w-4 text-primary" /> Device API Key
-                </CardTitle>
-                <CardDescription>Your personal key that authenticates both QR codes above. Keep it private.</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {deviceApiKey ? (
-                  <>
                     <div className="flex items-center gap-2">
                       <code className="flex-1 bg-muted rounded-lg px-3 py-2 text-xs font-mono text-foreground break-all border border-border/50">
                         {deviceApiKey}
@@ -840,134 +744,29 @@ export default function PatientDetail() {
                       </Button>
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      Regenerating creates a new key and <strong>invalidates both QR codes</strong> — you'll need to re-scan them.
+                      Regenerating creates a new key and <strong>invalidates the QR code</strong> — re-scan after regenerating.
                     </p>
-                  </>
-                ) : null}
-              </CardContent>
-            </Card>
-
-            {/* Integration Instructions */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Oraimo — primary card */}
-              <Card className="border-green-200 bg-green-50/30 shadow-sm md:col-span-2">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <Watch className="h-4 w-4 text-green-600" />
-                    <span><span className="font-bold text-green-700">o</span>raimo Smartwatch</span>
-                    <span className="ml-auto text-xs font-normal bg-green-100 text-green-700 px-2 py-0.5 rounded-full border border-green-200">Recommended</span>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="text-sm text-muted-foreground space-y-3">
-                  <p>Sync your Oraimo smartwatch readings directly using the QR code above:</p>
-                  <ol className="list-decimal list-inside space-y-1.5 text-xs">
-                    <li>Generate your QR code above (if you haven't already)</li>
-                    <li>Scan the QR code with your phone camera</li>
-                    <li>The <strong>PulseRPM sync form</strong> opens in your browser</li>
-                    <li>Open the <strong>Oraimo Health app</strong> and note your latest readings</li>
-                    <li>Enter Heart Rate, SpO₂, and Temperature into the form</li>
-                    <li><strong>Skip Blood Pressure</strong> if your Oraimo model doesn't measure it</li>
-                    <li>Tap <em>"Sync to PulseRPM"</em> — your provider is notified instantly</li>
-                  </ol>
-                  <div className="bg-white border border-green-100 rounded-lg p-3 text-xs space-y-1">
-                    <p className="font-semibold text-gray-700">Supported readings from Oraimo:</p>
-                    <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-gray-600">
-                      <span>✅ Heart Rate (all models)</span>
-                      <span>✅ Blood Oxygen / SpO₂ (most models)</span>
-                      <span>⚠️ Body Temperature (select models)</span>
-                      <span>⚠️ Blood Pressure (select models only)</span>
-                    </div>
+                  </CardContent>
+                </Card>
+              </>
+            ) : (
+              <Card className="border-border/50 shadow-sm">
+                <CardContent className="pt-6">
+                  <div className="text-center py-12 border border-dashed rounded-xl border-border/50">
+                    <Smartphone className="h-12 w-12 text-muted-foreground/40 mx-auto mb-3" />
+                    <p className="text-sm font-semibold text-foreground mb-1">No QR code yet</p>
+                    <p className="text-sm text-muted-foreground mb-6">Generate your personal QR code to connect the PulseRPM mobile app.</p>
+                    <Button onClick={handleGenerateKey} disabled={deviceLoading} className="gap-2">
+                      {deviceLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Smartphone className="h-4 w-4" />}
+                      Generate QR Code
+                    </Button>
                   </div>
                 </CardContent>
               </Card>
-
-              {/* Apple Health */}
-              <Card className="border-border/50 shadow-sm">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <Apple className="h-4 w-4" /> Apple Health / iPhone
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="text-sm text-muted-foreground space-y-2">
-                  <p>Use the <strong>iOS Shortcuts</strong> app to send data automatically:</p>
-                  <ol className="list-decimal list-inside space-y-1.5 text-xs">
-                    <li>Open Shortcuts → New Shortcut</li>
-                    <li>Add action: <em>"Get Health Samples"</em> (Heart Rate, Blood Pressure, etc.)</li>
-                    <li>Add action: <em>"Get Contents of URL"</em></li>
-                    <li>Set URL to the endpoint below</li>
-                    <li>Method: POST, Body: JSON with your vitals</li>
-                    <li>Add <code>X-Device-Api-Key</code> header with your key</li>
-                    <li>Set as automation to run every hour</li>
-                  </ol>
-                  <div className="mt-3 p-2 bg-muted rounded text-xs font-mono break-all">{ingestUrl}</div>
-                </CardContent>
-              </Card>
-
-              {/* Android / Google Fit */}
-              <Card className="border-border/50 shadow-sm">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <Smartphone className="h-4 w-4" /> Android / Google Fit
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="text-sm text-muted-foreground space-y-2">
-                  <p>Use <strong>Tasker</strong> or <strong>Automate</strong> to send Google Fit data:</p>
-                  <ol className="list-decimal list-inside space-y-1.5 text-xs">
-                    <li>Install Tasker + Google Fit plugin</li>
-                    <li>Create a task triggered hourly</li>
-                    <li>Action: HTTP POST to endpoint below</li>
-                    <li>Add header: <code>X-Device-Api-Key: your-key</code></li>
-                    <li>Body: JSON with heartRate, systolicBp, spo2</li>
-                  </ol>
-                  <div className="mt-3 p-2 bg-muted rounded text-xs font-mono break-all">{ingestUrl}</div>
-                </CardContent>
-              </Card>
-
-              {/* Wearables */}
-              <Card className="border-border/50 shadow-sm">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <Watch className="h-4 w-4" /> Smartwatch / Wearable
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="text-sm text-muted-foreground space-y-2">
-                  <p>Any device that can make HTTP requests (Garmin, Fitbit, Samsung Health) can push directly:</p>
-                  <div className="bg-muted rounded-lg p-2 text-xs font-mono space-y-1">
-                    <div className="text-primary">POST {ingestUrl}</div>
-                    <div className="text-muted-foreground">X-Device-Api-Key: your-key</div>
-                    <div>{"{"}</div>
-                    <div className="pl-3">"heartRate": 72,</div>
-                    <div className="pl-3">"systolicBp": 120,</div>
-                    <div className="pl-3">"diastolicBp": 80,</div>
-                    <div className="pl-3">"spo2": 98,</div>
-                    <div className="pl-3">"temperature": 36.6</div>
-                    <div>{"}"}</div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* REST API */}
-              <Card className="border-border/50 shadow-sm">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <Activity className="h-4 w-4" /> REST API / Custom App
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="text-sm text-muted-foreground space-y-2">
-                  <p>Send data from any custom app, script, or health device:</p>
-                  <div className="bg-muted rounded-lg p-2 text-xs font-mono space-y-0.5">
-                    <div className="text-primary">curl -X POST \</div>
-                    <div className="pl-3">-H "X-Device-Api-Key: your-key" \</div>
-                    <div className="pl-3">-H "Content-Type: application/json" \</div>
-                    <div className="pl-3">-d '{"{"}"heartRate":72,"spo2":98{"}"}' \</div>
-                    <div className="pl-3 break-all">{ingestUrl}</div>
-                  </div>
-                  <p className="text-xs">Supported fields: heartRate, systolicBp, diastolicBp, spo2, temperature, caloriesBurned, recordedAt</p>
-                </CardContent>
-              </Card>
-            </div>
+            )}
           </div>
         )}
+
       </div>
     </Layout>
   );
