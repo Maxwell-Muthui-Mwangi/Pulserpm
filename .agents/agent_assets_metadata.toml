@@ -47,3 +47,9 @@ id = "iUGUbemt5898jYnDCFatV"
 uri = "file://PulseRPM_api-client-react.tar.gz"
 type = "unspecified"
 title = "@workspace/api-client-react — package.json & library"
+
+[[outputs]]
+id = "fcsZV8gMI54qW-H_Lwedj"
+uri = "file://PulseRPM_Updated_Source.tar.gz"
+type = "unspecified"
+title = "PulseRPM Updated Source (app / components / context / services / src)"
