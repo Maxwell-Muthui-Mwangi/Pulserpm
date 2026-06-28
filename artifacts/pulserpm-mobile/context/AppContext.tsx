@@ -246,7 +246,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const perms = await getHCPermissions();
       if (!perms.heartRate && !perms.spo2 && !perms.bloodPressure && !perms.temperature) return;
 
-      const vitals = await readLatestVitals(0.5); // last 30 minutes
+      // Read since last successful HC sync (or last 2 hours if never synced)
+      // so foreground wake-ups never miss readings recorded while the app was closed
+      let hoursBack = 2;
+      const lastHCRaw = await AsyncStorage.getItem(STORAGE_KEY_LAST_HC_SYNC);
+      if (lastHCRaw) {
+        const msSince = Date.now() - new Date(lastHCRaw).getTime();
+        hoursBack = Math.min(Math.max(msSince / 3_600_000 + 0.1, 0.25), 24);
+      }
+      const vitals = await readLatestVitals(hoursBack);
       if (!hasAnyReading(vitals)) return;
 
       const ok = await syncReading({ ...vitals, source: "health_connect" });

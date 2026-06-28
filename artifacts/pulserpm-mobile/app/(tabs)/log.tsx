@@ -19,19 +19,19 @@ import { useColors } from "@/hooks/useColors";
 interface FieldState { value: string; skipped: boolean }
 
 function VitalInput({
-  label, unit, icon, iconColor, placeholder, hint, optional,
-  state, onChange, onSkip,
+  label, unit, icon, iconColor, placeholder, hint,
+  state, onChange, hasError,
 }: {
   label: string; unit: string; icon: string; iconColor: string;
-  placeholder: string; hint: string; optional: boolean;
+  placeholder: string; hint: string;
   state: FieldState;
   onChange: (v: string) => void;
-  onSkip: () => void;
+  hasError?: boolean;
 }) {
   const colors = useColors();
   const s = fieldStyles(colors);
   return (
-    <View style={[s.card, state.skipped && s.cardSkipped]}>
+    <View style={[s.card, hasError && { borderWidth: 1, borderColor: "#ef4444" }]}>
       <View style={s.header}>
         <View style={[s.iconBox, { backgroundColor: iconColor + "15" }]}>
           <Feather name={icon as any} size={16} color={iconColor} />
@@ -40,27 +40,21 @@ function VitalInput({
           <Text style={s.label}>{label}</Text>
           <Text style={s.unit}>{unit}</Text>
         </View>
-        {optional && (
-          <Pressable onPress={onSkip} style={[s.skipBtn, { backgroundColor: state.skipped ? colors.secondary : colors.warning + "15" }]}>
-            <Text style={[s.skipText, { color: state.skipped ? colors.mutedForeground : colors.warning }]}>
-              {state.skipped ? "Skipped" : "Skip"}
-            </Text>
-          </Pressable>
-        )}
-      </View>
-      {!state.skipped && (
-        <View style={{ marginTop: 10 }}>
-          <TextInput
-            style={s.input}
-            value={state.value}
-            onChangeText={onChange}
-            placeholder={placeholder}
-            placeholderTextColor={colors.mutedForeground}
-            keyboardType="decimal-pad"
-          />
-          <Text style={s.hint}>{hint}</Text>
+        <View style={[s.requiredBadge, { backgroundColor: iconColor + "15" }]}>
+          <Text style={[s.requiredText, { color: iconColor }]}>Required</Text>
         </View>
-      )}
+      </View>
+      <View style={{ marginTop: 10 }}>
+        <TextInput
+          style={s.input}
+          value={state.value}
+          onChangeText={onChange}
+          placeholder={placeholder}
+          placeholderTextColor={colors.mutedForeground}
+          keyboardType="decimal-pad"
+        />
+        <Text style={s.hint}>{hint}</Text>
+      </View>
     </View>
   );
 }
@@ -72,13 +66,12 @@ function fieldStyles(colors: ReturnType<typeof useColors>) {
       shadowColor: "#000", shadowOpacity: 0.04, shadowRadius: 6, shadowOffset: { width: 0, height: 1 },
       elevation: 1,
     },
-    cardSkipped: { opacity: 0.55 },
     header: { flexDirection: "row", alignItems: "center", gap: 10 },
     iconBox: { width: 32, height: 32, borderRadius: 8, alignItems: "center", justifyContent: "center" },
     label: { fontSize: 14, fontWeight: "600", color: colors.foreground, fontFamily: "Inter_600SemiBold" },
     unit: { fontSize: 11, color: colors.mutedForeground, fontFamily: "Inter_400Regular" },
-    skipBtn: { borderRadius: 20, paddingHorizontal: 10, paddingVertical: 4 },
-    skipText: { fontSize: 11, fontFamily: "Inter_600SemiBold" },
+    requiredBadge: { borderRadius: 20, paddingHorizontal: 8, paddingVertical: 3 },
+    requiredText: { fontSize: 10, fontFamily: "Inter_600SemiBold" },
     input: {
       backgroundColor: colors.secondary, borderRadius: 10,
       paddingHorizontal: 14, paddingVertical: 12,
@@ -98,10 +91,10 @@ export default function LogScreen() {
 
   const [heartRate, setHeartRate] = useState<FieldState>(EMPTY);
   const [spo2, setSpo2] = useState<FieldState>(EMPTY);
-  const [temp, setTemp] = useState<FieldState>({ value: "", skipped: true });
+  const [temp, setTemp] = useState<FieldState>(EMPTY);
   const [systolic, setSystolic] = useState("");
   const [diastolic, setDiastolic] = useState("");
-  const [bpSkipped, setBpSkipped] = useState(true);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, boolean>>({});
   const [error, setError] = useState("");
   const [submitted, setSubmitted] = useState(false);
 
@@ -110,44 +103,64 @@ export default function LogScreen() {
   function reset() {
     setHeartRate(EMPTY);
     setSpo2(EMPTY);
-    setTemp({ value: "", skipped: true });
+    setTemp(EMPTY);
     setSystolic("");
     setDiastolic("");
-    setBpSkipped(true);
+    setFieldErrors({});
     setError("");
     setSubmitted(false);
   }
 
   async function handleSubmit() {
     setError("");
+    const errs: Record<string, boolean> = {};
     const reading: VitalReading = {};
 
-    if (!heartRate.skipped && heartRate.value) {
+    // Heart Rate — required
+    if (!heartRate.value.trim()) {
+      errs.heartRate = true;
+    } else {
       const v = Number(heartRate.value);
-      if (isNaN(v) || v < 30 || v > 250) { setError("Heart rate must be 30–250 bpm."); return; }
+      if (isNaN(v) || v < 30 || v > 250) { setError("Heart rate must be 30–250 bpm."); errs.heartRate = true; setFieldErrors(errs); return; }
       reading.heartRate = Math.round(v);
     }
-    if (!spo2.skipped && spo2.value) {
+
+    // SpO₂ — required
+    if (!spo2.value.trim()) {
+      errs.spo2 = true;
+    } else {
       const v = Number(spo2.value);
-      if (isNaN(v) || v < 50 || v > 100) { setError("SpO₂ must be 50–100%."); return; }
+      if (isNaN(v) || v < 50 || v > 100) { setError("SpO₂ must be 50–100%."); errs.spo2 = true; setFieldErrors(errs); return; }
       reading.spo2 = Math.round(v);
     }
-    if (!temp.skipped && temp.value) {
+
+    // Temperature — required
+    if (!temp.value.trim()) {
+      errs.temp = true;
+    } else {
       const v = Number(temp.value);
-      if (isNaN(v) || v < 30 || v > 45) { setError("Temperature must be 30–45°C."); return; }
+      if (isNaN(v) || v < 30 || v > 45) { setError("Temperature must be 30–45°C."); errs.temp = true; setFieldErrors(errs); return; }
       reading.temperature = parseFloat(v.toFixed(1));
     }
-    if (!bpSkipped && systolic && diastolic) {
+
+    // Blood Pressure — required (both fields)
+    if (!systolic.trim() || !diastolic.trim()) {
+      errs.bp = true;
+    } else {
       const s = Number(systolic), d = Number(diastolic);
       if (isNaN(s) || s < 50 || s > 250 || isNaN(d) || d < 30 || d > 200) {
-        setError("Blood pressure values seem out of range."); return;
+        setError("Blood pressure values seem out of range."); errs.bp = true; setFieldErrors(errs); return;
       }
       reading.systolicBp = Math.round(s);
       reading.diastolicBp = Math.round(d);
     }
 
-    const hasAny = Object.keys(reading).length > 0;
-    if (!hasAny) { setError("Please enter at least one reading."); return; }
+    if (Object.keys(errs).length > 0) {
+      setFieldErrors(errs);
+      setError("All 4 readings are required — please fill in every field.");
+      return;
+    }
+    setFieldErrors({});
 
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     const ok = await syncReading(reading);
@@ -162,6 +175,7 @@ export default function LogScreen() {
   }
 
   const s = styles(colors, insets);
+  const fes = fieldErrors;
 
   if (submitted) {
     return (
@@ -188,32 +202,32 @@ export default function LogScreen() {
       }}
       keyboardShouldPersistTaps="handled"
     >
-      <Text style={s.pageHint}>Open your Oraimo app, note your readings, and enter them below.</Text>
+      <Text style={s.pageHint}>All 4 readings are required. Open your Oraimo app, note your readings, and enter them below.</Text>
 
       <VitalInput
         label="Heart Rate" unit="bpm" icon="heart" iconColor="#ef4444"
         placeholder="72" hint="Open Oraimo → Heart Rate"
-        optional={false} state={heartRate}
+        state={heartRate}
         onChange={(v) => setHeartRate({ ...heartRate, value: v })}
-        onSkip={() => setHeartRate({ ...heartRate, skipped: !heartRate.skipped })}
+        hasError={fes.heartRate}
       />
       <VitalInput
         label="Blood Oxygen (SpO₂)" unit="%" icon="droplet" iconColor="#3b82f6"
         placeholder="98" hint="Open Oraimo → Blood Oxygen / SpO₂"
-        optional={false} state={spo2}
+        state={spo2}
         onChange={(v) => setSpo2({ ...spo2, value: v })}
-        onSkip={() => setSpo2({ ...spo2, skipped: !spo2.skipped })}
+        hasError={fes.spo2}
       />
       <VitalInput
         label="Body Temperature" unit="°C" icon="thermometer" iconColor="#f59e0b"
-        placeholder="36.6" hint="Only available on select Oraimo models"
-        optional={true} state={temp}
+        placeholder="36.6" hint="Open Oraimo → Body Temperature"
+        state={temp}
         onChange={(v) => setTemp({ ...temp, value: v })}
-        onSkip={() => setTemp({ ...temp, skipped: !temp.skipped })}
+        hasError={fes.temp}
       />
 
-      {/* Blood Pressure */}
-      <View style={[s.bpCard, bpSkipped && s.bpCardSkipped]}>
+      {/* Blood Pressure — always required */}
+      <View style={[s.bpCard, fes.bp && { borderWidth: 1, borderColor: "#ef4444" }]}>
         <View style={s.bpHeader}>
           <View style={[s.iconBox, { backgroundColor: "#8b5cf615" }]}>
             <Feather name="bar-chart-2" size={16} color="#8b5cf6" />
@@ -222,42 +236,38 @@ export default function LogScreen() {
             <Text style={s.bpLabel}>Blood Pressure</Text>
             <Text style={s.bpUnit}>mmHg</Text>
           </View>
-          <Pressable onPress={() => setBpSkipped(!bpSkipped)} style={[s.skipBtn, { backgroundColor: bpSkipped ? colors.secondary : colors.warning + "15" }]}>
-            <Text style={[s.skipText, { color: bpSkipped ? colors.mutedForeground : colors.warning }]}>
-              {bpSkipped ? "Skipped" : "Skip"}
-            </Text>
-          </Pressable>
-        </View>
-        {!bpSkipped && (
-          <View style={{ marginTop: 10, gap: 6 }}>
-            <View style={s.bpRow}>
-              <View style={{ flex: 1 }}>
-                <TextInput
-                  style={s.bpInput}
-                  value={systolic}
-                  onChangeText={setSystolic}
-                  placeholder="120"
-                  placeholderTextColor={colors.mutedForeground}
-                  keyboardType="numeric"
-                />
-                <Text style={s.bpFieldLabel}>Systolic (top)</Text>
-              </View>
-              <Text style={s.bpSlash}>/</Text>
-              <View style={{ flex: 1 }}>
-                <TextInput
-                  style={s.bpInput}
-                  value={diastolic}
-                  onChangeText={setDiastolic}
-                  placeholder="80"
-                  placeholderTextColor={colors.mutedForeground}
-                  keyboardType="numeric"
-                />
-                <Text style={s.bpFieldLabel}>Diastolic (bottom)</Text>
-              </View>
-            </View>
-            <Text style={s.bpHint}>Only available on select Oraimo models — skip if yours doesn't measure BP</Text>
+          <View style={[s.requiredBadge, { backgroundColor: "#8b5cf615" }]}>
+            <Text style={[s.requiredText, { color: "#8b5cf6" }]}>Required</Text>
           </View>
-        )}
+        </View>
+        <View style={{ marginTop: 10, gap: 6 }}>
+          <View style={s.bpRow}>
+            <View style={{ flex: 1 }}>
+              <TextInput
+                style={s.bpInput}
+                value={systolic}
+                onChangeText={setSystolic}
+                placeholder="120"
+                placeholderTextColor={colors.mutedForeground}
+                keyboardType="numeric"
+              />
+              <Text style={s.bpFieldLabel}>Systolic (top)</Text>
+            </View>
+            <Text style={s.bpSlash}>/</Text>
+            <View style={{ flex: 1 }}>
+              <TextInput
+                style={s.bpInput}
+                value={diastolic}
+                onChangeText={setDiastolic}
+                placeholder="80"
+                placeholderTextColor={colors.mutedForeground}
+                keyboardType="numeric"
+              />
+              <Text style={s.bpFieldLabel}>Diastolic (bottom)</Text>
+            </View>
+          </View>
+          <Text style={s.bpHint}>Open Oraimo → Blood Pressure</Text>
+        </View>
       </View>
 
       {!!error && (
@@ -293,10 +303,11 @@ function styles(colors: ReturnType<typeof useColors>, insets: { top: number; bot
       shadowColor: "#000", shadowOpacity: 0.04, shadowRadius: 6, shadowOffset: { width: 0, height: 1 },
       elevation: 1,
     },
-    bpCardSkipped: { opacity: 0.55 },
     bpHeader: { flexDirection: "row", alignItems: "center", gap: 10 },
     bpLabel: { fontSize: 14, fontWeight: "600", color: colors.foreground, fontFamily: "Inter_600SemiBold" },
     bpUnit: { fontSize: 11, color: colors.mutedForeground, fontFamily: "Inter_400Regular" },
+    requiredBadge: { borderRadius: 20, paddingHorizontal: 8, paddingVertical: 3 },
+    requiredText: { fontSize: 10, fontFamily: "Inter_600SemiBold" },
     bpRow: { flexDirection: "row", alignItems: "center", gap: 8 },
     bpSlash: { fontSize: 24, color: colors.mutedForeground, fontFamily: "Inter_400Regular", paddingTop: 4 },
     bpInput: {
@@ -308,8 +319,6 @@ function styles(colors: ReturnType<typeof useColors>, insets: { top: number; bot
     bpFieldLabel: { fontSize: 10, color: colors.mutedForeground, textAlign: "center", marginTop: 4, fontFamily: "Inter_400Regular" },
     bpHint: { fontSize: 11, color: colors.mutedForeground, fontFamily: "Inter_400Regular" },
     iconBox: { width: 32, height: 32, borderRadius: 8, alignItems: "center", justifyContent: "center" },
-    skipBtn: { borderRadius: 20, paddingHorizontal: 10, paddingVertical: 4 },
-    skipText: { fontSize: 11, fontFamily: "Inter_600SemiBold" },
     errorBox: {
       flexDirection: "row", alignItems: "center", gap: 6,
       backgroundColor: "#fef2f2", borderRadius: 10, padding: 10,

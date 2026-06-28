@@ -58,8 +58,15 @@ TaskManager.defineTask(HC_SYNC_TASK, async () => {
       return BackgroundFetch.BackgroundFetchResult.NoData;
     }
 
-    // Read vitals from the last 30 minutes to avoid re-uploading old readings
-    const vitals = await readLatestVitals(0.5);
+    // Read vitals since the last successful sync (or last 2 hours if never synced)
+    // so no readings are missed even if a sync interval is skipped
+    const lastSyncRaw = await AsyncStorage.getItem(STORAGE_KEY_LAST_HC_SYNC);
+    let hoursBack = 2;
+    if (lastSyncRaw) {
+      const msSince = Date.now() - new Date(lastSyncRaw).getTime();
+      hoursBack = Math.min(Math.max(msSince / 3_600_000 + 0.1, 0.25), 24);
+    }
+    const vitals = await readLatestVitals(hoursBack);
     if (!hasAnyReading(vitals)) return BackgroundFetch.BackgroundFetchResult.NoData;
 
     const payload: Record<string, number | string> = {};
