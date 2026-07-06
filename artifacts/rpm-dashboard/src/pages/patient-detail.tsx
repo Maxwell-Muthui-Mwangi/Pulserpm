@@ -364,11 +364,6 @@ export default function PatientDetail() {
     };
   }).reverse() || [];
 
-  const ingestUrl = `${window.location.origin}${API_BASE}/api/device/ingest`;
-  const syncPageUrl = deviceApiKey
-    ? `${window.location.origin}${API_BASE}/sync?apiKey=${deviceApiKey}`
-    : "";
-
   return (
     <Layout>
       <div className="space-y-6">

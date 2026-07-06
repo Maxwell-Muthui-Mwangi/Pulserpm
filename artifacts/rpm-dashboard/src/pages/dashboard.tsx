@@ -16,13 +16,11 @@ import {
   Heart,
   Clock,
   ChevronRight,
-  Watch,
   Loader2,
   RefreshCw,
   Zap,
   Smartphone,
   ScanLine,
-  Wifi,
 } from "lucide-react";
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend
@@ -148,8 +146,6 @@ function useWatchKey(isPatient: boolean) {
   return { apiKey, loading, keyLoaded, generate, revoke, reload: load };
 }
 
-type WatchDevice = "healthwear" | "oraimo" | "mobile";
-
 interface SmartWatchCardProps {
   watch: ReturnType<typeof useWatchKey>;
   userId?: number;
@@ -157,82 +153,24 @@ interface SmartWatchCardProps {
 }
 
 function SmartWatchCard({ watch, userId, apiBase }: SmartWatchCardProps) {
-  const [activeDevice, setActiveDevice] = useState<WatchDevice>("healthwear");
   const [expoDevUrl, setExpoDevUrl] = useState<string | null>(null);
 
   useEffect(() => {
-    if (activeDevice !== "mobile") return;
     fetch(`${apiBase}/api/device/expo-dev-url`)
       .then((r) => r.ok ? r.json() : null)
       .then((d) => { if (d?.url) setExpoDevUrl(d.url); })
       .catch(() => {});
-  }, [activeDevice, apiBase]);
+  }, [apiBase]);
 
-  const devices: {
-    id: WatchDevice;
-    label: string;
-    badge?: string;
-    tagline: string;
-    buildUrl: (key: string, origin: string, base: string) => string;
-    fgColor: string;
-    accentBg: string;
-    accentRing: string;
-    dot: string;
-    steps: { icon: React.ReactNode; title: string; desc: string }[];
-  }[] = [
-    {
-      id: "healthwear",
-      label: "Healthwear",
-      badge: "NEW",
-      tagline: "Full vitals — all readings supported",
-      buildUrl: (key, origin, base) => `${origin}${base}/sync-healthwear?apiKey=${key}`,
-      fgColor: "#059669",
-      accentBg: "bg-emerald-500",
-      accentRing: "ring-emerald-200",
-      dot: "bg-emerald-500",
-      steps: [
-        { icon: <ScanLine className="h-4 w-4 text-emerald-600" />, title: "Scan this QR code", desc: "Use your phone camera — no app needed" },
-        { icon: <Watch className="h-4 w-4 text-emerald-600" />, title: "Open Healthwear app", desc: "Go to Live Vitals or Health Data" },
-        { icon: <Wifi className="h-4 w-4 text-emerald-600" />, title: "Enter all readings & sync", desc: "Heart Rate, SpO₂, BP, Temperature, Calories" },
-      ],
-    },
-    {
-      id: "oraimo",
-      label: "Oraimo",
-      tagline: "Heart Rate, SpO₂, Temperature",
-      buildUrl: (key, origin, base) => `${origin}${base}/sync?apiKey=${key}`,
-      fgColor: "#0284c7",
-      accentBg: "bg-sky-500",
-      accentRing: "ring-sky-200",
-      dot: "bg-sky-500",
-      steps: [
-        { icon: <ScanLine className="h-4 w-4 text-sky-600" />, title: "Scan this QR code", desc: "Use your phone camera — no app needed" },
-        { icon: <Watch className="h-4 w-4 text-sky-600" />, title: "Open Oraimo app", desc: "Check Heart Rate, SpO₂, and Temperature" },
-        { icon: <Wifi className="h-4 w-4 text-sky-600" />, title: "Enter readings & sync", desc: "Skip Blood Pressure if your model doesn't support it" },
-      ],
-    },
-    {
-      id: "mobile",
-      label: "PulseRPM App",
-      badge: "HC",
-      tagline: "Auto-sync via Android Health Connect",
-      buildUrl: (key) => expoDevUrl
-        ? `${expoDevUrl}?apiKey=${key}`
-        : `pulserpm-mobile://connect?apiKey=${key}`,
-      fgColor: "#7c3aed",
-      accentBg: "bg-violet-600",
-      accentRing: "ring-violet-200",
-      dot: "bg-violet-500",
-      steps: [
-        { icon: <Smartphone className="h-4 w-4 text-violet-600" />, title: "Open Expo Go on your Android phone", desc: "Tap the QR code icon in the top-right corner of Expo Go" },
-        { icon: <ScanLine className="h-4 w-4 text-violet-600" />, title: "Scan this QR with Expo Go", desc: "The app opens and your account links automatically — no typing needed" },
-        { icon: <Zap className="h-4 w-4 text-violet-600" />, title: "Enable Health Connect sync", desc: "Open the Health tab → grant permissions → tap Sync Now" },
-      ],
-    },
+  const syncUrl = watch.apiKey
+    ? (expoDevUrl ? `${expoDevUrl}?apiKey=${watch.apiKey}` : `pulserpm-mobile://connect?apiKey=${watch.apiKey}`)
+    : "";
+
+  const steps = [
+    { icon: <Smartphone className="h-4 w-4 text-violet-600" />, title: "Open the PulseRPM app", desc: "Download it if you haven't already" },
+    { icon: <ScanLine className="h-4 w-4 text-violet-600" />, title: "Tap \"Scan QR Code\"", desc: "Point your camera at the QR code below" },
+    { icon: <Zap className="h-4 w-4 text-violet-600" />, title: "That's it — you're synced", desc: "Your vitals sync automatically via Health Connect" },
   ];
-
-  const current = devices.find((d) => d.id === activeDevice)!;
-  const syncUrl = watch.apiKey ? current.buildUrl(watch.apiKey, window.location.origin, apiBase) : "";
 
   return (
     <Card className="border-border/50 shadow-sm overflow-hidden relative">
@@ -241,9 +179,9 @@ function SmartWatchCard({ watch, userId, apiBase }: SmartWatchCardProps) {
         <div className="flex items-center justify-between flex-wrap gap-3">
           <CardTitle className="text-lg flex items-center gap-2">
             <div className="h-8 w-8 rounded-xl bg-primary/10 flex items-center justify-center">
-              <Watch className="h-4 w-4 text-primary" />
+              <Smartphone className="h-4 w-4 text-primary" />
             </div>
-            Connect Your Smartwatch
+            Connect the PulseRPM App
           </CardTitle>
           {watch.apiKey && (
             <div className="flex items-center gap-1.5 bg-success/10 border border-success/20 rounded-full px-3 py-1">
@@ -252,31 +190,7 @@ function SmartWatchCard({ watch, userId, apiBase }: SmartWatchCardProps) {
             </div>
           )}
         </div>
-        {/* Device selector tabs */}
-        <div className="flex gap-2 mt-3">
-          {devices.map((d) => (
-            <button
-              key={d.id}
-              onClick={() => setActiveDevice(d.id)}
-              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium border transition-all ${
-                activeDevice === d.id
-                  ? `bg-card border-border shadow-sm text-foreground`
-                  : "bg-transparent border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50"
-              }`}
-            >
-              <div className={`h-2 w-2 rounded-full ${d.dot} ${activeDevice === d.id ? "opacity-100" : "opacity-40"}`} />
-              {d.label}
-              {d.badge && (
-                <span className={`text-[10px] rounded-full px-1.5 py-0.5 font-semibold leading-none ${
-                  d.id === "healthwear" ? "bg-emerald-100 text-emerald-700 border border-emerald-200"
-                  : d.id === "mobile" ? "bg-violet-100 text-violet-700 border border-violet-200"
-                  : "bg-muted text-muted-foreground border border-border"
-                }`}>{d.badge}</span>
-              )}
-            </button>
-          ))}
-        </div>
-        <p className="text-xs text-muted-foreground mt-1">{current.tagline}</p>
+        <p className="text-xs text-muted-foreground mt-1">Auto-sync via Android Health Connect</p>
       </CardHeader>
 
       <CardContent>
@@ -289,28 +203,28 @@ function SmartWatchCard({ watch, userId, apiBase }: SmartWatchCardProps) {
             {/* QR Code */}
             <div className="flex flex-col items-center gap-3 shrink-0">
               <div className="relative">
-                <div className={`p-4 bg-white rounded-2xl shadow-lg border border-border/30 ring-2 ${current.accentRing}`}>
+                <div className="p-4 bg-white rounded-2xl shadow-lg border border-border/30 ring-2 ring-violet-200">
                   <QRCodeSVG
                     value={syncUrl}
                     size={156}
                     level="M"
                     includeMargin={false}
-                    fgColor={current.fgColor}
+                    fgColor="#7c3aed"
                   />
                 </div>
-                <div className={`absolute -top-2 -right-2 h-6 w-6 ${current.accentBg} rounded-full flex items-center justify-center shadow-md`}>
+                <div className="absolute -top-2 -right-2 h-6 w-6 bg-violet-600 rounded-full flex items-center justify-center shadow-md">
                   <ScanLine className="h-3 w-3 text-white" />
                 </div>
               </div>
               <p className="text-xs text-muted-foreground text-center max-w-[160px]">
-                Scan with your phone camera
+                Scan with the PulseRPM app
               </p>
             </div>
 
             {/* Steps */}
             <div className="flex-1 space-y-2.5">
-              <p className="text-sm font-semibold text-foreground">How to sync your readings:</p>
-              {current.steps.map((step, i) => (
+              <p className="text-sm font-semibold text-foreground">How to connect:</p>
+              {steps.map((step, i) => (
                 <div key={i} className="flex items-start gap-3 p-3 rounded-xl bg-muted/40 border border-border/30">
                   <div className="h-7 w-7 rounded-lg bg-background border border-border/50 flex items-center justify-center shrink-0 shadow-sm">
                     {step.icon}
@@ -338,19 +252,14 @@ function SmartWatchCard({ watch, userId, apiBase }: SmartWatchCardProps) {
           <div className="flex flex-col sm:flex-row items-center gap-6">
             <div className="flex flex-col items-center gap-3 text-center sm:w-44 shrink-0">
               <div className="h-20 w-20 rounded-2xl border-2 border-dashed border-border/50 bg-muted/30 flex items-center justify-center">
-                <Watch className="h-9 w-9 text-muted-foreground/40" />
+                <Smartphone className="h-9 w-9 text-muted-foreground/40" />
               </div>
               <p className="text-xs text-muted-foreground">No device paired yet</p>
             </div>
             <div className="flex-1 space-y-3">
               <p className="text-sm text-muted-foreground">
-                Generate one QR code that works with both <strong>Healthwear</strong> and <strong>Oraimo</strong> — or any other wearable. Scan once, sync anytime.
+                Generate your QR code to link the <strong>PulseRPM app</strong>. Scan once and your vitals sync automatically via Health Connect.
               </p>
-              <div className="flex flex-wrap gap-1.5">
-                {["Healthwear", "Oraimo", "Apple Watch", "Samsung Health", "Fitbit"].map((brand) => (
-                  <span key={brand} className={`text-xs border rounded-full px-2.5 py-0.5 ${brand === "Healthwear" ? "bg-emerald-50 text-emerald-700 border-emerald-200 font-medium" : "bg-muted text-muted-foreground border-border/50"}`}>{brand}</span>
-                ))}
-              </div>
               <Button onClick={watch.generate} disabled={watch.loading} className="gap-2 shadow-sm">
                 {watch.loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
                 Generate My QR Code
