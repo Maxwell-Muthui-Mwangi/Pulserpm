@@ -198,12 +198,22 @@ export async function processAndSaveAlerts(
 
       if (!patient) return;
 
-      const providers = await db.select().from(providersTable);
-      if (providers.length === 0) return;
+      // Only notify the patient's specifically assigned provider
+      if (!patient.providerId) {
+        console.warn(`[alertEngine] Patient ${patientId} has no assigned provider — skipping alert email`);
+        return;
+      }
 
-      const provider = patient.providerId
-        ? providers.find((p) => p.id === patient.providerId) ?? providers[0]
-        : providers[0];
+      const [provider] = await db
+        .select()
+        .from(providersTable)
+        .where(eq(providersTable.id, patient.providerId))
+        .limit(1);
+
+      if (!provider) {
+        console.warn(`[alertEngine] Assigned provider ${patient.providerId} not found for patient ${patientId} — skipping alert email`);
+        return;
+      }
 
       await sendAlertEmail({
         providerName: provider.name,

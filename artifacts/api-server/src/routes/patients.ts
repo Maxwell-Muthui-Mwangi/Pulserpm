@@ -57,7 +57,7 @@ router.get("/patients/pending", requireAuth, async (req, res) => {
 router.post("/patients/pending/:id/approve", requireAuth, async (req, res) => {
   try {
     if (req.user!.role !== "provider") { res.status(403).json({ error: "Forbidden" }); return; }
-    const pendingId = parseInt(req.params.id, 10);
+    const pendingId = parseInt(String(req.params.id), 10);
     const { age, conditions, gender, dateOfBirth, providerId } = req.body;
 
     const [pending] = await db.select().from(pendingPatientsTable).where(eq(pendingPatientsTable.id, pendingId)).limit(1);
@@ -104,7 +104,7 @@ router.post("/patients/pending/:id/approve", requireAuth, async (req, res) => {
 
 router.get("/patients", requireAuth, async (req, res) => {
   try {
-    const { search, riskLevel, providerId } = req.query;
+    const { search, riskLevel } = req.query;
 
     let query = db.select().from(patientsTable).$dynamic();
 
@@ -114,7 +114,8 @@ router.get("/patients", requireAuth, async (req, res) => {
     if (req.user!.role === "patient") {
       conditions.push(eq(patientsTable.id, req.user!.id));
     } else {
-      if (providerId) conditions.push(eq(patientsTable.providerId, Number(providerId)));
+      // Providers only see patients they personally approved (assigned to them)
+      conditions.push(eq(patientsTable.providerId, req.user!.id));
       if (search) {
         const s = `%${search}%`;
         conditions.push(or(ilike(patientsTable.name, s), ilike(patientsTable.email, s)));
@@ -238,6 +239,12 @@ router.get("/patients/:patientId", requireAuth, async (req, res) => {
       return;
     }
 
+    // Providers can only access patients they personally approved
+    if (req.user!.role === "provider" && patient.providerId !== req.user!.id) {
+      res.status(403).json({ error: "Forbidden", message: "You do not have access to this patient" });
+      return;
+    }
+
     const [latestVitals] = await db
       .select()
       .from(vitalsTable)
@@ -288,7 +295,27 @@ router.get("/patients/:patientId", requireAuth, async (req, res) => {
 router.put("/patients/:patientId", requireAuth, async (req, res) => {
   try {
     const patientId = Number(req.params.patientId);
-    const { name, email, dateOfBirth, gender, conditions, providerId, deviceType } = req.body;
+
+    // Patients may only update their own record (limited fields)
+    if (req.user!.role === "patient" && req.user!.id !== patientId) {
+      res.status(403).json({ error: "Forbidden", message: "Access denied" });
+      return;
+    }
+
+    const [existingPatient] = await db.select().from(patientsTable).where(eq(patientsTable.id, patientId)).limit(1);
+    if (!existingPatient) {
+      res.status(404).json({ error: "Not Found", message: "Patient not found" });
+      return;
+    }
+
+    // Providers can only update their own patients
+    if (req.user!.role === "provider" && existingPatient.providerId !== req.user!.id) {
+      res.status(403).json({ error: "Forbidden", message: "You do not have access to this patient" });
+      return;
+    }
+
+    const { name, email, dateOfBirth, gender, conditions, deviceType } = req.body;
+    // providerId changes are not allowed through this endpoint to prevent patient hijacking
 
     const [updated] = await db
       .update(patientsTable)
@@ -298,7 +325,6 @@ router.put("/patients/:patientId", requireAuth, async (req, res) => {
         ...(dateOfBirth !== undefined && { dateOfBirth }),
         ...(gender !== undefined && { gender }),
         ...(conditions !== undefined && { conditions }),
-        ...(providerId !== undefined && { providerId }),
         ...(deviceType !== undefined && { deviceType }),
         updatedAt: new Date(),
       })

@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db, vitalsTable, alertsTable, patientsTable } from "@workspace/db";
-import { eq, and, gte, lte, sql, count, avg, min, max, sum } from "drizzle-orm";
+import { eq, and, gte, lte, sql, count, avg, min, max, sum, inArray } from "drizzle-orm";
 import { requireAuth } from "../middlewares/auth.js";
 
 const router = Router();
@@ -11,6 +11,18 @@ router.get("/patients/:patientId/summary", requireAuth, async (req, res) => {
     if (req.user!.role === "patient" && req.user!.id !== patientId) {
       res.status(403).json({ error: "Forbidden", message: "Access denied" });
       return;
+    }
+    // Providers can only view summaries for their own patients
+    if (req.user!.role === "provider") {
+      const [patient] = await db.select({ providerId: patientsTable.providerId }).from(patientsTable).where(eq(patientsTable.id, patientId)).limit(1);
+      if (!patient) {
+        res.status(404).json({ error: "Not Found", message: "Patient not found" });
+        return;
+      }
+      if (patient.providerId !== req.user!.id) {
+        res.status(403).json({ error: "Forbidden", message: "You do not have access to this patient" });
+        return;
+      }
     }
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -115,39 +127,54 @@ router.get("/dashboard/stats", requireAuth, async (req, res) => {
       });
     }
 
-    // Provider stats: aggregate across all patients
-    const [patientCount] = await db.select({ count: count() }).from(patientsTable);
+    // Provider stats: aggregate only across their own patients
+    const providerId = req.user!.id;
+    const myPatients = await db
+      .select({ id: patientsTable.id })
+      .from(patientsTable)
+      .where(eq(patientsTable.providerId, providerId));
 
-    const [activeAlertsCount] = await db
+    const myPatientIds = myPatients.map((p) => p.id);
+
+    const [patientCount] = await db
       .select({ count: count() })
-      .from(alertsTable)
-      .where(eq(alertsTable.status, "active"));
+      .from(patientsTable)
+      .where(eq(patientsTable.providerId, providerId));
 
-    const allPatients = await db.select({ id: patientsTable.id }).from(patientsTable);
-
+    let activeAlertsCount = { count: 0 };
+    let todaysReadings = { count: 0 };
     let criticalPatients = 0;
     let warningPatients = 0;
     let normalPatients = 0;
 
-    for (const patient of allPatients) {
-      const alerts = await db
-        .select()
+    if (myPatientIds.length > 0) {
+      const [alertsRow] = await db
+        .select({ count: count() })
         .from(alertsTable)
-        .where(and(eq(alertsTable.patientId, patient.id), eq(alertsTable.status, "active")));
+        .where(and(eq(alertsTable.status, "active"), inArray(alertsTable.patientId, myPatientIds)));
+      activeAlertsCount = alertsRow ?? { count: 0 };
 
-      if (alerts.some((a) => a.severity === "critical")) criticalPatients++;
-      else if (alerts.some((a) => a.severity === "warning")) warningPatients++;
-      else normalPatients++;
+      const [readingsRow] = await db
+        .select({ count: count() })
+        .from(vitalsTable)
+        .where(and(gte(vitalsTable.recordedAt, today), inArray(vitalsTable.patientId, myPatientIds)));
+      todaysReadings = readingsRow ?? { count: 0 };
+
+      for (const patient of myPatients) {
+        const alerts = await db
+          .select()
+          .from(alertsTable)
+          .where(and(eq(alertsTable.patientId, patient.id), eq(alertsTable.status, "active")));
+
+        if (alerts.some((a) => a.severity === "critical")) criticalPatients++;
+        else if (alerts.some((a) => a.severity === "warning")) warningPatients++;
+        else normalPatients++;
+      }
     }
-
-    const [todaysReadings] = await db
-      .select({ count: count() })
-      .from(vitalsTable)
-      .where(gte(vitalsTable.recordedAt, today));
 
     return res.json({
       isPatientView: false,
-      totalPatients: Number(patientCount.count),
+      totalPatients: Number(patientCount?.count ?? 0),
       activeAlerts: Number(activeAlertsCount.count),
       criticalPatients,
       warningPatients,
@@ -167,45 +194,56 @@ router.get("/dashboard/trends", requireAuth, async (req, res) => {
       return;
     }
 
+    const providerId = req.user!.id;
     const days = Math.min(Math.max(parseInt(String(req.query.days ?? "7"), 10), 1), 30);
 
     const since = new Date();
     since.setDate(since.getDate() - days + 1);
     since.setHours(0, 0, 0, 0);
 
-    const rows = await db
-      .select({
-        day: sql<string>`DATE_TRUNC('day', ${vitalsTable.recordedAt})::text`,
-        avgHeartRate: avg(vitalsTable.heartRate),
-        avgSystolicBp: avg(vitalsTable.systolicBp),
-        avgSpo2: avg(vitalsTable.spo2),
-        avgTemperature: avg(vitalsTable.temperature),
-        totalReadings: count(),
-      })
-      .from(vitalsTable)
-      .where(gte(vitalsTable.recordedAt, since))
-      .groupBy(sql`DATE_TRUNC('day', ${vitalsTable.recordedAt})`)
-      .orderBy(sql`DATE_TRUNC('day', ${vitalsTable.recordedAt})`);
+    // Only include vitals for this provider's own patients
+    const myPatients = await db
+      .select({ id: patientsTable.id })
+      .from(patientsTable)
+      .where(eq(patientsTable.providerId, providerId));
+    const myPatientIds = myPatients.map((p) => p.id);
 
-    const trend = rows.map((r) => ({
-      date: r.day ? (r.day.includes("T") ? r.day.split("T")[0] : r.day.split(" ")[0]) : "",
-      avgHeartRate: r.avgHeartRate ? parseFloat(Number(r.avgHeartRate).toFixed(1)) : null,
-      avgSystolicBp: r.avgSystolicBp ? parseFloat(Number(r.avgSystolicBp).toFixed(1)) : null,
-      avgSpo2: r.avgSpo2 ? parseFloat(Number(r.avgSpo2).toFixed(1)) : null,
-      avgTemperature: r.avgTemperature ? parseFloat(Number(r.avgTemperature).toFixed(2)) : null,
-      totalReadings: Number(r.totalReadings),
-    }));
-
-    const allPatients = await db.select({ id: patientsTable.id }).from(patientsTable);
+    let trend: object[] = [];
     let critical = 0, warning = 0, normal = 0;
-    for (const p of allPatients) {
-      const activeAlerts = await db
-        .select()
-        .from(alertsTable)
-        .where(and(eq(alertsTable.patientId, p.id), eq(alertsTable.status, "active")));
-      if (activeAlerts.some((a) => a.severity === "critical")) critical++;
-      else if (activeAlerts.some((a) => a.severity === "warning")) warning++;
-      else normal++;
+
+    if (myPatientIds.length > 0) {
+      const rows = await db
+        .select({
+          day: sql<string>`DATE_TRUNC('day', ${vitalsTable.recordedAt})::text`,
+          avgHeartRate: avg(vitalsTable.heartRate),
+          avgSystolicBp: avg(vitalsTable.systolicBp),
+          avgSpo2: avg(vitalsTable.spo2),
+          avgTemperature: avg(vitalsTable.temperature),
+          totalReadings: count(),
+        })
+        .from(vitalsTable)
+        .where(and(gte(vitalsTable.recordedAt, since), inArray(vitalsTable.patientId, myPatientIds)))
+        .groupBy(sql`DATE_TRUNC('day', ${vitalsTable.recordedAt})`)
+        .orderBy(sql`DATE_TRUNC('day', ${vitalsTable.recordedAt})`);
+
+      trend = rows.map((r) => ({
+        date: r.day ? (r.day.includes("T") ? r.day.split("T")[0] : r.day.split(" ")[0]) : "",
+        avgHeartRate: r.avgHeartRate ? parseFloat(Number(r.avgHeartRate).toFixed(1)) : null,
+        avgSystolicBp: r.avgSystolicBp ? parseFloat(Number(r.avgSystolicBp).toFixed(1)) : null,
+        avgSpo2: r.avgSpo2 ? parseFloat(Number(r.avgSpo2).toFixed(1)) : null,
+        avgTemperature: r.avgTemperature ? parseFloat(Number(r.avgTemperature).toFixed(2)) : null,
+        totalReadings: Number(r.totalReadings),
+      }));
+
+      for (const p of myPatients) {
+        const activeAlerts = await db
+          .select()
+          .from(alertsTable)
+          .where(and(eq(alertsTable.patientId, p.id), eq(alertsTable.status, "active")));
+        if (activeAlerts.some((a) => a.severity === "critical")) critical++;
+        else if (activeAlerts.some((a) => a.severity === "warning")) warning++;
+        else normal++;
+      }
     }
 
     return res.json({ trend, patientStatus: { critical, warning, normal } });

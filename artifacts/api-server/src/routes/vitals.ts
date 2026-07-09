@@ -11,12 +11,37 @@ import {
 
 const router = Router();
 
+/**
+ * Verify that the requesting provider owns the given patient.
+ * Returns the patient row on success, or sends a 403/404 and returns null.
+ */
+async function assertProviderOwnsPatient(
+  patientId: number,
+  providerId: number,
+  res: import("express").Response
+): Promise<(typeof patientsTable.$inferSelect) | null> {
+  const [patient] = await db.select().from(patientsTable).where(eq(patientsTable.id, patientId)).limit(1);
+  if (!patient) {
+    res.status(404).json({ error: "Not Found", message: "Patient not found" });
+    return null;
+  }
+  if (patient.providerId !== providerId) {
+    res.status(403).json({ error: "Forbidden", message: "You do not have access to this patient" });
+    return null;
+  }
+  return patient;
+}
+
 router.get("/patients/:patientId/vitals", requireAuth, async (req, res) => {
   try {
     const patientId = Number(req.params.patientId);
     if (req.user!.role === "patient" && req.user!.id !== patientId) {
       res.status(403).json({ error: "Forbidden", message: "Access denied" });
       return;
+    }
+    if (req.user!.role === "provider") {
+      const owned = await assertProviderOwnsPatient(patientId, req.user!.id, res);
+      if (!owned) return;
     }
     const period = (req.query.period as string) || "day";
     const limit = Math.min(Number(req.query.limit) || 100, 500);
@@ -51,6 +76,10 @@ router.post("/patients/:patientId/vitals", requireAuth, async (req, res) => {
     if (req.user!.role === "patient" && req.user!.id !== patientId) {
       res.status(403).json({ error: "Forbidden", message: "Access denied" });
       return;
+    }
+    if (req.user!.role === "provider") {
+      const owned = await assertProviderOwnsPatient(patientId, req.user!.id, res);
+      if (!owned) return;
     }
     const { heartRate, systolicBp, diastolicBp, spo2, caloriesBurned, temperature, source, recordedAt } = req.body;
 
@@ -87,6 +116,10 @@ router.get("/patients/:patientId/vitals/latest", requireAuth, async (req, res) =
     if (req.user!.role === "patient" && req.user!.id !== patientId) {
       res.status(403).json({ error: "Forbidden", message: "Access denied" });
       return;
+    }
+    if (req.user!.role === "provider") {
+      const owned = await assertProviderOwnsPatient(patientId, req.user!.id, res);
+      if (!owned) return;
     }
 
     const [vitals] = await db
