@@ -3,7 +3,7 @@ import nodemailer from "nodemailer";
 interface AlertEmailData {
   providerName: string;
   providerEmail: string;
-  patientName: string;
+  patientId: number;
   patientAge: number | null;
   patientGender: string | null;
   patientConditions: string[];
@@ -107,6 +107,8 @@ function buildAlertEmailHtml(data: AlertEmailData): string {
   const overallSeverity = criticalAlerts.length > 0 ? "CRITICAL" : "WARNING";
   const severityColor = overallSeverity === "CRITICAL" ? "#dc2626" : "#d97706";
 
+  const patientRef = `Patient #${data.patientId}`;
+
   const ageStr = data.patientAge ? `${data.patientAge} years old` : "Age unknown";
   const genderStr = data.patientGender
     ? data.patientGender.charAt(0).toUpperCase() + data.patientGender.slice(1)
@@ -141,19 +143,19 @@ function buildAlertEmailHtml(data: AlertEmailData): string {
   <div style="max-width:680px;margin:32px auto;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
     <div style="background:${severityColor};padding:24px 32px;">
       <p style="margin:0 0 4px;color:rgba(255,255,255,0.85);font-size:12px;text-transform:uppercase;letter-spacing:1px;">PulseRPM · Patient Alert</p>
-      <h1 style="margin:0;color:#ffffff;font-size:22px;font-weight:700;">${overallSeverity} — ${data.patientName}</h1>
+      <h1 style="margin:0;color:#ffffff;font-size:22px;font-weight:700;">${overallSeverity} — ${patientRef}</h1>
     </div>
     <div style="padding:28px 32px;">
       <p style="margin:0 0 20px;color:#374151;">Dear Dr. ${data.providerName.split(" ").at(-1)},</p>
       <p style="margin:0 0 24px;color:#6b7280;line-height:1.6;">
-        Your patient <strong style="color:#111827;">${data.patientName}</strong> has triggered
+        <strong style="color:#111827;">${patientRef}</strong> has triggered
         <strong style="color:${severityColor};">${data.alerts.length} alert${data.alerts.length !== 1 ? "s" : ""}</strong>
         that require${data.alerts.length === 1 ? "s" : ""} your immediate attention.
       </p>
       <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:16px 20px;margin-bottom:24px;">
         <h2 style="margin:0 0 12px;font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:#6b7280;">Patient Profile</h2>
         <table style="width:100%;border-collapse:collapse;">
-          <tr><td style="padding:4px 0;color:#6b7280;font-size:14px;width:140px;">Name</td><td style="padding:4px 0;color:#111827;font-size:14px;font-weight:500;">${data.patientName}</td></tr>
+          <tr><td style="padding:4px 0;color:#6b7280;font-size:14px;width:140px;">Reference ID</td><td style="padding:4px 0;color:#111827;font-size:14px;font-weight:600;">${patientRef}</td></tr>
           <tr><td style="padding:4px 0;color:#6b7280;font-size:14px;">Age</td><td style="padding:4px 0;color:#111827;font-size:14px;">${ageStr}</td></tr>
           <tr><td style="padding:4px 0;color:#6b7280;font-size:14px;">Gender</td><td style="padding:4px 0;color:#111827;font-size:14px;">${genderStr}</td></tr>
           <tr><td style="padding:4px 0;color:#6b7280;font-size:14px;">Conditions</td><td style="padding:4px 0;color:#111827;font-size:14px;">${conditionsStr}</td></tr>
@@ -178,7 +180,7 @@ function buildAlertEmailHtml(data: AlertEmailData): string {
       </p>
     </div>
     <div style="padding:16px 32px;background:#f9fafb;border-top:1px solid #e5e7eb;">
-      <p style="margin:0;color:#9ca3af;font-size:12px;">This is an automated alert from PulseRPM Remote Patient Monitoring System. Time: ${new Date().toUTCString()}</p>
+      <p style="margin:0;color:#9ca3af;font-size:12px;">This is an automated alert from PulseRPM Remote Patient Monitoring System. Reference: ${patientRef}. Time: ${new Date().toUTCString()}</p>
     </div>
   </div>
 </body>
@@ -217,8 +219,10 @@ function buildVerificationEmailHtml(name: string, code: string): string {
 
 // ── Public API ───────────────────────────────────────────────────────────────
 export async function sendAlertEmail(data: AlertEmailData): Promise<void> {
-  const subject = `[${data.alerts.some((a) => a.severity === "critical") ? "CRITICAL" : "WARNING"}] Patient Alert — ${data.patientName}`;
-  await send(data.providerEmail, subject, buildAlertEmailHtml(data), `skipping alert for ${data.patientName}`);
+  const patientRef = `Patient #${data.patientId}`;
+  const severity = data.alerts.some((a) => a.severity === "critical") ? "CRITICAL" : "WARNING";
+  const subject = `[${severity}] Alert — ${patientRef}`;
+  await send(data.providerEmail, subject, buildAlertEmailHtml(data), `skipping alert for ${patientRef}`);
 }
 
 export async function sendVerificationEmail(to: string, name: string, code: string): Promise<boolean> {
@@ -278,8 +282,10 @@ export async function sendPatientApprovedEmail(to: string, patientName: string, 
 }
 
 // ── Provider: new patient pending approval ────────────────────────────────────
-function buildNewPatientPendingHtml(providerName: string, patientName: string, patientEmail: string, dashboardUrl: string): string {
+// Uses patient ID (not name) for confidentiality in provider-facing emails
+function buildNewPatientPendingHtml(providerName: string, patientId: number, dashboardUrl: string): string {
   const lastName = providerName.split(" ").at(-1) ?? providerName;
+  const patientRef = `Patient #${patientId}`;
   return `<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
@@ -296,12 +302,8 @@ function buildNewPatientPendingHtml(providerName: string, patientName: string, p
       <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:16px 20px;margin-bottom:24px;">
         <table style="width:100%;border-collapse:collapse;">
           <tr>
-            <td style="padding:6px 0;color:#94a3b8;font-size:13px;width:80px;">Name</td>
-            <td style="padding:6px 0;color:#0f172a;font-size:14px;font-weight:600;">${patientName}</td>
-          </tr>
-          <tr>
-            <td style="padding:6px 0;color:#94a3b8;font-size:13px;">Email</td>
-            <td style="padding:6px 0;color:#0f172a;font-size:14px;">${patientEmail}</td>
+            <td style="padding:6px 0;color:#94a3b8;font-size:13px;width:100px;">Reference ID</td>
+            <td style="padding:6px 0;color:#0f172a;font-size:14px;font-weight:600;">${patientRef}</td>
           </tr>
           <tr>
             <td style="padding:6px 0;color:#94a3b8;font-size:13px;">Status</td>
@@ -311,6 +313,9 @@ function buildNewPatientPendingHtml(providerName: string, patientName: string, p
           </tr>
         </table>
       </div>
+      <p style="color:#94a3b8;font-size:12px;line-height:1.6;margin:0 0 24px;">
+        Patient identity details are available securely within the PulseRPM dashboard to protect patient confidentiality.
+      </p>
       <div style="text-align:center;">
         <a href="${dashboardUrl}" style="display:inline-block;background:#0ea5e9;color:#ffffff;text-decoration:none;padding:14px 32px;border-radius:8px;font-size:15px;font-weight:600;">Review in Dashboard</a>
       </div>
@@ -323,11 +328,11 @@ function buildNewPatientPendingHtml(providerName: string, patientName: string, p
 </html>`;
 }
 
-export async function sendNewPatientPendingEmail(to: string, providerName: string, patientName: string, patientEmail: string, dashboardUrl: string): Promise<void> {
+export async function sendNewPatientPendingEmail(to: string, providerName: string, patientId: number, dashboardUrl: string): Promise<void> {
   await send(
     to,
-    `New patient awaiting approval — ${patientName}`,
-    buildNewPatientPendingHtml(providerName, patientName, patientEmail, dashboardUrl),
+    `New patient awaiting approval — Patient #${patientId}`,
+    buildNewPatientPendingHtml(providerName, patientId, dashboardUrl),
     `new patient pending notification to ${to}`
   );
 }

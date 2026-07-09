@@ -218,7 +218,7 @@ export async function processAndSaveAlerts(
       await sendAlertEmail({
         providerName: provider.name,
         providerEmail: provider.email,
-        patientName: patient.name,
+        patientId: patient.id,
         patientAge: computeAge(patient.dateOfBirth),
         patientGender: patient.gender,
         patientConditions: patient.conditions ?? [],

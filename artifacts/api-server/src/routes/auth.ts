@@ -13,6 +13,7 @@ function generateCode(): string {
   return String(Math.floor(100000 + Math.random() * 900000));
 }
 
+// ── Login ────────────────────────────────────────────────────────────────────
 router.post("/auth/login", authLimiter, async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -26,6 +27,12 @@ router.post("/auth/login", authLimiter, async (req, res) => {
 
     const [provider] = await db.select().from(providersTable).where(eq(providersTable.email, email)).limit(1);
     if (provider && verifyPassword(password, provider.passwordHash)) {
+      // Block login until email is verified
+      if (!provider.emailVerified) {
+        logAuditEvent({ actorId: provider.id, actorEmail: provider.email, actorRole: provider.role, action: "auth.login", resourceType: "auth", ipAddress: ip, userAgent: ua, outcome: "denied", details: JSON.stringify({ reason: "email_unverified" }) });
+        res.status(403).json({ error: "Email not verified", status: "email_unverified", message: "Please verify your email address before logging in.", email: provider.email });
+        return;
+      }
       const token = createToken({ id: provider.id, email: provider.email, role: provider.role });
       logAuditEvent({ actorId: provider.id, actorEmail: provider.email, actorRole: provider.role, action: "auth.login", resourceType: "auth", ipAddress: ip, userAgent: ua, outcome: "success" });
       res.json({ token, user: { id: provider.id, email: provider.email, name: provider.name, role: provider.role } });
@@ -59,6 +66,104 @@ router.post("/auth/login", authLimiter, async (req, res) => {
   }
 });
 
+// ── Provider signup ──────────────────────────────────────────────────────────
+router.post("/auth/signup", authLimiter, async (req, res) => {
+  try {
+    const { name, email, password, role = "provider", specialty } = req.body;
+    if (!name || !email || !password) {
+      res.status(400).json({ error: "Bad Request", message: "Name, email, and password are required" });
+      return;
+    }
+
+    const [existingProvider] = await db.select().from(providersTable).where(eq(providersTable.email, email)).limit(1);
+    const [existingPatient] = await db.select().from(patientsTable).where(eq(patientsTable.email, email)).limit(1);
+    if (existingProvider || existingPatient) {
+      res.status(409).json({ error: "Conflict", message: "An account with this email already exists" });
+      return;
+    }
+
+    if (role !== "provider") {
+      res.status(400).json({ error: "Bad Request", message: "Use /api/auth/patient-signup for patient registration" });
+      return;
+    }
+
+    const code = generateCode();
+    const expiry = new Date(Date.now() + 15 * 60 * 1000);
+
+    await db.insert(providersTable).values({
+      name,
+      email,
+      passwordHash: hashPassword(password),
+      specialty: specialty || null,
+      role: "provider",
+      emailVerified: false,
+      verificationCode: code,
+      verificationCodeExpiry: expiry,
+    });
+
+    logAuditEvent({ actorEmail: email, actorRole: "provider", action: "auth.signup", resourceType: "auth", ipAddress: getClientIp(req), userAgent: req.headers["user-agent"], outcome: "success" });
+
+    const emailSent = await sendVerificationEmail(email, name, code);
+    const responseBody: Record<string, unknown> = {
+      message: emailSent
+        ? "Account created. A verification code has been sent to your email."
+        : "Account created. We could not deliver your verification email — use the code shown on screen.",
+      email,
+      emailSent,
+    };
+    if (!emailSent) responseBody.fallbackCode = code;
+    res.status(201).json(responseBody);
+  } catch (err) {
+    console.error("Signup error:", err);
+    res.status(500).json({ error: "Internal Server Error", message: "Signup failed" });
+  }
+});
+
+// ── Provider email verification ───────────────────────────────────────────────
+router.post("/auth/provider/verify-email", authLimiter, async (req, res) => {
+  try {
+    const { email, code } = req.body;
+    if (!email || !code) {
+      res.status(400).json({ error: "Bad Request", message: "Email and code required" });
+      return;
+    }
+
+    const [provider] = await db.select().from(providersTable).where(eq(providersTable.email, email)).limit(1);
+    if (!provider) {
+      // Generic response to avoid account enumeration
+      res.status(400).json({ error: "Invalid Request", message: "The verification code is incorrect or has expired." });
+      return;
+    }
+    if (provider.emailVerified) {
+      // Already verified — do NOT issue a token here (no password was presented).
+      // Direct the user to log in normally.
+      res.json({ message: "Email already verified. Please log in with your credentials." });
+      return;
+    }
+    if (provider.verificationCode !== String(code).trim()) {
+      res.status(400).json({ error: "Invalid Code", message: "The verification code is incorrect. Please try again or request a new code." });
+      return;
+    }
+    if (!provider.verificationCodeExpiry || new Date() > new Date(provider.verificationCodeExpiry)) {
+      res.status(400).json({ error: "Code Expired", message: "The verification code has expired. Please request a new one." });
+      return;
+    }
+
+    await db.update(providersTable)
+      .set({ emailVerified: true, verificationCode: null, verificationCodeExpiry: null })
+      .where(eq(providersTable.email, email));
+
+    logAuditEvent({ actorId: provider.id, actorEmail: provider.email, actorRole: provider.role, action: "auth.email_verified", resourceType: "auth", outcome: "success" });
+
+    // Verification complete — user must now log in with their password to get a token.
+    res.json({ message: "Email verified successfully. You can now log in to PulseRPM." });
+  } catch (err) {
+    console.error("Provider verify email error:", err);
+    res.status(500).json({ error: "Internal Server Error", message: "Verification failed" });
+  }
+});
+
+// ── Patient signup ───────────────────────────────────────────────────────────
 router.post("/auth/patient-signup", authLimiter, async (req, res) => {
   try {
     const { name, email, password } = req.body;
@@ -100,8 +205,6 @@ router.post("/auth/patient-signup", authLimiter, async (req, res) => {
 
     logAuditEvent({ actorEmail: email, action: "auth.signup", resourceType: "auth", ipAddress: getClientIp(req), userAgent: req.headers["user-agent"], outcome: "success" });
 
-    // Send email — if delivery fails, include the code in the response so the
-    // patient can still complete verification (Resend free tier / no verified domain).
     const emailSent = await sendVerificationEmail(email, name, code);
     const responseBody: Record<string, unknown> = { message: emailSent ? "Verification code sent to your email." : "We could not deliver your verification email. Use the code shown on screen.", email, emailSent };
     if (!emailSent) responseBody.fallbackCode = code;
@@ -112,6 +215,7 @@ router.post("/auth/patient-signup", authLimiter, async (req, res) => {
   }
 });
 
+// ── Patient email verification ────────────────────────────────────────────────
 router.post("/auth/verify-email", async (req, res) => {
   try {
     const { email, code } = req.body;
@@ -140,17 +244,16 @@ router.post("/auth/verify-email", async (req, res) => {
 
     await db.update(pendingPatientsTable).set({ emailVerified: true }).where(eq(pendingPatientsTable.email, email));
 
-    // Notify all providers that a new patient is awaiting approval (non-blocking)
+    // Notify all verified providers that a new patient is awaiting approval (non-blocking)
     setImmediate(async () => {
       try {
-        const providers = await db.select().from(providersTable);
+        const providers = await db.select().from(providersTable).where(eq(providersTable.emailVerified, true));
         const dashboardOrigin = process.env.DASHBOARD_URL || "https://pulserpm.replit.app";
         for (const provider of providers) {
           await sendNewPatientPendingEmail(
             provider.email,
             provider.name,
-            pending.name,
-            pending.email,
+            pending.id,
             `${dashboardOrigin}/patients`
           );
         }
@@ -166,7 +269,9 @@ router.post("/auth/verify-email", async (req, res) => {
   }
 });
 
-router.post("/auth/resend-code", async (req, res) => {
+// ── Resend verification code ───────────────────────────────────────────────────
+// Handles both patients (pending_patients table) and providers (providers table)
+router.post("/auth/resend-code", authLimiter, async (req, res) => {
   try {
     const { email } = req.body;
     if (!email) {
@@ -174,9 +279,28 @@ router.post("/auth/resend-code", async (req, res) => {
       return;
     }
 
+    const code = generateCode();
+    const expiry = new Date(Date.now() + 15 * 60 * 1000);
+
+    // Check provider first
+    const [provider] = await db.select().from(providersTable).where(eq(providersTable.email, email)).limit(1);
+    if (provider) {
+      if (provider.emailVerified) {
+        res.status(400).json({ error: "Already Verified", message: "Email is already verified" });
+        return;
+      }
+      await db.update(providersTable).set({ verificationCode: code, verificationCodeExpiry: expiry }).where(eq(providersTable.email, email));
+      const emailSent = await sendVerificationEmail(email, provider.name, code);
+      const responseBody: Record<string, unknown> = { message: emailSent ? "A new verification code has been sent to your email." : "We could not deliver your verification email. Use the code shown on screen.", emailSent };
+      if (!emailSent) responseBody.fallbackCode = code;
+      res.json(responseBody);
+      return;
+    }
+
+    // Check pending patient
     const [pending] = await db.select().from(pendingPatientsTable).where(eq(pendingPatientsTable.email, email)).limit(1);
     if (!pending) {
-      res.status(404).json({ error: "Not Found", message: "No pending signup found for this email" });
+      res.status(404).json({ error: "Not Found", message: "No account found for this email" });
       return;
     }
     if (pending.emailVerified) {
@@ -184,8 +308,6 @@ router.post("/auth/resend-code", async (req, res) => {
       return;
     }
 
-    const code = generateCode();
-    const expiry = new Date(Date.now() + 15 * 60 * 1000);
     await db.update(pendingPatientsTable).set({ verificationCode: code, verificationExpiry: expiry }).where(eq(pendingPatientsTable.email, email));
     const emailSent = await sendVerificationEmail(email, pending.name, code);
     const responseBody: Record<string, unknown> = { message: emailSent ? "A new verification code has been sent to your email." : "We could not deliver your verification email. Use the code shown on screen.", emailSent };
@@ -197,6 +319,7 @@ router.post("/auth/resend-code", async (req, res) => {
   }
 });
 
+// ── Me ────────────────────────────────────────────────────────────────────────
 router.get("/auth/me", requireAuth, async (req, res) => {
   try {
     const user = req.user!;
@@ -216,6 +339,7 @@ router.get("/auth/me", requireAuth, async (req, res) => {
   }
 });
 
+// ── Dismiss welcome banner ────────────────────────────────────────────────────
 router.post("/auth/dismiss-welcome", requireAuth, async (req, res) => {
   try {
     const user = req.user!;
@@ -225,35 +349,6 @@ router.post("/auth/dismiss-welcome", requireAuth, async (req, res) => {
   } catch (err) {
     console.error("Dismiss welcome error:", err);
     res.status(500).json({ error: "Internal Server Error" });
-  }
-});
-
-router.post("/auth/signup", authLimiter, async (req, res) => {
-  try {
-    const { name, email, password, role = "provider", specialty } = req.body;
-    if (!name || !email || !password) {
-      res.status(400).json({ error: "Bad Request", message: "Name, email, and password are required" });
-      return;
-    }
-
-    const [existingProvider] = await db.select().from(providersTable).where(eq(providersTable.email, email)).limit(1);
-    const [existingPatient] = await db.select().from(patientsTable).where(eq(patientsTable.email, email)).limit(1);
-    if (existingProvider || existingPatient) {
-      res.status(409).json({ error: "Conflict", message: "An account with this email already exists" });
-      return;
-    }
-
-    if (role === "provider") {
-      const [provider] = await db.insert(providersTable).values({ name, email, passwordHash: hashPassword(password), specialty: specialty || null, role: "provider" }).returning();
-      const token = createToken({ id: provider.id, email: provider.email, role: provider.role });
-      logAuditEvent({ actorId: provider.id, actorEmail: provider.email, actorRole: "provider", action: "auth.signup", resourceType: "auth", ipAddress: getClientIp(req), userAgent: req.headers["user-agent"], outcome: "success" });
-      res.status(201).json({ token, user: { id: provider.id, email: provider.email, name: provider.name, role: provider.role } });
-    } else {
-      res.status(400).json({ error: "Bad Request", message: "Use /api/auth/patient-signup for patient registration" });
-    }
-  } catch (err) {
-    console.error("Signup error:", err);
-    res.status(500).json({ error: "Internal Server Error", message: "Signup failed" });
   }
 });
 
