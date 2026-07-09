@@ -44,26 +44,55 @@ async function sendViaResend(to: string, subject: string, html: string): Promise
   }
 }
 
-// ── SMTP (Gmail / any SMTP provider) ────────────────────────────────────────
-function createSmtpTransport() {
-  const host = process.env.SMTP_HOST;
+// ── SMTP (Gmail / Outlook / Yahoo / any provider) ────────────────────────────
+// Creates a nodemailer transporter.
+// Priority: explicit SMTP_HOST env var → auto-detect from SMTP_USER domain.
+// SMTP_HOST is *optional* — Gmail, Outlook, Yahoo, and iCloud are detected automatically.
+function createSmtpTransporter(): nodemailer.Transporter | null {
   const user = process.env.SMTP_USER;
   const pass = process.env.SMTP_PASS;
-  const port = parseInt(process.env.SMTP_PORT ?? "587", 10);
-  if (!host || !user || !pass) return null;
-  return nodemailer.createTransport({
-    host,
-    port,
-    secure: port === 465,
-    auth: { user, pass },
-  });
+  if (!user || !pass) return null;
+
+  const auth = { user, pass };
+
+  const explicitHost = process.env.SMTP_HOST;
+  if (explicitHost) {
+    const port = parseInt(process.env.SMTP_PORT ?? "587", 10);
+    console.log(`[email] SMTP: using explicit host ${explicitHost}:${port}`);
+    return nodemailer.createTransport({ host: explicitHost, port, secure: port === 465, auth });
+  }
+
+  // Auto-detect service from the sender's email domain
+  const domain = (user.split("@")[1] ?? "").toLowerCase();
+
+  if (domain === "gmail.com" || domain === "googlemail.com") {
+    console.log("[email] SMTP: auto-detected Gmail");
+    return nodemailer.createTransport({ service: "Gmail", auth });
+  }
+  if (["outlook.com", "hotmail.com", "live.com", "live.co.uk", "msn.com"].includes(domain)) {
+    console.log("[email] SMTP: auto-detected Outlook/Hotmail");
+    return nodemailer.createTransport({ service: "hotmail", auth });
+  }
+  if (domain === "yahoo.com" || domain === "ymail.com" || domain === "yahoo.co.uk") {
+    console.log("[email] SMTP: auto-detected Yahoo");
+    return nodemailer.createTransport({ service: "Yahoo", auth });
+  }
+  if (domain === "icloud.com" || domain === "me.com" || domain === "mac.com") {
+    console.log("[email] SMTP: auto-detected iCloud");
+    return nodemailer.createTransport({ host: "smtp.mail.me.com", port: 587, secure: false, auth });
+  }
+
+  // Unknown domain — need SMTP_HOST to proceed
+  console.warn(`[email] SMTP: cannot auto-detect provider for "${domain}". Set SMTP_HOST to configure SMTP delivery.`);
+  return null;
 }
 
-async function sendViaSmtp(to: string, subject: string, html: string, from: string): Promise<boolean> {
-  const transport = createSmtpTransport();
+async function sendViaSmtp(to: string, subject: string, html: string): Promise<boolean> {
+  const transport = createSmtpTransporter();
   if (!transport) return false;
   try {
-    await transport.sendMail({ from, to, subject, html });
+    const user = process.env.SMTP_USER!;
+    await transport.sendMail({ from: `"PulseRPM" <${user}>`, to, subject, html });
     return true;
   } catch (err) {
     console.error("[email] SMTP send failed:", err);
@@ -73,21 +102,26 @@ async function sendViaSmtp(to: string, subject: string, html: string, from: stri
 
 // ── Unified sender ───────────────────────────────────────────────────────────
 async function send(to: string, subject: string, html: string, fallbackLog: string): Promise<boolean> {
-  // Try Resend first
-  if (process.env.RESEND_API_KEY) {
+  // Try Resend first (only if a verified from-domain is configured;
+  // the default onboarding@resend.dev only delivers to the Resend account owner)
+  const resendKey = process.env.RESEND_API_KEY;
+  const resendFromEmail = process.env.RESEND_FROM_EMAIL;
+  if (resendKey && resendFromEmail) {
     const ok = await sendViaResend(to, subject, html);
     if (ok) { console.log(`[email] Sent via Resend → ${to}`); return true; }
+    console.warn("[email] Resend failed — falling back to SMTP");
+  } else if (resendKey && !resendFromEmail) {
+    console.warn("[email] Resend API key set but RESEND_FROM_EMAIL not configured. Skipping Resend (onboarding@resend.dev cannot deliver to arbitrary addresses). Set RESEND_FROM_EMAIL to a verified Resend domain to enable.");
   }
 
-  // Try SMTP
-  if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) {
-    const fromAddress = `"PulseRPM" <${process.env.SMTP_USER}>`;
-    const ok = await sendViaSmtp(to, subject, html, fromAddress);
+  // Try SMTP (SMTP_USER + SMTP_PASS are enough — host auto-detected from domain)
+  if (process.env.SMTP_USER && process.env.SMTP_PASS) {
+    const ok = await sendViaSmtp(to, subject, html);
     if (ok) { console.log(`[email] Sent via SMTP → ${to}`); return true; }
   }
 
-  // No transport configured — log to console so dev can still test
-  console.warn(`[email] Email delivery failed — ${fallbackLog}`);
+  // Both failed
+  console.warn(`[email] All transports failed — ${fallbackLog}`);
   return false;
 }
 

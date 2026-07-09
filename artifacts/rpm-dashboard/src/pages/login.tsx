@@ -1,6 +1,6 @@
 import { useState, useRef } from "react";
 import { Activity, Stethoscope, User, Loader2, Eye, EyeOff, Mail, CheckCircle2, Clock } from "lucide-react";
-import { useLogin, useSignup } from "@workspace/api-client-react";
+import { useLogin } from "@workspace/api-client-react";
 import { setAuthToken, getAuthToken } from "@/lib/utils";
 import { queryClient } from "@/lib/query-client";
 import { Button } from "@/components/ui/button";
@@ -11,7 +11,7 @@ import { motion, AnimatePresence } from "framer-motion";
 
 const API_BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
-type Screen = "form" | "verify" | "pending";
+type Screen = "form" | "verify" | "pending" | "verified";
 type Mode = "login" | "signup";
 type Role = "provider" | "patient";
 
@@ -53,13 +53,14 @@ export default function Login() {
   const [code, setCode] = useState(["", "", "", "", "", ""]);
   const codeRefs = useRef<(HTMLInputElement | null)[]>([]);
   const [fallbackCode, setFallbackCode] = useState<string | null>(null);
+  // Track which role we're currently verifying so we hit the right endpoint
+  const [verifyingRole, setVerifyingRole] = useState<Role>("patient");
 
   const [loading, setLoading] = useState(false);
   const [resendLoading, setResendLoading] = useState(false);
   const [resendSent, setResendSent] = useState(false);
 
   const loginMutation = useLogin();
-  const signupMutation = useSignup();
 
   const cfg = ROLE_CONFIG[role];
   const RoleIcon = cfg.icon;
@@ -99,21 +100,32 @@ export default function Login() {
     );
   };
 
-  const handleProviderSignup = (e: React.FormEvent) => {
+  const handleProviderSignup = async (e: React.FormEvent) => {
     e.preventDefault();
-    signupMutation.mutate(
-      { data: { name, email, password, role: "provider", ...(specialty ? { specialty } : {}) } },
-      {
-        onSuccess: (res) => redirectToApp(res.token, res.user.name, "Account created!"),
-        onError: (err: unknown) => {
-          const message =
-            (err as { data?: { message?: string } })?.data?.message ??
-            (err as { message?: string })?.message ??
-            "Signup failed";
-          toast({ title: "Signup failed", description: message, variant: "destructive" });
-        },
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/auth/signup`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, email, password, role: "provider", ...(specialty ? { specialty } : {}) }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast({ title: "Signup failed", description: data.message ?? "Something went wrong", variant: "destructive" });
+        return;
       }
-    );
+      // Signup now requires email verification before login
+      setPendingEmail(email);
+      setPendingName(name);
+      setCode(["", "", "", "", "", ""]);
+      setFallbackCode(data.fallbackCode ?? null);
+      setVerifyingRole("provider");
+      setScreen("verify");
+    } catch {
+      toast({ title: "Signup failed", description: "Network error. Please try again.", variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handlePatientSignup = async (e: React.FormEvent) => {
@@ -134,6 +146,7 @@ export default function Login() {
       setPendingName(name);
       setCode(["", "", "", "", "", ""]);
       setFallbackCode(data.fallbackCode ?? null);
+      setVerifyingRole("patient");
       setScreen("verify");
     } catch {
       toast({ title: "Signup failed", description: "Network error. Please try again.", variant: "destructive" });
@@ -151,7 +164,11 @@ export default function Login() {
     }
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/api/auth/verify-email`, {
+      // Providers and patients hit different verification endpoints
+      const endpoint = verifyingRole === "provider"
+        ? `${API_BASE}/api/auth/provider/verify-email`
+        : `${API_BASE}/api/auth/verify-email`;
+      const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: pendingEmail, code: fullCode }),
@@ -161,7 +178,8 @@ export default function Login() {
         toast({ title: "Verification failed", description: data.message ?? "Incorrect or expired code.", variant: "destructive" });
         return;
       }
-      setScreen("pending");
+      // Providers: email verified → direct to login. Patients: email verified → awaiting approval.
+      setScreen(verifyingRole === "provider" ? "verified" : "pending");
     } catch {
       toast({ title: "Verification failed", description: "Network error. Please try again.", variant: "destructive" });
     } finally {
@@ -224,6 +242,7 @@ export default function Login() {
     if (nextRole) setRole(nextRole);
     setEmail(""); setPassword(""); setName(""); setSpecialty("");
     setCode(["", "", "", "", "", ""]);
+    setFallbackCode(null);
     setShowPassword(false);
   };
 
@@ -242,13 +261,19 @@ export default function Login() {
           </div>
         </div>
         <h2 className="text-center text-3xl font-bold tracking-tight text-foreground">
-          {screen === "verify" ? "Verify your email" : screen === "pending" ? "Account pending" : mode === "login" ? "Sign in to PulseRPM" : "Create your account"}
+          {screen === "verify" ? "Verify your email"
+            : screen === "pending" ? "Account pending"
+            : screen === "verified" ? "Email verified!"
+            : mode === "login" ? "Sign in to PulseRPM"
+            : "Create your account"}
         </h2>
         <p className="mt-2 text-center text-sm text-muted-foreground">
           {screen === "verify"
-            ? `Enter the 6-digit code sent to ${pendingEmail}`
+            ? `Check your inbox at ${pendingEmail}`
             : screen === "pending"
             ? "Your account is awaiting provider approval"
+            : screen === "verified"
+            ? "Your account is ready — sign in to get started"
             : mode === "login" ? cfg.subtitle : "Join PulseRPM to monitor patient health"}
         </p>
       </motion.div>
@@ -314,11 +339,37 @@ export default function Login() {
                     </button>
                   )}
                   <div>
-                    <button type="button" onClick={() => reset("signup", "patient")} className="text-xs text-muted-foreground hover:text-foreground">
+                    <button type="button" onClick={() => reset("signup", verifyingRole)} className="text-xs text-muted-foreground hover:text-foreground">
                       ← Back to sign up
                     </button>
                   </div>
                 </div>
+              </motion.div>
+            )}
+
+            {/* ── PROVIDER VERIFIED SCREEN ── */}
+            {screen === "verified" && (
+              <motion.div key="verified" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.3 }}
+                className="text-center space-y-5"
+              >
+                <div className="flex items-center justify-center">
+                  <div className="h-16 w-16 rounded-full bg-green-50 border-2 border-green-200 flex items-center justify-center">
+                    <CheckCircle2 className="h-8 w-8 text-green-500" />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <h3 className="font-bold text-lg text-foreground">Email verified!</h3>
+                  <p className="text-sm text-muted-foreground leading-relaxed">
+                    Your email <strong>{pendingEmail}</strong> has been confirmed. Your provider account is now active.
+                  </p>
+                </div>
+                <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 text-left space-y-1">
+                  <p className="text-xs text-blue-700 font-medium">You're all set</p>
+                  <p className="text-xs text-blue-600">Sign in with your email and password to access your dashboard and start monitoring patients.</p>
+                </div>
+                <Button className="w-full h-11 text-base" onClick={() => reset("login", "provider")}>
+                  Sign in to PulseRPM
+                </Button>
               </motion.div>
             )}
 
@@ -446,9 +497,9 @@ export default function Login() {
                   </div>
 
                   <Button type="submit" className="w-full h-11 text-base shadow-md hover:shadow-lg transition-all mt-2"
-                    disabled={loginMutation.isPending || signupMutation.isPending || loading}
+                    disabled={loginMutation.isPending || loading}
                   >
-                    {(loginMutation.isPending || signupMutation.isPending || loading) ? (
+                    {(loginMutation.isPending || loading) ? (
                       <><Loader2 className="mr-2 h-4 w-4 animate-spin" />{mode === "login" ? "Signing in..." : "Creating account..."}</>
                     ) : mode === "login" ? (
                       <><RoleIcon className="mr-2 h-4 w-4" />Sign in as {cfg.label}</>

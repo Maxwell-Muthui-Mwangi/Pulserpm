@@ -9,6 +9,7 @@ import thresholdsRouter from "./thresholds.js";
 import summaryRouter from "./summary.js";
 import deviceRouter from "./device.js";
 import auditRouter from "./audit.js";
+import testEmailRouter from "./testEmail.js";
 
 const router: IRouter = Router();
 
@@ -22,5 +23,6 @@ router.use(thresholdsRouter);
 router.use(summaryRouter);
 router.use(deviceRouter);
 router.use(auditRouter);
+router.use(testEmailRouter);
 
 export default router;
