@@ -1,0 +1,1 @@
+- [Gmail SMTP setup for transactional email](gmail-smtp.md) — auto-detect by domain works, but bad/expired App Passwords fail silently as generic errors; verify via a dev test-email endpoint.
