@@ -12,6 +12,8 @@ export const providersTable = pgTable("providers", {
   emailVerified: boolean("email_verified").notNull().default(false),
   verificationCode: text("verification_code"),
   verificationCodeExpiry: timestamp("verification_code_expiry"),
+  passwordResetCode: text("password_reset_code"),
+  passwordResetCodeExpiry: timestamp("password_reset_code_expiry"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

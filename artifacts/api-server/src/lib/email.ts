@@ -362,6 +362,54 @@ function buildNewPatientPendingHtml(providerName: string, patientId: number, das
 </html>`;
 }
 
+// ── Password reset email ──────────────────────────────────────────────────────
+function buildPasswordResetEmailHtml(name: string, code: string): string {
+  const firstName = name.split(" ")[0];
+  return `<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f9fafb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+  <div style="max-width:480px;margin:40px auto;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
+    <div style="background:linear-gradient(135deg,#0ea5e9 0%,#0284c7 100%);padding:32px;text-align:center;">
+      <span style="font-size:28px;font-weight:800;color:#ffffff;letter-spacing:-0.5px;">Pulse<span style="color:rgba(255,255,255,0.7);">RPM</span></span>
+    </div>
+    <div style="padding:32px;">
+      <div style="text-align:center;margin-bottom:24px;">
+        <div style="display:inline-flex;align-items:center;justify-content:center;width:56px;height:56px;border-radius:50%;background:#eff6ff;border:2px solid #bfdbfe;">
+          <span style="font-size:26px;">🔑</span>
+        </div>
+      </div>
+      <h2 style="margin:0 0 8px;font-size:20px;font-weight:700;color:#0f172a;text-align:center;">Reset your password</h2>
+      <p style="color:#64748b;font-size:14px;line-height:1.7;margin:0 0 28px;text-align:center;">
+        Hi ${firstName}, we received a request to reset your PulseRPM password.<br>
+        Enter the code below — it expires in <strong>15 minutes</strong>.
+      </p>
+      <div style="background:#f1f5f9;border-radius:12px;padding:28px;text-align:center;margin-bottom:28px;">
+        <span style="font-size:40px;font-weight:800;letter-spacing:12px;color:#0ea5e9;font-variant-numeric:tabular-nums;">${code}</span>
+      </div>
+      <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:14px 18px;margin-bottom:8px;">
+        <p style="margin:0;color:#991b1b;font-size:13px;line-height:1.6;">
+          <strong>Didn't request this?</strong> You can safely ignore this email. Your password will not change.
+        </p>
+      </div>
+    </div>
+    <div style="padding:16px 32px;background:#f8fafc;border-top:1px solid #e2e8f0;">
+      <p style="margin:0;color:#cbd5e1;font-size:11px;text-align:center;">PulseRPM · Remote Patient Monitoring · Secure &amp; HIPAA-Compliant</p>
+    </div>
+  </div>
+</body>
+</html>`;
+}
+
+export async function sendPasswordResetEmail(to: string, name: string, code: string): Promise<boolean> {
+  return send(
+    to,
+    "Reset your PulseRPM password",
+    buildPasswordResetEmailHtml(name, code),
+    `password reset code for ${to}: ${code}`,
+  );
+}
+
 export async function sendNewPatientPendingEmail(to: string, providerName: string, patientId: number, dashboardUrl: string): Promise<void> {
   await send(
     to,

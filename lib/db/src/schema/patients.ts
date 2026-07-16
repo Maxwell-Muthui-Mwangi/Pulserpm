@@ -16,6 +16,8 @@ export const patientsTable = pgTable("patients", {
   deviceApiKey: uuid("device_api_key"),
   role: text("role").notNull().default("patient"),
   approvalWelcomePending: boolean("approval_welcome_pending").notNull().default(false),
+  passwordResetCode: text("password_reset_code"),
+  passwordResetCodeExpiry: timestamp("password_reset_code_expiry"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

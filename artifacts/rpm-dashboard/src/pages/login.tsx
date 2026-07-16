@@ -1,5 +1,5 @@
 import { useState, useRef } from "react";
-import { Activity, Stethoscope, User, Loader2, Eye, EyeOff, Mail, CheckCircle2, Clock } from "lucide-react";
+import { Activity, Stethoscope, User, Loader2, Eye, EyeOff, Mail, CheckCircle2, Clock, KeyRound, ShieldCheck } from "lucide-react";
 import { useLogin } from "@workspace/api-client-react";
 import { setAuthToken, getAuthToken } from "@/lib/utils";
 import { queryClient } from "@/lib/query-client";
@@ -11,7 +11,7 @@ import { motion, AnimatePresence } from "framer-motion";
 
 const API_BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
-type Screen = "form" | "verify" | "pending" | "verified";
+type Screen = "form" | "verify" | "pending" | "verified" | "forgot" | "forgot-verify" | "reset";
 type Mode = "login" | "signup";
 type Role = "provider" | "patient";
 
@@ -53,8 +53,15 @@ export default function Login() {
   const [code, setCode] = useState(["", "", "", "", "", ""]);
   const codeRefs = useRef<(HTMLInputElement | null)[]>([]);
   const [fallbackCode, setFallbackCode] = useState<string | null>(null);
-  // Track which role we're currently verifying so we hit the right endpoint
   const [verifyingRole, setVerifyingRole] = useState<Role>("patient");
+
+  // Forgot-password flow state
+  const [forgotEmail, setForgotEmail] = useState("");
+  const [resetCode, setResetCode] = useState<string>(""); // captured after OTP entry
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const [loading, setLoading] = useState(false);
   const [resendLoading, setResendLoading] = useState(false);
@@ -114,7 +121,6 @@ export default function Login() {
         toast({ title: "Signup failed", description: data.message ?? "Something went wrong", variant: "destructive" });
         return;
       }
-      // Signup now requires email verification before login
       setPendingEmail(email);
       setPendingName(name);
       setCode(["", "", "", "", "", ""]);
@@ -164,7 +170,6 @@ export default function Login() {
     }
     setLoading(true);
     try {
-      // Providers and patients hit different verification endpoints
       const endpoint = verifyingRole === "provider"
         ? `${API_BASE}/api/auth/provider/verify-email`
         : `${API_BASE}/api/auth/verify-email`;
@@ -178,7 +183,6 @@ export default function Login() {
         toast({ title: "Verification failed", description: data.message ?? "Incorrect or expired code.", variant: "destructive" });
         return;
       }
-      // Providers: email verified → direct to login. Patients: email verified → awaiting approval.
       setScreen(verifyingRole === "provider" ? "verified" : "pending");
     } catch {
       toast({ title: "Verification failed", description: "Network error. Please try again.", variant: "destructive" });
@@ -214,6 +218,114 @@ export default function Login() {
     }
   };
 
+  // ── Forgot password handlers ────────────────────────────────────────────────
+
+  const handleForgotRequest = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!forgotEmail.trim()) return;
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/auth/forgot-password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: forgotEmail.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast({ title: "Request failed", description: data.message ?? "Something went wrong.", variant: "destructive" });
+        return;
+      }
+      setCode(["", "", "", "", "", ""]);
+      setFallbackCode(data.fallbackCode ?? null);
+      setScreen("forgot-verify");
+      setTimeout(() => codeRefs.current[0]?.focus(), 100);
+    } catch {
+      toast({ title: "Request failed", description: "Network error. Please try again.", variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleForgotVerify = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const fullCode = code.join("");
+    if (fullCode.length !== 6) {
+      toast({ title: "Invalid code", description: "Please enter all 6 digits.", variant: "destructive" });
+      return;
+    }
+    // Store the code and move to the password-reset step — the actual
+    // verification happens server-side when the new password is submitted.
+    setResetCode(fullCode);
+    setNewPassword("");
+    setConfirmPassword("");
+    setScreen("reset");
+  };
+
+  const handleResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newPassword.length < 6) {
+      toast({ title: "Password too short", description: "Password must be at least 6 characters.", variant: "destructive" });
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      toast({ title: "Passwords don't match", description: "Please make sure both passwords are identical.", variant: "destructive" });
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/auth/reset-password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: forgotEmail.trim(), code: resetCode, newPassword }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        // Code may have expired — send them back to re-request
+        toast({ title: "Reset failed", description: data.message ?? "The code may have expired. Please try again.", variant: "destructive" });
+        if (res.status === 400) {
+          setCode(["", "", "", "", "", ""]);
+          setScreen("forgot-verify");
+        }
+        return;
+      }
+      toast({ title: "Password updated!", description: "You can now sign in with your new password." });
+      reset("login");
+    } catch {
+      toast({ title: "Reset failed", description: "Network error. Please try again.", variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResendResetCode = async () => {
+    setResendLoading(true);
+    setResendSent(false);
+    try {
+      const res = await fetch(`${API_BASE}/api/auth/forgot-password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: forgotEmail.trim() }),
+      });
+      if (res.ok) {
+        const d = await res.json();
+        setFallbackCode(d.fallbackCode ?? null);
+        setResendSent(true);
+        setCode(["", "", "", "", "", ""]);
+        codeRefs.current[0]?.focus();
+        setTimeout(() => setResendSent(false), 5000);
+      } else {
+        const d = await res.json();
+        toast({ title: "Failed to resend", description: d.message, variant: "destructive" });
+      }
+    } catch {
+      toast({ title: "Failed to resend", description: "Network error.", variant: "destructive" });
+    } finally {
+      setResendLoading(false);
+    }
+  };
+
+  // ── Code input helpers ──────────────────────────────────────────────────────
+
   const handleCodeInput = (idx: number, val: string) => {
     const digit = val.replace(/\D/g, "").slice(-1);
     const next = [...code];
@@ -244,7 +356,31 @@ export default function Login() {
     setCode(["", "", "", "", "", ""]);
     setFallbackCode(null);
     setShowPassword(false);
+    setForgotEmail(""); setResetCode("");
+    setNewPassword(""); setConfirmPassword("");
+    setShowNewPassword(false); setShowConfirmPassword(false);
   };
+
+  // ── Screen title / subtitle ─────────────────────────────────────────────────
+  const screenTitle = (() => {
+    if (screen === "verify")        return "Verify your email";
+    if (screen === "pending")       return "Account pending";
+    if (screen === "verified")      return "Email verified!";
+    if (screen === "forgot")        return "Forgot password?";
+    if (screen === "forgot-verify") return "Check your email";
+    if (screen === "reset")         return "Set new password";
+    return mode === "login" ? "Sign in to PulseRPM" : "Create your account";
+  })();
+
+  const screenSubtitle = (() => {
+    if (screen === "verify")        return `Check your inbox at ${pendingEmail}`;
+    if (screen === "pending")       return "Your account is awaiting provider approval";
+    if (screen === "verified")      return "Your account is ready — sign in to get started";
+    if (screen === "forgot")        return "Enter your email and we'll send a reset code";
+    if (screen === "forgot-verify") return `We sent a reset code to ${forgotEmail}`;
+    if (screen === "reset")         return "Choose a new password for your account";
+    return mode === "login" ? cfg.subtitle : "Join PulseRPM to monitor patient health";
+  })();
 
   return (
     <div className="min-h-screen bg-background flex flex-col justify-center py-12 sm:px-6 lg:px-8 relative overflow-hidden">
@@ -261,20 +397,10 @@ export default function Login() {
           </div>
         </div>
         <h2 className="text-center text-3xl font-bold tracking-tight text-foreground">
-          {screen === "verify" ? "Verify your email"
-            : screen === "pending" ? "Account pending"
-            : screen === "verified" ? "Email verified!"
-            : mode === "login" ? "Sign in to PulseRPM"
-            : "Create your account"}
+          {screenTitle}
         </h2>
         <p className="mt-2 text-center text-sm text-muted-foreground">
-          {screen === "verify"
-            ? `Check your inbox at ${pendingEmail}`
-            : screen === "pending"
-            ? "Your account is awaiting provider approval"
-            : screen === "verified"
-            ? "Your account is ready — sign in to get started"
-            : mode === "login" ? cfg.subtitle : "Join PulseRPM to monitor patient health"}
+          {screenSubtitle}
         </p>
       </motion.div>
 
@@ -293,7 +419,6 @@ export default function Login() {
                   </div>
                 </div>
 
-                {/* Fallback banner shown when email could not be delivered */}
                 {fallbackCode ? (
                   <div className="mb-5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-center space-y-1">
                     <p className="text-xs font-semibold text-amber-700 uppercase tracking-wide">Email delivery unavailable</p>
@@ -400,6 +525,191 @@ export default function Login() {
               </motion.div>
             )}
 
+            {/* ── FORGOT PASSWORD — ENTER EMAIL ── */}
+            {screen === "forgot" && (
+              <motion.div key="forgot" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.3 }}>
+                <div className="flex items-center justify-center mb-6">
+                  <div className="h-14 w-14 rounded-full bg-primary/10 flex items-center justify-center">
+                    <KeyRound className="h-7 w-7 text-primary" />
+                  </div>
+                </div>
+
+                <form onSubmit={handleForgotRequest} className="space-y-5">
+                  <div>
+                    <Label htmlFor="forgot-email">Email address</Label>
+                    <div className="mt-1.5">
+                      <Input
+                        id="forgot-email"
+                        type="email"
+                        autoComplete="email"
+                        required
+                        value={forgotEmail}
+                        onChange={(e) => setForgotEmail(e.target.value)}
+                        placeholder="you@example.com"
+                        className="w-full"
+                        autoFocus
+                      />
+                    </div>
+                    <p className="mt-1.5 text-xs text-muted-foreground">
+                      Works for both provider and patient accounts.
+                    </p>
+                  </div>
+
+                  <Button type="submit" className="w-full h-11 text-base shadow-md" disabled={loading}>
+                    {loading
+                      ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Sending reset code...</>
+                      : "Send reset code"}
+                  </Button>
+                </form>
+
+                <div className="mt-5 text-center">
+                  <button type="button" onClick={() => reset("login")} className="text-xs text-muted-foreground hover:text-foreground transition-colors">
+                    ← Back to sign in
+                  </button>
+                </div>
+              </motion.div>
+            )}
+
+            {/* ── FORGOT PASSWORD — ENTER CODE ── */}
+            {screen === "forgot-verify" && (
+              <motion.div key="forgot-verify" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.3 }}>
+                <div className="flex items-center justify-center mb-6">
+                  <div className="h-14 w-14 rounded-full bg-primary/10 flex items-center justify-center">
+                    <Mail className="h-7 w-7 text-primary" />
+                  </div>
+                </div>
+
+                {fallbackCode ? (
+                  <div className="mb-5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-center space-y-1">
+                    <p className="text-xs font-semibold text-amber-700 uppercase tracking-wide">Email delivery unavailable</p>
+                    <p className="text-xs text-amber-600">We couldn't send the email. Use this code instead:</p>
+                    <p className="text-3xl font-extrabold tracking-[0.25em] text-amber-800 font-mono py-1">{fallbackCode}</p>
+                    <p className="text-[11px] text-amber-500">Expires in 15 minutes</p>
+                  </div>
+                ) : (
+                  <p className="text-center text-sm text-muted-foreground mb-5">
+                    We sent a 6-digit reset code to <strong>{forgotEmail}</strong>. It expires in 15 minutes.
+                  </p>
+                )}
+
+                <form onSubmit={handleForgotVerify} className="space-y-6">
+                  <div>
+                    <Label className="text-center block text-sm text-muted-foreground mb-3">Reset code</Label>
+                    <div className="flex justify-center gap-2" onPaste={handleCodePaste}>
+                      {code.map((digit, idx) => (
+                        <input
+                          key={idx}
+                          ref={(el) => { codeRefs.current[idx] = el; }}
+                          type="text"
+                          inputMode="numeric"
+                          maxLength={1}
+                          value={digit}
+                          onChange={(e) => handleCodeInput(idx, e.target.value)}
+                          onKeyDown={(e) => handleCodeKeyDown(idx, e)}
+                          className="w-11 h-14 text-center text-xl font-bold rounded-xl border-2 border-border bg-muted/30 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
+                        />
+                      ))}
+                    </div>
+                  </div>
+                  <Button type="submit" className="w-full h-11 text-base shadow-md" disabled={loading || code.join("").length !== 6}>
+                    {loading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Verifying...</> : "Continue"}
+                  </Button>
+                </form>
+
+                <div className="mt-5 text-center space-y-2">
+                  {resendSent ? (
+                    <p className="text-sm text-success font-medium flex items-center justify-center gap-1.5"><CheckCircle2 className="h-4 w-4" /> New code sent!</p>
+                  ) : (
+                    <button type="button" onClick={handleResendResetCode} disabled={resendLoading} className="text-sm text-primary hover:underline font-medium disabled:opacity-50">
+                      {resendLoading ? "Sending..." : "Resend code"}
+                    </button>
+                  )}
+                  <div>
+                    <button type="button" onClick={() => setScreen("forgot")} className="text-xs text-muted-foreground hover:text-foreground">
+                      ← Change email
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
+            {/* ── RESET PASSWORD — SET NEW PASSWORD ── */}
+            {screen === "reset" && (
+              <motion.div key="reset" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.3 }}>
+                <div className="flex items-center justify-center mb-6">
+                  <div className="h-14 w-14 rounded-full bg-green-50 border-2 border-green-200 flex items-center justify-center">
+                    <ShieldCheck className="h-7 w-7 text-green-500" />
+                  </div>
+                </div>
+
+                <div className="mb-5 bg-green-50 border border-green-200 rounded-xl px-4 py-3 text-center">
+                  <p className="text-xs font-medium text-green-700">Code verified ✓</p>
+                  <p className="text-xs text-green-600 mt-0.5">Now choose a new password for <strong>{forgotEmail}</strong></p>
+                </div>
+
+                <form onSubmit={handleResetPassword} className="space-y-4">
+                  <div>
+                    <Label htmlFor="new-password">New password</Label>
+                    <div className="mt-1.5 relative">
+                      <Input
+                        id="new-password"
+                        type={showNewPassword ? "text" : "password"}
+                        autoComplete="new-password"
+                        required
+                        minLength={6}
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                        placeholder="••••••••"
+                        className="w-full pr-10"
+                        autoFocus
+                      />
+                      <button type="button" onClick={() => setShowNewPassword(!showNewPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors" tabIndex={-1}>
+                        {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
+                    <p className="mt-1 text-xs text-muted-foreground">Minimum 6 characters</p>
+                  </div>
+
+                  <div>
+                    <Label htmlFor="confirm-password">Confirm new password</Label>
+                    <div className="mt-1.5 relative">
+                      <Input
+                        id="confirm-password"
+                        type={showConfirmPassword ? "text" : "password"}
+                        autoComplete="new-password"
+                        required
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        placeholder="••••••••"
+                        className={`w-full pr-10 ${confirmPassword && confirmPassword !== newPassword ? "border-destructive focus:ring-destructive/20" : ""}`}
+                      />
+                      <button type="button" onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors" tabIndex={-1}>
+                        {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
+                    {confirmPassword && confirmPassword !== newPassword && (
+                      <p className="mt-1 text-xs text-destructive">Passwords don't match</p>
+                    )}
+                    {confirmPassword && confirmPassword === newPassword && (
+                      <p className="mt-1 text-xs text-green-600 flex items-center gap-1"><CheckCircle2 className="h-3 w-3" /> Passwords match</p>
+                    )}
+                  </div>
+
+                  <Button
+                    type="submit"
+                    className="w-full h-11 text-base shadow-md mt-2"
+                    disabled={loading || newPassword.length < 6 || newPassword !== confirmPassword}
+                  >
+                    {loading
+                      ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Updating password...</>
+                      : "Update password"}
+                  </Button>
+                </form>
+              </motion.div>
+            )}
+
             {/* ── MAIN FORM ── */}
             {screen === "form" && (
               <motion.div key="form" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} transition={{ duration: 0.3 }}>
@@ -481,8 +791,19 @@ export default function Login() {
                   </div>
 
                   <div>
-                    <Label htmlFor="password">Password</Label>
-                    <div className="mt-1.5 relative">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <Label htmlFor="password">Password</Label>
+                      {mode === "login" && (
+                        <button
+                          type="button"
+                          onClick={() => { setForgotEmail(email); setScreen("forgot"); }}
+                          className="text-xs text-primary hover:underline font-medium"
+                        >
+                          Forgot password?
+                        </button>
+                      )}
+                    </div>
+                    <div className="relative">
                       <Input id="password" type={showPassword ? "text" : "password"}
                         autoComplete={mode === "login" ? "current-password" : "new-password"}
                         required minLength={mode === "signup" ? 6 : undefined}

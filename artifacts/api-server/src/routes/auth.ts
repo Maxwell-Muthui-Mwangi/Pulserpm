@@ -3,7 +3,7 @@ import { db, providersTable, patientsTable, pendingPatientsTable } from "@worksp
 import { eq } from "drizzle-orm";
 import { hashPassword, verifyPassword, createToken } from "../lib/auth.js";
 import { requireAuth } from "../middlewares/auth.js";
-import { sendVerificationEmail, sendNewPatientPendingEmail } from "../lib/email.js";
+import { sendVerificationEmail, sendNewPatientPendingEmail, sendPasswordResetEmail } from "../lib/email.js";
 import { logAuditEvent, getClientIp } from "../middlewares/auditLog.js";
 import { authLimiter } from "../middlewares/rateLimit.js";
 
@@ -316,6 +316,112 @@ router.post("/auth/resend-code", authLimiter, async (req, res) => {
   } catch (err) {
     console.error("Resend code error:", err);
     res.status(500).json({ error: "Internal Server Error", message: "Failed to resend code" });
+  }
+});
+
+// ── Forgot password — request reset code ─────────────────────────────────────
+router.post("/auth/forgot-password", authLimiter, async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) {
+      res.status(400).json({ error: "Bad Request", message: "Email is required" });
+      return;
+    }
+
+    const code   = generateCode();
+    const expiry = new Date(Date.now() + 15 * 60 * 1000);
+
+    // Check providers table first, then patients
+    const [provider] = await db.select().from(providersTable).where(eq(providersTable.email, email)).limit(1);
+    if (provider) {
+      await db.update(providersTable)
+        .set({ passwordResetCode: code, passwordResetCodeExpiry: expiry })
+        .where(eq(providersTable.email, email));
+      const emailSent = await sendPasswordResetEmail(email, provider.name, code);
+      const body: Record<string, unknown> = { message: "If an account exists for this email, a reset code has been sent.", emailSent };
+      if (!emailSent) body.fallbackCode = code;
+      logAuditEvent({ actorId: provider.id, actorEmail: email, actorRole: provider.role, action: "auth.password_reset_requested", resourceType: "auth", ipAddress: getClientIp(req), userAgent: req.headers["user-agent"], outcome: "success" });
+      res.json(body);
+      return;
+    }
+
+    const [patient] = await db.select().from(patientsTable).where(eq(patientsTable.email, email)).limit(1);
+    if (patient) {
+      await db.update(patientsTable)
+        .set({ passwordResetCode: code, passwordResetCodeExpiry: expiry })
+        .where(eq(patientsTable.email, email));
+      const emailSent = await sendPasswordResetEmail(email, patient.name, code);
+      const body: Record<string, unknown> = { message: "If an account exists for this email, a reset code has been sent.", emailSent };
+      if (!emailSent) body.fallbackCode = code;
+      logAuditEvent({ actorId: patient.id, actorEmail: email, actorRole: patient.role, action: "auth.password_reset_requested", resourceType: "auth", ipAddress: getClientIp(req), userAgent: req.headers["user-agent"], outcome: "success" });
+      res.json(body);
+      return;
+    }
+
+    // Generic response — don't reveal whether the email exists
+    res.json({ message: "If an account exists for this email, a reset code has been sent.", emailSent: false });
+  } catch (err) {
+    console.error("Forgot password error:", err);
+    res.status(500).json({ error: "Internal Server Error", message: "Failed to process reset request" });
+  }
+});
+
+// ── Reset password — verify code + set new password ───────────────────────────
+router.post("/auth/reset-password", authLimiter, async (req, res) => {
+  try {
+    const { email, code, newPassword } = req.body;
+    if (!email || !code || !newPassword) {
+      res.status(400).json({ error: "Bad Request", message: "Email, code, and new password are required" });
+      return;
+    }
+    if (typeof newPassword !== "string" || newPassword.length < 6) {
+      res.status(400).json({ error: "Bad Request", message: "Password must be at least 6 characters" });
+      return;
+    }
+
+    // Try providers first
+    const [provider] = await db.select().from(providersTable).where(eq(providersTable.email, email)).limit(1);
+    if (provider) {
+      if (provider.passwordResetCode !== String(code).trim()) {
+        res.status(400).json({ error: "Invalid Code", message: "The reset code is incorrect. Please request a new one." });
+        return;
+      }
+      if (!provider.passwordResetCodeExpiry || new Date() > new Date(provider.passwordResetCodeExpiry)) {
+        res.status(400).json({ error: "Code Expired", message: "The reset code has expired. Please request a new one." });
+        return;
+      }
+      await db.update(providersTable)
+        .set({ passwordHash: hashPassword(newPassword), passwordResetCode: null, passwordResetCodeExpiry: null })
+        .where(eq(providersTable.email, email));
+      logAuditEvent({ actorId: provider.id, actorEmail: email, actorRole: provider.role, action: "auth.password_reset", resourceType: "auth", ipAddress: getClientIp(req), userAgent: req.headers["user-agent"], outcome: "success" });
+      res.json({ message: "Password updated successfully. You can now sign in with your new password." });
+      return;
+    }
+
+    // Try patients
+    const [patient] = await db.select().from(patientsTable).where(eq(patientsTable.email, email)).limit(1);
+    if (patient) {
+      if (patient.passwordResetCode !== String(code).trim()) {
+        res.status(400).json({ error: "Invalid Code", message: "The reset code is incorrect. Please request a new one." });
+        return;
+      }
+      if (!patient.passwordResetCodeExpiry || new Date() > new Date(patient.passwordResetCodeExpiry)) {
+        res.status(400).json({ error: "Code Expired", message: "The reset code has expired. Please request a new one." });
+        return;
+      }
+      await db.update(patientsTable)
+        .set({ passwordHash: hashPassword(newPassword), passwordResetCode: null, passwordResetCodeExpiry: null })
+        .where(eq(patientsTable.email, email));
+      logAuditEvent({ actorId: patient.id, actorEmail: email, actorRole: patient.role, action: "auth.password_reset", resourceType: "auth", ipAddress: getClientIp(req), userAgent: req.headers["user-agent"], outcome: "success" });
+      res.json({ message: "Password updated successfully. You can now sign in with your new password." });
+      return;
+    }
+
+    // Email not found — generic error to avoid enumeration
+    res.status(400).json({ error: "Invalid Request", message: "The reset code is incorrect or has expired." });
+  } catch (err) {
+    console.error("Reset password error:", err);
+    res.status(500).json({ error: "Internal Server Error", message: "Failed to reset password" });
   }
 });
 
