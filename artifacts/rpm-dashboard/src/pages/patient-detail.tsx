@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useRoute } from "wouter";
 import { QRCodeSVG } from "qrcode.react";
 import Layout from "@/components/layout";
@@ -47,8 +48,9 @@ export default function PatientDetail() {
   const [deviceApiKey, setDeviceApiKey] = useState<string | null>(null);
   const [deviceLoading, setDeviceLoading] = useState(false);
   const [keyCopied, setKeyCopied] = useState(false);
-  const [expoDevUrl, setExpoDevUrl] = useState<string | null>(null);
   const [printing, setPrinting] = useState(false);
+  const [sseConnected, setSseConnected] = useState(false);
+  const queryClient = useQueryClient();
 
   const { data: patient, isLoading: pLoading } = useGetPatient(patientId, { request: withAuth(), query: { enabled: !!patientId } as any });
   const { data: vitals, isLoading: vLoading } = useGetPatientVitals(patientId, { period, limit: 100 }, { request: withAuth(), query: { enabled: !!patientId && activeTab === "charts" } as any });
@@ -73,13 +75,22 @@ export default function PatientDetail() {
     }
   }, []);
 
+  // SSE subscription — receive real-time vitals push and invalidate queries
+  const patientIdRef = useRef(patientId);
+  patientIdRef.current = patientId;
   useEffect(() => {
-    if (activeTab !== "device" || !isPatient) return;
-    fetch(`${API_BASE}/api/device/expo-dev-url`)
-      .then((r) => r.ok ? r.json() : null)
-      .then((d) => { if (d?.url) setExpoDevUrl(d.url); })
-      .catch(() => {});
-  }, [activeTab, isPatient]);
+    const token = getAuthToken();
+    if (!token || !patientId) return;
+    const url = `${API_BASE}/api/device/events?patientId=${patientId}&token=${encodeURIComponent(token)}`;
+    const es = new EventSource(url);
+    es.addEventListener("connected", () => setSseConnected(true));
+    es.addEventListener("vitals", () => {
+      // Invalidate all queries so vitals, alerts, and patient summary refresh
+      queryClient.invalidateQueries();
+    });
+    es.onerror = () => setSseConnected(false);
+    return () => { es.close(); setSseConnected(false); };
+  }, [patientId, queryClient]);
 
   useEffect(() => {
     if (activeTab === "device" && isPatient) {
@@ -688,6 +699,12 @@ export default function PatientDetail() {
                   <CardHeader className="pb-2 text-center">
                     <CardTitle className="text-xl font-bold flex items-center justify-center gap-2 text-violet-700">
                       <Smartphone className="h-5 w-5" /> Connect PulseRPM App
+                      {sseConnected && (
+                        <span className="flex items-center gap-1 text-xs font-normal text-success bg-success/10 border border-success/20 rounded-full px-2 py-0.5 ml-1">
+                          <span className="h-1.5 w-1.5 rounded-full bg-success animate-pulse" />
+                          Live
+                        </span>
+                      )}
                     </CardTitle>
                     <CardDescription className="text-sm">
                       Scan this QR code with the PulseRPM mobile app to link your account and start syncing automatically.
@@ -696,9 +713,7 @@ export default function PatientDetail() {
                   <CardContent className="flex flex-col items-center gap-5 pt-2">
                     <div className="p-4 bg-white rounded-2xl shadow-lg border border-violet-100 ring-2 ring-violet-200">
                       <QRCodeSVG
-                        value={expoDevUrl
-                          ? `${expoDevUrl}?apiKey=${deviceApiKey}`
-                          : `pulserpm-mobile://connect?apiKey=${deviceApiKey}`}
+                        value={`${window.location.origin}${API_BASE}/api/device/connect?apiKey=${deviceApiKey}`}
                         size={220}
                         level="M"
                         includeMargin={false}

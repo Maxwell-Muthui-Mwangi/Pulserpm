@@ -3,6 +3,8 @@ import { db, patientsTable, vitalsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { requireAuth } from "../middlewares/auth.js";
 import { evaluateVitals, getOrCreateThresholds, processAndSaveAlerts } from "../lib/alertEngine.js";
+import { broadcastVitals, subscribe } from "../lib/deviceSSE.js";
+import { verifyToken } from "../lib/auth.js";
 import crypto from "crypto";
 
 const router = Router();
@@ -191,6 +193,21 @@ router.post("/device/ingest", async (req, res) => {
     const candidates = evaluateVitals(inserted, thresholds);
     const triggeredAlerts = await processAndSaveAlerts(patient.id, candidates);
 
+    // Push real-time vitals event to any subscribed dashboard tabs
+    broadcastVitals(patient.id, {
+      vitalsId: inserted.id,
+      patientId: patient.id,
+      heartRate: inserted.heartRate,
+      systolicBp: inserted.systolicBp,
+      diastolicBp: inserted.diastolicBp,
+      spo2: inserted.spo2,
+      temperature: inserted.temperature,
+      caloriesBurned: inserted.caloriesBurned,
+      source: inserted.source,
+      recordedAt: inserted.recordedAt,
+      alertsTriggered: triggeredAlerts.length,
+    });
+
     res.status(201).json({ 
       success: true, 
       message: "Vitals recorded successfully",
@@ -225,6 +242,100 @@ router.get("/device/expo-dev-url", (_req, res) => {
   const expoDomain = process.env.REPLIT_EXPO_DEV_DOMAIN;
   res.json({
     url: expoDomain ? `exp://${expoDomain}/--/pair` : null,
+  });
+});
+
+// ─── Public connection-config endpoint ──────────────────────────────────────
+// Returns JSON connection config for a given API key; used by the QR code URL.
+// The companion app GETs this URL after scanning the QR, then saves the config.
+router.get("/device/connect", async (req, res) => {
+  try {
+    const apiKey = req.query.apiKey as string | undefined;
+    if (!apiKey || !UUID_REGEX.test(apiKey)) {
+      res.status(400).json({ valid: false, error: "Missing or invalid apiKey" });
+      return;
+    }
+
+    const [patient] = await db
+      .select({ id: patientsTable.id })
+      .from(patientsTable)
+      .where(eq(patientsTable.deviceApiKey, apiKey))
+      .limit(1);
+
+    if (!patient) {
+      res.status(401).json({ valid: false, error: "Invalid API key" });
+      return;
+    }
+
+    const base = `${req.protocol}://${req.get("host")}`;
+    res.json({
+      valid: true,
+      apiKey,
+      patientId: patient.id,
+      ingestUrl: `${base}/api/device/ingest`,
+      statusUrl: `${base}/api/device/status`,
+      version: 1,
+    });
+  } catch (err) {
+    console.error("Device connect error:", err);
+    res.status(500).json({ valid: false, error: "Server error" });
+  }
+});
+
+// ─── SSE endpoint for real-time vitals push ──────────────────────────────────
+// Dashboard tabs subscribe here; EventSource can't set headers so JWT is
+// passed as a query param (?token=...).  Nginx proxy buffering is disabled via
+// the X-Accel-Buffering header.
+router.get("/device/events", async (req, res) => {
+  // Authenticate via query-param token (EventSource cannot set headers)
+  const token = req.query.token as string | undefined;
+  if (!token) {
+    res.status(401).json({ error: "Missing token" });
+    return;
+  }
+
+  const payload = verifyToken(token);
+  if (!payload) {
+    res.status(401).json({ error: "Invalid or expired token" });
+    return;
+  }
+
+  // Determine which patient's events to stream
+  let patientId: number;
+  if (payload.role === "patient") {
+    patientId = payload.id as number;
+  } else {
+    // Provider: requires explicit patientId query param
+    const qp = parseInt(req.query.patientId as string, 10);
+    if (!qp || isNaN(qp)) {
+      res.status(400).json({ error: "Missing patientId for provider SSE" });
+      return;
+    }
+    patientId = qp;
+  }
+
+  // Set SSE headers
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no"); // disable nginx proxy buffering
+  res.flushHeaders();
+
+  // Register subscriber
+  const unsubscribe = subscribe(patientId, res);
+
+  // Send initial connected event
+  res.write(`event: connected\ndata: ${JSON.stringify({ patientId })}\n\n`);
+
+  // Heartbeat every 25 s to keep the connection alive through proxies
+  const heartbeat = setInterval(() => {
+    try { res.write(`: heartbeat\n\n`); } catch { /* client gone */ }
+  }, 25_000);
+
+  // Clean up on client disconnect
+  req.on("close", () => {
+    clearInterval(heartbeat);
+    unsubscribe();
   });
 });
 

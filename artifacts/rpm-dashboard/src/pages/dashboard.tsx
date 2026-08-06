@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { Link } from "wouter";
 import { QRCodeSVG } from "qrcode.react";
@@ -153,17 +154,8 @@ interface SmartWatchCardProps {
 }
 
 function SmartWatchCard({ watch, userId, apiBase }: SmartWatchCardProps) {
-  const [expoDevUrl, setExpoDevUrl] = useState<string | null>(null);
-
-  useEffect(() => {
-    fetch(`${apiBase}/api/device/expo-dev-url`)
-      .then((r) => r.ok ? r.json() : null)
-      .then((d) => { if (d?.url) setExpoDevUrl(d.url); })
-      .catch(() => {});
-  }, [apiBase]);
-
   const syncUrl = watch.apiKey
-    ? (expoDevUrl ? `${expoDevUrl}?apiKey=${watch.apiKey}` : `pulserpm-mobile://connect?apiKey=${watch.apiKey}`)
+    ? `${window.location.origin}${apiBase}/api/device/connect?apiKey=${watch.apiKey}`
     : "";
 
   const steps = [
@@ -285,6 +277,21 @@ export default function Dashboard() {
   );
   const { trend, patientStatus, loading: trendsLoading } = useTrends();
   const watch = useWatchKey(!!isPatient);
+  const queryClient = useQueryClient();
+
+  // Real-time SSE subscription — invalidate queries when the patient's device
+  // pushes new vitals so the dashboard updates without a manual refresh.
+  useEffect(() => {
+    if (!isPatient || !user?.id) return;
+    const token = getAuthToken();
+    if (!token) return;
+    const url = `${API_BASE}/api/device/events?patientId=${user.id}&token=${encodeURIComponent(token)}`;
+    const es = new EventSource(url);
+    es.addEventListener("vitals", () => {
+      queryClient.invalidateQueries();
+    });
+    return () => es.close();
+  }, [isPatient, user?.id, queryClient]);
 
   const isLoading = statsLoading || alertsLoading || (!isPatient && patientsLoading);
 
