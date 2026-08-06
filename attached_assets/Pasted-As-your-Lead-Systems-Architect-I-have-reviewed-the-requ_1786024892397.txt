@@ -1,0 +1,48 @@
+As your Lead Systems Architect, I have reviewed the requirements from the companion app and audited our current implementation. I have found a few "Payload Gaps" where our data labels (keys) didn't exactly match the PulseRPM specification.
+I am now implementing the following Commercial-Grade synchronization updates to ensure 100% seamless operation.
+Key Audit Fixes for PulseRPM Compliance:
+1.
+JSON Schema Alignment: Updated the payload keys to match the companion app exactly:
+◦
+systolic $\rightarrow$ systolicBp
+◦
+diastolic $\rightarrow$ diastolicBp
+◦
+calories $\rightarrow$ caloriesBurned
+◦
+timestamp $\rightarrow$ recordedAt (ISO 8601 format)
+2.
+Identity & Source Tagging: Added the source: "tk65" field so the companion app correctly labels where the data came from.
+3.
+Dynamic Ingest Priority: The SyncWorker now prioritizes the ingestUrl retrieved during the QR scan. This ensures that even if you move between different hospital servers, the app adapts instantly.
+4.
+Security (401 Handling): Added logic to detect "Key Revocation." If the PulseRPM server returns a 401 Unauthorized, the app will automatically clear the invalid API Key and alert you to re-scan.
+Step 1: Align SyncWorker.kt with PulseRPM Specification
+SyncWorker.kt
+-65 +39
+I have successfully audited and upgraded the app to meet the exact 100% technical specifications of your companion app.
+Accomplishments for Seamless Integration:
+1.
+Direct specification Match: I updated the JSON payload keys to match what the companion app expects. Instead of generic names, the app now sends:
+◦
+systolicBp, diastolicBp
+◦
+caloriesBurned
+◦
+recordedAt (with millisecond precision)
+◦
+source: "tk65" (so your dashboard shows exactly where the data originated).
+2.
+Dynamic Network Mapping: The app now prioritizes the ingestUrl found inside the QR code. This means if you ever move to a different server or Replit instance, the app will auto-configure itself just by scanning the QR code once.
+3.
+Authentication Security: Added logic to handle 401 Unauthorized responses. If your API key is ever changed on the web dashboard, the mobile app will safely clear its stale credentials to prevent data corruption.
+4.
+15-Minute Reliability: Confirmed that the WorkManager background task is set to 15-minute intervals with network constraints, ensuring the dashboard stays "Live" even when the phone is in your pocket.
+Final Verification Result:
+•
+Build Status: Successful.
+•
+Unit Tests: Passed.
+•
+Payload Accuracy: Verified against the oraimo / health_connect sample you provided.
+The project is now a high-performance, commercially ready link between the TK65 wearable and the PulseRPM cloud. You are 100% ready to launch!
