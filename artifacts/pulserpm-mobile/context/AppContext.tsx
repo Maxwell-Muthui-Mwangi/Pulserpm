@@ -2,7 +2,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { AppState as RNAppState, AppStateStatus, Platform } from "react-native";
 
-import { STORAGE_KEY_LAST_HC_SYNC, registerBackgroundSync } from "@/services/BackgroundSync";
+import { STORAGE_KEY_LAST_HC_SYNC, isBackgroundSyncRegistered, registerBackgroundSync } from "@/services/BackgroundSync";
 
 /**
  * Build-time fallback domain for local dev / Expo Go.
@@ -317,11 +317,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     syncFromHealthConnect();
   }, [apiKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // On foreground wake: retry failed uploads + pull fresh HC data
+  // On foreground wake: re-register background sync if the OS killed it,
+  // retry failed uploads, and pull fresh HC data.
   useEffect(() => {
     if (!apiKey) return;
     const sub = RNAppState.addEventListener("change", (next: AppStateStatus) => {
       if (appState.current.match(/inactive|background/) && next === "active") {
+        // Re-register the background task if the OS terminated it while suspended.
+        // isBackgroundSyncRegistered is a no-op on iOS so this is safe cross-platform.
+        isBackgroundSyncRegistered().then((registered) => {
+          if (!registered) {
+            registerBackgroundSync(15);
+          }
+        });
         retryPending();
         syncFromHealthConnect();
       }
