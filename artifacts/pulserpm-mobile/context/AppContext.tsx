@@ -154,9 +154,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   async function postReading(
     key: string,
     reading: VitalReading
-  ): Promise<{ ok: boolean; alertsTriggered?: number }> {
+  ): Promise<{ ok: boolean; alertsTriggered?: number; notPaired?: boolean }> {
     const url = resolveIngestUrl();
-    if (!url) return { ok: false };
+    if (!url) {
+      // No ingest URL stored — device hasn't been paired via QR scan yet.
+      // Return a distinct signal so the UI can prompt re-pairing instead of
+      // showing a generic network error.
+      return { ok: false, notPaired: true };
+    }
 
     const payload: Record<string, number | string> = {
       source: reading.source ?? "mobile",
@@ -207,7 +212,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setSyncStatus("syncing");
       const now = new Date().toISOString();
       try {
-        const { ok, alertsTriggered } = await postReading(apiKey, reading);
+        const { ok, alertsTriggered, notPaired } = await postReading(apiKey, reading);
+        if (notPaired) {
+          // No ingest URL — QR code hasn't been scanned yet. Don't queue as pending
+          // (retrying without a URL will never succeed). Surface error so the UI
+          // can prompt the user to open the app and re-scan their QR code.
+          setSyncStatus("error");
+          setTimeout(() => setSyncStatus("idle"), 3000);
+          return false;
+        }
         const log: SyncLog = {
           id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
           timestamp: now,

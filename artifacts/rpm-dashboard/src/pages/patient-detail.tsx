@@ -60,6 +60,8 @@ export default function PatientDetail() {
 
   const [deviceApiKey, setDeviceApiKey] = useState<string | null>(null);
   const [deviceLoading, setDeviceLoading] = useState(false);
+  // Starts true when the tab loads so we never flash "No QR code yet" while fetching
+  const [keyLoading, setKeyLoading] = useState(defaultTab === "device");
   const [keyCopied, setKeyCopied] = useState(false);
   const [printing, setPrinting] = useState(false);
   const [sseConnected, setSseConnected] = useState(false);
@@ -82,6 +84,7 @@ export default function PatientDetail() {
   const resAlert = useResolveAlert();
 
   const fetchDeviceKey = useCallback(async () => {
+    setKeyLoading(true);
     try {
       const res = await fetch(`${API_BASE}/api/device/key`, {
         headers: { Authorization: `Bearer ${getAuthToken()}` }
@@ -91,7 +94,9 @@ export default function PatientDetail() {
         setDeviceApiKey(data.apiKey || null);
       }
     } catch {
-      // ignore
+      // ignore — key stays null, patient can generate one
+    } finally {
+      setKeyLoading(false);
     }
   }, []);
 
@@ -823,7 +828,42 @@ export default function PatientDetail() {
         {/* Connect Device Tab (patients only) */}
         {activeTab === "device" && isPatient && (
           <div className="space-y-6 max-w-md mx-auto">
-            {deviceApiKey ? (
+
+            {/* ── Offline reconnection alert ─────────────────────────────────── */}
+            {(() => {
+              const syncedAt = (patient as any)?.latestVitals?.recordedAt
+                ? new Date((patient as any).latestVitals.recordedAt)
+                : null;
+              const msSince = syncedAt ? now.getTime() - syncedAt.getTime() : null;
+              if (!msSince || msSince < STALE_VITALS_MS) return null;
+              return (
+                <Card className="border-amber-300 bg-amber-50 shadow-sm">
+                  <CardContent className="p-4 flex gap-3 items-start">
+                    <WifiOff className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-semibold text-amber-900 text-sm">
+                        Device offline — last synced {formatDistanceToNow(syncedAt!, { addSuffix: true })}
+                      </p>
+                      <p className="text-xs text-amber-800 mt-1 leading-relaxed">
+                        To resume syncing, open the <strong>PulseRPM</strong> app on your phone and
+                        re-scan the QR code below. This updates the app to point at this server.
+                      </p>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })()}
+
+            {/* ── Loading state ──────────────────────────────────────────────── */}
+            {keyLoading ? (
+              <Card className="border-border/50 shadow-sm">
+                <CardContent className="py-20 flex flex-col items-center gap-3">
+                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                  <p className="text-sm text-muted-foreground">Loading your connection details…</p>
+                </CardContent>
+              </Card>
+
+            ) : deviceApiKey ? (
               <>
                 {/* Single QR Code */}
                 <Card className="border-violet-200 bg-gradient-to-br from-violet-50/60 to-transparent shadow-md">
@@ -844,7 +884,7 @@ export default function PatientDetail() {
                   <CardContent className="flex flex-col items-center gap-5 pt-2">
                     <div className="p-4 bg-white rounded-2xl shadow-lg border border-violet-100 ring-2 ring-violet-200">
                       <QRCodeSVG
-                        value={`${window.location.origin}${API_BASE}/api/device/connect?apiKey=${deviceApiKey}`}
+                        value={`${window.location.origin}/api/device/connect?apiKey=${deviceApiKey}`}
                         size={220}
                         level="M"
                         includeMargin={false}
@@ -856,6 +896,21 @@ export default function PatientDetail() {
                       <li>Tap <strong>"Scan QR Code"</strong> on the connect screen</li>
                       <li>Point at this QR — the app links and syncs instantly</li>
                     </ol>
+                  </CardContent>
+                </Card>
+
+                {/* Server connection info — helps patient verify their app is hitting the right URL */}
+                <Card className="border-border/50 shadow-sm bg-muted/30">
+                  <CardContent className="p-4 space-y-1.5">
+                    <p className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+                      <Wifi className="h-3.5 w-3.5" /> Your device should be sending data to:
+                    </p>
+                    <code className="text-xs font-mono bg-background border border-border/50 rounded px-2.5 py-1.5 block break-all text-foreground">
+                      {window.location.origin}/api/device/ingest
+                    </code>
+                    <p className="text-xs text-muted-foreground">
+                      If your app shows a different URL, re-scan the QR code above — it will update automatically.
+                    </p>
                   </CardContent>
                 </Card>
 
