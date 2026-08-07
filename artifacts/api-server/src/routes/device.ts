@@ -108,12 +108,30 @@ router.get("/device/status", async (req, res) => {
 //   Apple Health: { HeartRate, BloodPressureSystolic, BloodPressureDiastolic, OxygenSaturation, BodyTemperature, ActiveEnergyBurned, StartDate }
 //   Fitbit:       { heart: { restingHeartRate }, spo2: { value }, tempSkin: { value }, calories: { value } }
 //   Google Fit:   { heartRate: { bpm }, bloodPressure: { systolic, diastolic }, oxygen: { saturation }, temperature: { celsius } }
-router.post("/device/ingest", async (req, res) => {
+// Shared helper – resolves an API key from any of the auth styles companion
+// apps use: X-Device-Api-Key header, Authorization: Bearer <key>, or ?apiKey=
+function resolveApiKey(req: import("express").Request): string | null {
+  const headerKey = req.headers["x-device-api-key"] as string | undefined;
+  if (headerKey) return headerKey;
+
+  const auth = req.headers["authorization"] as string | undefined;
+  if (auth?.toLowerCase().startsWith("bearer ")) {
+    const candidate = auth.slice(7).trim();
+    if (UUID_REGEX.test(candidate)) return candidate;
+  }
+
+  const queryKey = req.query.apiKey as string | undefined;
+  if (queryKey) return queryKey;
+
+  return null;
+}
+
+async function handleIngest(req: import("express").Request, res: import("express").Response) {
   try {
-    const apiKey = req.headers["x-device-api-key"] as string || req.query.apiKey as string;
+    const apiKey = resolveApiKey(req);
 
     if (!apiKey) {
-      res.status(401).json({ error: "Unauthorized", message: "Missing X-Device-Api-Key header or apiKey query param" });
+      res.status(401).json({ error: "Unauthorized", message: "Missing X-Device-Api-Key header, Authorization: Bearer <key>, or apiKey query param" });
       return;
     }
 
@@ -165,8 +183,8 @@ router.post("/device/ingest", async (req, res) => {
 
     const recordedAt = body.recordedAt || body.StartDate || body.startDate || body.timestamp || new Date().toISOString();
 
-    // Accept source from body (e.g. "oraimo"), fall back to "wearable"
-    const ALLOWED_SOURCES = ["oraimo", "healthwear", "wearable", "manual", "apple_health", "google_fit", "fitbit", "tk65", "health_connect", "mobile"];
+    // Accept source from body (e.g. "oraimo", "healthwatch"), fall back to "wearable"
+    const ALLOWED_SOURCES = ["oraimo", "healthwear", "healthwatch", "wearable", "manual", "apple_health", "google_fit", "fitbit", "tk65", "health_connect", "mobile"];
     const source = (typeof body.source === "string" && ALLOWED_SOURCES.includes(body.source))
       ? body.source
       : "wearable";
@@ -220,7 +238,12 @@ router.post("/device/ingest", async (req, res) => {
     console.error("Device ingest error:", err);
     res.status(500).json({ error: "Internal Server Error", message: "Failed to ingest vitals" });
   }
-});
+}
+
+// Primary ingest route + path aliases for companion app compatibility
+router.post("/device/ingest", handleIngest);
+router.post("/device/sync",   handleIngest);  // alias: HealthWatch may use /sync
+router.post("/ingest",        handleIngest);  // alias: short path
 
 function normalizeField(body: Record<string, unknown>, keys: string[], ...fallbacks: (number | undefined | null)[]): number | null {
   for (const key of keys) {
@@ -235,8 +258,77 @@ function normalizeField(body: Record<string, unknown>, keys: string[], ...fallba
   return null;
 }
 
-// Expose the current Expo Go development URL so the dashboard can generate
-// a scannable QR code that opens directly in Expo Go.
+// ─── Shared identity response builder ────────────────────────────────────────
+async function buildIdentityResponse(
+  apiKey: string,
+  req: import("express").Request,
+  res: import("express").Response
+): Promise<void> {
+  if (!UUID_REGEX.test(apiKey)) {
+    res.status(401).json({ valid: false, error: "Missing or invalid API key" });
+    return;
+  }
+  const [patient] = await db
+    .select({ id: patientsTable.id, name: patientsTable.name, email: patientsTable.email })
+    .from(patientsTable)
+    .where(eq(patientsTable.deviceApiKey, apiKey))
+    .limit(1);
+  if (!patient) {
+    res.status(401).json({ valid: false, error: "API key not recognised" });
+    return;
+  }
+  const base = `${req.protocol}://${req.get("host")}`;
+  const ingestUrl = `${base}/api/device/ingest`;
+  const eventsUrl = `${base}/api/device/events`;
+  res.json({
+    // Identity — all field names HealthWatch may read
+    valid: true,
+    patientId: patient.id,
+    patient_id: patient.id,
+    id: patient.id,
+    patientName: patient.name,
+    name: patient.name,
+    email: patient.email,
+    accountEmail: patient.email,
+
+    // Ingest URL aliases
+    ingestUrl,
+    syncUrl: ingestUrl,
+    endpoint: ingestUrl,
+
+    // SSE stream URL aliases
+    eventsUrl,
+    streamUrl: eventsUrl,
+    sseUrl: eventsUrl,
+
+    // Base server
+    serverUrl: base,
+    baseUrl: base,
+    pingUrl: `${base}/api/device/ping`,
+  });
+}
+
+// ─── /device/config — primary identity-resolution endpoint ───────────────────
+// HealthWatch calls GET /api/device/config?apiKey=<key> (or X-Device-Api-Key
+// header) after QR scan or manual entry to resolve patient ID + email and
+// obtain all ingest / SSE URLs in one shot.
+router.get("/device/config", async (req, res) => {
+  const apiKey = resolveApiKey(req);
+  if (!apiKey) { res.status(401).json({ valid: false, error: "Missing API key" }); return; }
+  await buildIdentityResponse(apiKey, req, res);
+});
+
+// ─── /device/ping — lightweight liveness + identity check ────────────────────
+// Used by HealthWatch's "Linked to Patient ID" indicator.
+router.get("/device/ping", async (req, res) => {
+  const apiKey = resolveApiKey(req);
+  if (!apiKey) { res.status(401).json({ valid: false, error: "Missing API key" }); return; }
+  await buildIdentityResponse(apiKey, req, res);
+});
+
+// ─── Ingest route aliases ─────────────────────────────────────────────────────
+// Some companion apps use a shorter path. Forward to the same handler.
+// ─── Expose current Expo Go dev URL ──────────────────────────────────────────
 // REPLIT_EXPO_DEV_DOMAIN is injected by the Expo workflow environment.
 router.get("/device/expo-dev-url", (_req, res) => {
   const expoDomain = process.env.REPLIT_EXPO_DEV_DOMAIN;
@@ -268,12 +360,33 @@ router.get("/device/connect", async (req, res) => {
     }
 
     const base = `${req.protocol}://${req.get("host")}`;
+    const ingestUrl = `${base}/api/device/ingest`;
+    const eventsUrl = `${base}/api/device/events`;
+
+    // Return multiple field-name aliases so different companion apps can find
+    // what they need regardless of which key name they look for.
     res.json({
       valid: true,
       apiKey,
       patientId: patient.id,
-      ingestUrl: `${base}/api/device/ingest`,
+      patientName: patient.name,
+
+      // Ingest URL — all aliases point to the same endpoint
+      ingestUrl,
+      syncUrl: ingestUrl,
+      endpoint: ingestUrl,
+      serverUrl: base,
+      baseUrl: base,
+
+      // SSE stream URL — companion apps can subscribe for real-time push-back
+      eventsUrl,
+      streamUrl: eventsUrl,
+      sseUrl: eventsUrl,
+
+      // Convenience status endpoint
       statusUrl: `${base}/api/device/status`,
+      pingUrl: `${base}/api/device/ping`,
+
       version: 1,
     });
   } catch (err) {
@@ -287,14 +400,51 @@ router.get("/device/connect", async (req, res) => {
 // passed as a query param (?token=...).  Nginx proxy buffering is disabled via
 // the X-Accel-Buffering header.
 //
-// Routing:
-//   Patient JWT  → subscribes to their own patient-specific events
-//   Provider JWT → subscribes to the global provider channel (all patients)
+// Auth modes:
+//   ?token=<jwt>    → Patient JWT subscribes to own channel
+//                     Provider JWT subscribes to global (all-patients) channel
+//   ?apiKey=<uuid>  → Companion app (e.g. HealthWatch) subscribes to patient channel
+//                     identified by the device API key — no JWT required
 router.get("/device/events", async (req, res) => {
-  // Authenticate via query-param token (EventSource cannot set headers)
-  const token = req.query.token as string | undefined;
+  const token  = req.query.token  as string | undefined;
+  const apiKey = req.query.apiKey as string | undefined;
+
+  // ── API-key auth (companion apps) ──────────────────────────────────────────
+  if (apiKey && !token) {
+    if (!UUID_REGEX.test(apiKey)) {
+      res.status(401).json({ error: "Invalid API key format" });
+      return;
+    }
+    const [patient] = await db
+      .select({ id: patientsTable.id })
+      .from(patientsTable)
+      .where(eq(patientsTable.deviceApiKey, apiKey))
+      .limit(1);
+    if (!patient) {
+      res.status(401).json({ error: "API key not recognised" });
+      return;
+    }
+
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+    res.setHeader("X-Accel-Buffering", "no");
+    res.flushHeaders();
+
+    const unsubscribe = subscribePatient(patient.id, res);
+    res.write(`event: connected\ndata: ${JSON.stringify({ patientId: patient.id, auth: "apiKey" })}\n\n`);
+
+    const heartbeat = setInterval(() => {
+      try { res.write(`: heartbeat\n\n`); } catch { /* client gone */ }
+    }, 25_000);
+
+    req.on("close", () => { clearInterval(heartbeat); unsubscribe(); });
+    return;
+  }
+
+  // ── JWT auth (dashboard) ────────────────────────────────────────────────────
   if (!token) {
-    res.status(401).json({ error: "Missing token" });
+    res.status(401).json({ error: "Missing token or apiKey" });
     return;
   }
 
