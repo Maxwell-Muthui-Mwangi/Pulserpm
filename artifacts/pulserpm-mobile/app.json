@@ -53,7 +53,13 @@
       ],
       "expo-font",
       "expo-web-browser",
-      "react-native-health-connect"
+      "react-native-health-connect",
+      [
+        "react-native-health",
+        {
+          "healthSharePermission": "PulseRPM reads heart rate, oxygen saturation, blood pressure, and temperature from Apple Health to monitor your vitals and share them with your care team."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

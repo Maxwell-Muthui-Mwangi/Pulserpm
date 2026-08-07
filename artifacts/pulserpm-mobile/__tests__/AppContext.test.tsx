@@ -9,7 +9,7 @@
 
 import React from "react";
 import { act, render, waitFor } from "@testing-library/react-native";
-import { AppState } from "react-native";
+import { AppState, AppStateStatus } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 // ---------------------------------------------------------------------------
@@ -71,7 +71,7 @@ import { AppProvider } from "../context/AppContext";
 
 const mockAsyncStorage = AsyncStorage as jest.Mocked<typeof AsyncStorage>;
 
-type AppStateHandler = (nextState: string) => void;
+type AppStateHandler = (nextState: AppStateStatus) => void;
 
 /** Renders AppProvider with a paired device (API key in storage). */
 function renderWithPairedDevice() {

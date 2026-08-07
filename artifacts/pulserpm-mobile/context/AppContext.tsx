@@ -305,7 +305,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (!perms.heartRate && !perms.spo2 && !perms.bloodPressure && !perms.temperature) return;
         readLatestVitals = rlv;
         hasAnyReading = har;
-        source = "healthkit";
+        source = "apple_health";
       } else {
         return;
       }

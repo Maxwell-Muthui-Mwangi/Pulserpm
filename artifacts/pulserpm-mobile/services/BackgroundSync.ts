@@ -30,7 +30,7 @@ export const STORAGE_KEY_BG_SYNC_ENABLED = "pulserpm_bg_sync_enabled";
  * so background syncs always reach the same environment as the foreground app.
  * Falls back to the build-time EXPO_PUBLIC_DOMAIN if no URL has been stored yet.
  */
-async function postVitals(apiKey: string, vitals: Record<string, number | string>): Promise<boolean> {
+async function postVitals(apiKey: string, source: string, vitals: Record<string, number | string>): Promise<boolean> {
   const storedUrl = await AsyncStorage.getItem(STORAGE_KEY_INGEST_URL);
   const fallbackDomain = process.env.EXPO_PUBLIC_DOMAIN ?? "";
   const ingestUrl = storedUrl || (fallbackDomain ? `https://${fallbackDomain}/api/device/ingest` : "");
@@ -43,7 +43,7 @@ async function postVitals(apiKey: string, vitals: Record<string, number | string
         "Content-Type": "application/json",
         "X-Device-Api-Key": apiKey,
       },
-      body: JSON.stringify({ source: "health_connect", ...vitals }),
+      body: JSON.stringify({ source, ...vitals }),
     });
     return res.ok;
   } catch {
@@ -60,6 +60,7 @@ TaskManager.defineTask(HC_SYNC_TASK, async () => {
     // Branch by platform: Android uses Health Connect, iOS uses HealthKit.
     let readLatestVitals: (hoursBack: number) => Promise<Record<string, number | undefined>>;
     let hasAnyReading: (v: Record<string, number | undefined>) => boolean;
+    let ingestSource: string;
 
     if (Platform.OS === "android") {
       const hc = await import("./HealthConnectService");
@@ -71,6 +72,7 @@ TaskManager.defineTask(HC_SYNC_TASK, async () => {
       }
       readLatestVitals = hc.readLatestVitals as typeof readLatestVitals;
       hasAnyReading = hc.hasAnyReading as typeof hasAnyReading;
+      ingestSource = "health_connect";
     } else if (Platform.OS === "ios") {
       const hk = await import("./HealthKitService");
       const status = await hk.getHKStatus();
@@ -81,6 +83,7 @@ TaskManager.defineTask(HC_SYNC_TASK, async () => {
       }
       readLatestVitals = hk.readLatestVitals as typeof readLatestVitals;
       hasAnyReading = hk.hasAnyReading as typeof hasAnyReading;
+      ingestSource = "apple_health";
     } else {
       return BackgroundFetch.BackgroundFetchResult.NoData;
     }
@@ -102,7 +105,7 @@ TaskManager.defineTask(HC_SYNC_TASK, async () => {
     if (vitals.systolicBp != null) payload.systolicBp = vitals.systolicBp;
     if (vitals.diastolicBp != null) payload.diastolicBp = vitals.diastolicBp;
 
-    const ok = await postVitals(apiKey, payload);
+    const ok = await postVitals(apiKey, ingestSource, payload);
     if (ok) {
       await AsyncStorage.setItem(STORAGE_KEY_LAST_HC_SYNC, new Date().toISOString());
       return BackgroundFetch.BackgroundFetchResult.NewData;
