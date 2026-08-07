@@ -7,6 +7,7 @@
     "dev": "NODE_ENV=development tsx ./src/index.ts",
     "build": "tsx ./build.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "tsx --test src/lib/vitalsbus.test.ts",
     "smoke-test-sse": "tsx scripts/smoke-test-sse.ts"
   },
   "dependencies": {
@@ -24,6 +25,7 @@
     "express": "^5",
     "express-rate-limit": "^8.3.2",
     "helmet": "^8.1.0",
+    "ioredis": "^6.0.0",
     "jsonwebtoken": "^9.0.3",
     "node-cron": "^4.2.1",
     "nodemailer": "^8.0.3"
