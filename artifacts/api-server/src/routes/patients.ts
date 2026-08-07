@@ -8,6 +8,41 @@ import { sendPatientApprovedEmail } from "../lib/email.js";
 
 const router = Router();
 
+// Returns the latest non-null value for each vital field independently.
+// One partial sync (e.g. only heart rate) will never blank out BP / SpO2 /
+// temperature that arrived in an earlier sync from a different device cycle.
+async function getLatestVitalsPerField(patientId: number): Promise<{
+  heartRate: number | null;
+  systolicBp: number | null;
+  diastolicBp: number | null;
+  spo2: number | null;
+  temperature: number | null;
+  caloriesBurned: number | null;
+  recordedAt: Date | null;
+} | null> {
+  const result = await db.execute(sql`
+    SELECT
+      (SELECT heart_rate      FROM vitals WHERE patient_id = ${patientId} AND heart_rate      IS NOT NULL ORDER BY recorded_at DESC LIMIT 1) AS heart_rate,
+      (SELECT systolic_bp     FROM vitals WHERE patient_id = ${patientId} AND systolic_bp     IS NOT NULL ORDER BY recorded_at DESC LIMIT 1) AS systolic_bp,
+      (SELECT diastolic_bp    FROM vitals WHERE patient_id = ${patientId} AND diastolic_bp    IS NOT NULL ORDER BY recorded_at DESC LIMIT 1) AS diastolic_bp,
+      (SELECT spo2            FROM vitals WHERE patient_id = ${patientId} AND spo2            IS NOT NULL ORDER BY recorded_at DESC LIMIT 1) AS spo2,
+      (SELECT temperature     FROM vitals WHERE patient_id = ${patientId} AND temperature     IS NOT NULL ORDER BY recorded_at DESC LIMIT 1) AS temperature,
+      (SELECT calories_burned FROM vitals WHERE patient_id = ${patientId} AND calories_burned IS NOT NULL ORDER BY recorded_at DESC LIMIT 1) AS calories_burned,
+      (SELECT recorded_at     FROM vitals WHERE patient_id = ${patientId}                                 ORDER BY recorded_at DESC LIMIT 1) AS recorded_at
+  `);
+  const row = result.rows[0] as Record<string, unknown> | undefined;
+  if (!row || row.recorded_at == null) return null;
+  return {
+    heartRate:     row.heart_rate      as number | null,
+    systolicBp:    row.systolic_bp     as number | null,
+    diastolicBp:   row.diastolic_bp    as number | null,
+    spo2:          row.spo2            as number | null,
+    temperature:   row.temperature     as number | null,
+    caloriesBurned:row.calories_burned as number | null,
+    recordedAt:    row.recorded_at     as Date,
+  };
+}
+
 function calcAge(dob: string | null): number | undefined {
   if (!dob) return undefined;
   const birth = new Date(dob);
@@ -130,12 +165,7 @@ router.get("/patients", requireAuth, async (req, res) => {
 
     const results = await Promise.all(
       patients.map(async (p) => {
-        const [latestVitals] = await db
-          .select()
-          .from(vitalsTable)
-          .where(eq(vitalsTable.patientId, p.id))
-          .orderBy(desc(vitalsTable.recordedAt))
-          .limit(1);
+        const latestVitals = await getLatestVitalsPerField(p.id);
 
         const [alertCount] = await db
           .select({ count: count() })
@@ -245,12 +275,7 @@ router.get("/patients/:patientId", requireAuth, async (req, res) => {
       return;
     }
 
-    const [latestVitals] = await db
-      .select()
-      .from(vitalsTable)
-      .where(eq(vitalsTable.patientId, patientId))
-      .orderBy(desc(vitalsTable.recordedAt))
-      .limit(1);
+    const latestVitals = await getLatestVitalsPerField(patientId);
 
     const [alertCount] = await db
       .select({ count: count() })
