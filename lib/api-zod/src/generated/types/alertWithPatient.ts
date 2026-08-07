@@ -13,10 +13,13 @@ export interface AlertWithPatient {
   patientId: number;
   patientName: string;
   alertType: string;
+  vitalType?: string;
   severity: AlertWithPatientSeverity;
   status: AlertWithPatientStatus;
   value: number;
   threshold: number;
   message: string;
+  /** @nullable */
+  triggeredAt?: Date | null;
   createdAt: Date;
 }

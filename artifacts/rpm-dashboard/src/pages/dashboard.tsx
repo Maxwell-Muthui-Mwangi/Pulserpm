@@ -491,7 +491,7 @@ export default function Dashboard() {
                       <div key={alert.id} className="flex items-start space-x-4 p-4 rounded-xl border border-border/50 hover:border-border hover:shadow-sm transition-all bg-card">
                         <div className={`mt-1.5 h-2 w-2 rounded-full shrink-0 ${alert.severity === "critical" ? "bg-destructive animate-pulse" : "bg-warning"}`} />
                         <div className="flex-1">
-                          <p className="font-medium text-foreground">{alert.vitalType.replace("_", " ")}</p>
+                          <p className="font-medium text-foreground">{(alert.vitalType ?? "").replace("_", " ")}</p>
                           <p className="text-sm text-muted-foreground mt-0.5">{alert.message}</p>
                           <div className="flex items-center space-x-2 mt-2">
                             <Badge variant={alert.severity === "critical" ? "critical" : "amber"} className="text-[10px] px-1.5 py-0">
@@ -880,7 +880,7 @@ export default function Dashboard() {
                         <div>
                           <p className="font-medium text-sm text-foreground">
                             {alert.patientName}
-                            <span className="text-muted-foreground font-normal ml-1.5">· {alert.vitalType.replace("_", " ")}</span>
+                            <span className="text-muted-foreground font-normal ml-1.5">· {(alert.vitalType ?? "").replace("_", " ")}</span>
                           </p>
                           <p className="text-xs text-muted-foreground mt-0.5">{alert.message}</p>
                           <div className="flex items-center gap-2 mt-1.5">

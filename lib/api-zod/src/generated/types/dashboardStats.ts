@@ -5,14 +5,21 @@
  * Remote Patient Monitoring API + Academic Assignment Scheduler API
  * OpenAPI spec version: 1.0.0
  */
+import type { DashboardStatsOverallStatus } from "./dashboardStatsOverallStatus";
 
 export interface DashboardStats {
-  totalPatients: number;
+  isPatientView?: boolean;
+  totalPatients?: number;
   activeAlerts: number;
-  criticalAlerts: number;
+  criticalAlerts?: number;
+  criticalPatients?: number;
+  warningPatients?: number;
+  normalPatients?: number;
+  todaysReadings?: number;
+  overallStatus?: DashboardStatsOverallStatus;
   /** @nullable */
   avgHeartRate?: number | null;
   /** @nullable */
   avgSpo2?: number | null;
-  readingsToday: number;
+  readingsToday?: number;
 }

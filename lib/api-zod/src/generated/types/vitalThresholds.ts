@@ -10,9 +10,20 @@ export interface VitalThresholds {
   patientId: number;
   heartRateMin?: number;
   heartRateMax?: number;
+  heartRateCriticalMin?: number;
+  heartRateCriticalMax?: number;
+  systolicBpMin?: number;
   systolicBpMax?: number;
+  systolicBpCriticalMin?: number;
+  systolicBpCriticalMax?: number;
+  diastolicBpMin?: number;
   diastolicBpMax?: number;
+  diastolicBpCriticalMax?: number;
   spo2Min?: number;
+  spo2CriticalMin?: number;
+  temperatureMin?: number;
+  temperatureMax?: number;
+  temperatureCriticalMax?: number;
   glucoseMin?: number;
   glucoseMax?: number;
 }

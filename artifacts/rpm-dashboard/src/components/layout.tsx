@@ -289,7 +289,7 @@ export default function Layout({ children }: LayoutProps) {
                                 {alert.triggeredAt && !isNaN(new Date(alert.triggeredAt).getTime())
                                   ? format(new Date(alert.triggeredAt), "MMM d, h:mm a")
                                   : "—"}
-                                {" · "}{alert.vitalType.replace("_", " ")}
+                                {" · "}{(alert.vitalType ?? "").replace("_", " ")}
                               </p>
                             </div>
                             <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/50 mt-1.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />

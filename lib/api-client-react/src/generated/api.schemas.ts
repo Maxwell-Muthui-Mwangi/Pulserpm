@@ -121,6 +121,10 @@ export interface VitalsSnapshot {
   /** @nullable */
   spo2?: number | null;
   /** @nullable */
+  temperature?: number | null;
+  /** @nullable */
+  caloriesBurned?: number | null;
+  /** @nullable */
   recordedAt?: string | null;
 }
 
@@ -149,9 +153,20 @@ export interface VitalThresholds {
   patientId: number;
   heartRateMin?: number;
   heartRateMax?: number;
+  heartRateCriticalMin?: number;
+  heartRateCriticalMax?: number;
+  systolicBpMin?: number;
   systolicBpMax?: number;
+  systolicBpCriticalMin?: number;
+  systolicBpCriticalMax?: number;
+  diastolicBpMin?: number;
   diastolicBpMax?: number;
+  diastolicBpCriticalMax?: number;
   spo2Min?: number;
+  spo2CriticalMin?: number;
+  temperatureMin?: number;
+  temperatureMax?: number;
+  temperatureCriticalMax?: number;
   glucoseMin?: number;
   glucoseMax?: number;
 }
@@ -355,7 +370,10 @@ export interface Alert {
   status: AlertStatus;
   value: number;
   threshold: number;
+  vitalType?: string;
   message: string;
+  /** @nullable */
+  triggeredAt?: string | null;
   createdAt: string;
   /** @nullable */
   acknowledgedAt?: string | null;
@@ -391,11 +409,14 @@ export interface AlertWithPatient {
   patientId: number;
   patientName: string;
   alertType: string;
+  vitalType?: string;
   severity: AlertWithPatientSeverity;
   status: AlertWithPatientStatus;
   value: number;
   threshold: number;
   message: string;
+  /** @nullable */
+  triggeredAt?: string | null;
   createdAt: string;
 }
 
@@ -443,15 +464,30 @@ export interface BatchIngestResponse {
   totalAlertsTriggered: number;
 }
 
+export type DashboardStatsOverallStatus =
+  (typeof DashboardStatsOverallStatus)[keyof typeof DashboardStatsOverallStatus];
+
+export const DashboardStatsOverallStatus = {
+  critical: "critical",
+  average: "average",
+  good: "good",
+} as const;
+
 export interface DashboardStats {
-  totalPatients: number;
+  isPatientView?: boolean;
+  totalPatients?: number;
   activeAlerts: number;
-  criticalAlerts: number;
+  criticalAlerts?: number;
+  criticalPatients?: number;
+  warningPatients?: number;
+  normalPatients?: number;
+  todaysReadings?: number;
+  overallStatus?: DashboardStatsOverallStatus;
   /** @nullable */
   avgHeartRate?: number | null;
   /** @nullable */
   avgSpo2?: number | null;
-  readingsToday: number;
+  readingsToday?: number;
 }
 
 export interface SchedulerSignupRequest {

@@ -29,6 +29,7 @@ export * from "./createSchedulerPaymentRequest";
 export * from "./createSchedulerPaymentRequestStatus";
 export * from "./createSchedulerStudentRequest";
 export * from "./dashboardStats";
+export * from "./dashboardStatsOverallStatus";
 export * from "./errorResponse";
 export * from "./exportSchedulerAssignmentsParams";
 export * from "./getPatientAlertsParams";

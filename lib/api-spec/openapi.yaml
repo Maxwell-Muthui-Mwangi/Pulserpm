@@ -1656,6 +1656,10 @@ components:
           type: ["number", "null"]
         spo2:
           type: ["number", "null"]
+        temperature:
+          type: ["number", "null"]
+        caloriesBurned:
+          type: ["number", "null"]
         recordedAt:
           type: ["string", "null"]
           format: date-time
@@ -1736,8 +1740,13 @@ components:
           type: number
         threshold:
           type: number
+        vitalType:
+          type: string
         message:
           type: string
+        triggeredAt:
+          type: ["string", "null"]
+          format: date-time
         createdAt:
           type: string
           format: date-time
@@ -1769,6 +1778,8 @@ components:
           type: string
         alertType:
           type: string
+        vitalType:
+          type: string
         severity:
           type: string
           enum: [warning, critical]
@@ -1781,6 +1792,9 @@ components:
           type: number
         message:
           type: string
+        triggeredAt:
+          type: ["string", "null"]
+          format: date-time
         createdAt:
           type: string
           format: date-time
@@ -1805,11 +1819,33 @@ components:
           type: number
         heartRateMax:
           type: number
+        heartRateCriticalMin:
+          type: number
+        heartRateCriticalMax:
+          type: number
+        systolicBpMin:
+          type: number
         systolicBpMax:
+          type: number
+        systolicBpCriticalMin:
+          type: number
+        systolicBpCriticalMax:
+          type: number
+        diastolicBpMin:
           type: number
         diastolicBpMax:
           type: number
+        diastolicBpCriticalMax:
+          type: number
         spo2Min:
+          type: number
+        spo2CriticalMin:
+          type: number
+        temperatureMin:
+          type: number
+        temperatureMax:
+          type: number
+        temperatureCriticalMax:
           type: number
         glucoseMin:
           type: number
@@ -1898,12 +1934,25 @@ components:
     DashboardStats:
       type: object
       properties:
+        isPatientView:
+          type: boolean
         totalPatients:
           type: integer
         activeAlerts:
           type: integer
         criticalAlerts:
           type: integer
+        criticalPatients:
+          type: integer
+        warningPatients:
+          type: integer
+        normalPatients:
+          type: integer
+        todaysReadings:
+          type: integer
+        overallStatus:
+          type: string
+          enum: [critical, average, good]
         avgHeartRate:
           type: ["number", "null"]
         avgSpo2:
@@ -1911,10 +1960,7 @@ components:
         readingsToday:
           type: integer
       required:
-        - totalPatients
         - activeAlerts
-        - criticalAlerts
-        - readingsToday
 
     # ===== SCHEDULER SCHEMAS =====
 

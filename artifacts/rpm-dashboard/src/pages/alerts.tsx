@@ -103,7 +103,7 @@ export default function Alerts() {
                       <td className="px-6 py-4">
                         <div className="font-medium text-foreground">{alert.message}</div>
                         <div className="text-xs text-muted-foreground mt-0.5">
-                          <span className="font-semibold">{alert.vitalType.replace('_', ' ')}</span>: {alert.value} (Limit: {alert.threshold})
+                          <span className="font-semibold">{(alert.vitalType ?? "").replace('_', ' ')}</span>: {alert.value} (Limit: {alert.threshold})
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-muted-foreground">

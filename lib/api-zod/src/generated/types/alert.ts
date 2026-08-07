@@ -19,7 +19,10 @@ export interface Alert {
   status: AlertStatus;
   value: number;
   threshold: number;
+  vitalType?: string;
   message: string;
+  /** @nullable */
+  triggeredAt?: Date | null;
   createdAt: Date;
   /** @nullable */
   acknowledgedAt?: Date | null;

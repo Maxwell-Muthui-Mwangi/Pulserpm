@@ -20,7 +20,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { format } from "date-fns";
+import { format, formatDistanceToNow } from "date-fns";
 import { 
   Heart, Activity, Droplets, Thermometer, ArrowLeft, Settings, Bell, 
   CheckCircle2, XCircle, Loader2, Smartphone, Copy, RefreshCw, Trash2,
@@ -500,31 +500,45 @@ export default function PatientDetail() {
                   <CardContent className="p-4 flex flex-col justify-center items-center text-center">
                     <Heart className="h-6 w-6 text-rose-500 mb-2" />
                     <span className="text-xs text-muted-foreground font-semibold uppercase">Heart Rate</span>
-                    <span className="text-2xl font-bold mt-1">{patient.latestVitals?.heartRate || '--'} <span className="text-sm font-normal text-muted-foreground">bpm</span></span>
+                    <span className="text-2xl font-bold mt-1">{patient.latestVitals?.heartRate ?? '--'} <span className="text-sm font-normal text-muted-foreground">bpm</span></span>
                   </CardContent>
                 </Card>
                 <Card className="border-border/50 shadow-sm">
                   <CardContent className="p-4 flex flex-col justify-center items-center text-center">
                     <Activity className="h-6 w-6 text-blue-500 mb-2" />
                     <span className="text-xs text-muted-foreground font-semibold uppercase">Blood Pressure</span>
-                    <span className="text-2xl font-bold mt-1">{patient.latestVitals?.systolicBp || '--'}/{patient.latestVitals?.diastolicBp || '--'}</span>
+                    <span className="text-2xl font-bold mt-1">
+                      {patient.latestVitals?.systolicBp ?? '--'}/{patient.latestVitals?.diastolicBp ?? '--'}
+                      <span className="text-sm font-normal text-muted-foreground ml-1">mmHg</span>
+                    </span>
                   </CardContent>
                 </Card>
                 <Card className="border-border/50 shadow-sm">
                   <CardContent className="p-4 flex flex-col justify-center items-center text-center">
                     <Droplets className="h-6 w-6 text-cyan-500 mb-2" />
                     <span className="text-xs text-muted-foreground font-semibold uppercase">SpO2</span>
-                    <span className="text-2xl font-bold mt-1">{patient.latestVitals?.spo2 || '--'} <span className="text-sm font-normal text-muted-foreground">%</span></span>
+                    <span className="text-2xl font-bold mt-1">{patient.latestVitals?.spo2 ?? '--'} <span className="text-sm font-normal text-muted-foreground">%</span></span>
                   </CardContent>
                 </Card>
                 <Card className="border-border/50 shadow-sm">
                   <CardContent className="p-4 flex flex-col justify-center items-center text-center">
                     <Thermometer className="h-6 w-6 text-amber-500 mb-2" />
                     <span className="text-xs text-muted-foreground font-semibold uppercase">Temperature</span>
-                    <span className="text-2xl font-bold mt-1">{patient.latestVitals?.temperature || '--'} <span className="text-sm font-normal text-muted-foreground">°C</span></span>
+                    <span className="text-2xl font-bold mt-1">{patient.latestVitals?.temperature ?? '--'} <span className="text-sm font-normal text-muted-foreground">°C</span></span>
                   </CardContent>
                 </Card>
               </div>
+
+              {/* Last synced timestamp */}
+              {patient.latestVitals?.recordedAt ? (
+                <p className="text-xs text-muted-foreground flex items-center gap-1.5 -mt-2">
+                  <span className="h-1.5 w-1.5 rounded-full bg-success inline-block" />
+                  Last synced {formatDistanceToNow(new Date(patient.latestVitals.recordedAt as string), { addSuffix: true })}
+                  {" · "}{format(new Date(patient.latestVitals.recordedAt as string), "MMM d 'at' h:mm a")}
+                </p>
+              ) : (
+                <p className="text-xs text-muted-foreground -mt-2">No readings recorded yet</p>
+              )}
 
               <Card className="border-border/50 shadow-sm">
                 <CardHeader>

@@ -16,5 +16,9 @@ export interface VitalsSnapshot {
   /** @nullable */
   spo2?: number | null;
   /** @nullable */
+  temperature?: number | null;
+  /** @nullable */
+  caloriesBurned?: number | null;
+  /** @nullable */
   recordedAt?: Date | null;
 }
