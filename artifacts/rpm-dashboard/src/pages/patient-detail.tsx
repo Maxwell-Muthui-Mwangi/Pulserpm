@@ -43,6 +43,10 @@ const API_BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 // Must stay in sync with the same constant in patients.tsx.
 const DATA_GAP_THRESHOLD_MS = 30 * 60 * 1000; // 30 minutes
 
+// Threshold after which ANY patient's vitals are considered stale and the UI
+// degrades to warn the provider that data may no longer reflect reality.
+const STALE_VITALS_MS = 60 * 60 * 1000; // 60 minutes
+
 export default function PatientDetail() {
   const [, params] = useRoute("/patients/:id");
   const patientId = parseInt(params?.id || "0", 10);
@@ -493,48 +497,77 @@ export default function PatientDetail() {
                   </span>
                 )}
               </h3>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <Card className="border-border/50 shadow-sm bg-gradient-to-br from-card to-card">
-                  <CardContent className="p-4 flex flex-col justify-center items-center text-center">
-                    <Heart className="h-6 w-6 text-rose-500 mb-2" />
-                    <span className="text-xs text-muted-foreground font-semibold uppercase">Heart Rate</span>
-                    <span className="text-2xl font-bold mt-1">{patient.latestVitals?.heartRate ?? '--'} <span className="text-sm font-normal text-muted-foreground">bpm</span></span>
-                  </CardContent>
-                </Card>
-                <Card className="border-border/50 shadow-sm">
-                  <CardContent className="p-4 flex flex-col justify-center items-center text-center">
-                    <Activity className="h-6 w-6 text-blue-500 mb-2" />
-                    <span className="text-xs text-muted-foreground font-semibold uppercase">Blood Pressure</span>
-                    <span className="text-2xl font-bold mt-1">
-                      {patient.latestVitals?.systolicBp ?? '--'}/{patient.latestVitals?.diastolicBp ?? '--'}
-                      <span className="text-sm font-normal text-muted-foreground ml-1">mmHg</span>
-                    </span>
-                  </CardContent>
-                </Card>
-                <Card className="border-border/50 shadow-sm">
-                  <CardContent className="p-4 flex flex-col justify-center items-center text-center">
-                    <Droplets className="h-6 w-6 text-cyan-500 mb-2" />
-                    <span className="text-xs text-muted-foreground font-semibold uppercase">SpO2</span>
-                    <span className="text-2xl font-bold mt-1">{patient.latestVitals?.spo2 ?? '--'} <span className="text-sm font-normal text-muted-foreground">%</span></span>
-                  </CardContent>
-                </Card>
-                <Card className="border-border/50 shadow-sm">
-                  <CardContent className="p-4 flex flex-col justify-center items-center text-center">
-                    <Thermometer className="h-6 w-6 text-amber-500 mb-2" />
-                    <span className="text-xs text-muted-foreground font-semibold uppercase">Temperature</span>
-                    <span className="text-2xl font-bold mt-1">{patient.latestVitals?.temperature ?? '--'} <span className="text-sm font-normal text-muted-foreground">°C</span></span>
-                  </CardContent>
-                </Card>
-              </div>
+              {(() => {
+                const syncedAt = patient.latestVitals?.recordedAt ? new Date(patient.latestVitals.recordedAt as string) : null;
+                const diffMs = syncedAt ? now.getTime() - syncedAt.getTime() : 0;
+                const isStaleCards = syncedAt ? diffMs > STALE_VITALS_MS : false;
+                return (
+                  <div className={`grid grid-cols-2 md:grid-cols-4 gap-4 transition-opacity duration-300 ${isStaleCards ? "opacity-50" : ""}`}>
+                    <Card className="border-border/50 shadow-sm bg-gradient-to-br from-card to-card">
+                      <CardContent className="p-4 flex flex-col justify-center items-center text-center">
+                        <Heart className="h-6 w-6 text-rose-500 mb-2" />
+                        <span className="text-xs text-muted-foreground font-semibold uppercase">Heart Rate</span>
+                        <span className="text-2xl font-bold mt-1">{patient.latestVitals?.heartRate ?? '--'} <span className="text-sm font-normal text-muted-foreground">bpm</span></span>
+                        {isStaleCards && <span className="mt-1.5 text-[10px] font-semibold uppercase tracking-wide text-amber-600 bg-amber-100 dark:bg-amber-900/30 dark:text-amber-400 rounded-full px-1.5 py-0.5">Stale</span>}
+                      </CardContent>
+                    </Card>
+                    <Card className="border-border/50 shadow-sm">
+                      <CardContent className="p-4 flex flex-col justify-center items-center text-center">
+                        <Activity className="h-6 w-6 text-blue-500 mb-2" />
+                        <span className="text-xs text-muted-foreground font-semibold uppercase">Blood Pressure</span>
+                        <span className="text-2xl font-bold mt-1">
+                          {patient.latestVitals?.systolicBp ?? '--'}/{patient.latestVitals?.diastolicBp ?? '--'}
+                          <span className="text-sm font-normal text-muted-foreground ml-1">mmHg</span>
+                        </span>
+                        {isStaleCards && <span className="mt-1.5 text-[10px] font-semibold uppercase tracking-wide text-amber-600 bg-amber-100 dark:bg-amber-900/30 dark:text-amber-400 rounded-full px-1.5 py-0.5">Stale</span>}
+                      </CardContent>
+                    </Card>
+                    <Card className="border-border/50 shadow-sm">
+                      <CardContent className="p-4 flex flex-col justify-center items-center text-center">
+                        <Droplets className="h-6 w-6 text-cyan-500 mb-2" />
+                        <span className="text-xs text-muted-foreground font-semibold uppercase">SpO2</span>
+                        <span className="text-2xl font-bold mt-1">{patient.latestVitals?.spo2 ?? '--'} <span className="text-sm font-normal text-muted-foreground">%</span></span>
+                        {isStaleCards && <span className="mt-1.5 text-[10px] font-semibold uppercase tracking-wide text-amber-600 bg-amber-100 dark:bg-amber-900/30 dark:text-amber-400 rounded-full px-1.5 py-0.5">Stale</span>}
+                      </CardContent>
+                    </Card>
+                    <Card className="border-border/50 shadow-sm">
+                      <CardContent className="p-4 flex flex-col justify-center items-center text-center">
+                        <Thermometer className="h-6 w-6 text-amber-500 mb-2" />
+                        <span className="text-xs text-muted-foreground font-semibold uppercase">Temperature</span>
+                        <span className="text-2xl font-bold mt-1">{patient.latestVitals?.temperature ?? '--'} <span className="text-sm font-normal text-muted-foreground">°C</span></span>
+                        {isStaleCards && <span className="mt-1.5 text-[10px] font-semibold uppercase tracking-wide text-amber-600 bg-amber-100 dark:bg-amber-900/30 dark:text-amber-400 rounded-full px-1.5 py-0.5">Stale</span>}
+                      </CardContent>
+                    </Card>
+                  </div>
+                );
+              })()}
 
               {/* Last synced timestamp — re-renders every 30 s via the `now` ticker */}
               {patient.latestVitals?.recordedAt ? (() => {
                 const syncedAt = new Date(patient.latestVitals!.recordedAt as string);
                 const diffMs = now.getTime() - syncedAt.getTime();
                 const isRecent = diffMs < 5 * 60 * 1000; // < 5 minutes
-                const isDataGap = patient.deviceType === "wearable" && diffMs > DATA_GAP_THRESHOLD_MS;
+                const isStale = diffMs > STALE_VITALS_MS; // > 60 minutes — hard stale
+                const isDataGap = !isStale && patient.deviceType === "wearable" && diffMs > DATA_GAP_THRESHOLD_MS; // 30–60 min wearable gap
+                const staleHours = diffMs / 3_600_000;
+                const staleLabel = staleHours >= 1
+                  ? `${Math.floor(staleHours)} hour${Math.floor(staleHours) !== 1 ? "s" : ""}`
+                  : `${Math.round(diffMs / 60_000)} minutes`;
                 return (
                   <>
+                    {isStale && (
+                      <div className="flex items-start gap-3 rounded-xl border border-orange-500/40 bg-orange-500/10 px-4 py-3 -mt-2">
+                        <WifiOff className="h-4 w-4 text-orange-600 dark:text-orange-400 mt-0.5 shrink-0" />
+                        <div>
+                          <p className="text-sm font-semibold text-orange-700 dark:text-orange-400">
+                            No sync in {staleLabel} — device may be offline
+                          </p>
+                          <p className="text-xs text-orange-600/80 dark:text-orange-400/70 mt-0.5">
+                            The readings above are from the last successful sync and may no longer reflect the patient's current condition.
+                          </p>
+                        </div>
+                      </div>
+                    )}
                     {isDataGap && (
                       <div className="flex items-start gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 -mt-2">
                         <WifiOff className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
@@ -549,7 +582,7 @@ export default function PatientDetail() {
                       </div>
                     )}
                     <p className="text-xs text-muted-foreground flex items-center gap-1.5 -mt-2">
-                      <span className={`h-1.5 w-1.5 rounded-full inline-block ${isRecent ? "bg-green-500 animate-pulse" : isDataGap ? "bg-amber-500" : "bg-muted-foreground/50"}`} />
+                      <span className={`h-1.5 w-1.5 rounded-full inline-block ${isRecent ? "bg-green-500 animate-pulse" : isStale ? "bg-orange-500" : isDataGap ? "bg-amber-500" : "bg-muted-foreground/50"}`} />
                       {isRecent
                         ? <span className="text-green-600 font-medium">Just synced</span>
                         : <>Last synced {formatDistanceToNow(syncedAt, { addSuffix: true })}</>

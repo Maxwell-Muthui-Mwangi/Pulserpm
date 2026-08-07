@@ -22,7 +22,10 @@ import {
   Zap,
   Smartphone,
   ScanLine,
+  WifiOff,
 } from "lucide-react";
+
+const STALE_VITALS_MS = 60 * 60 * 1000; // 60 minutes
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend
 } from "recharts";
@@ -292,11 +295,11 @@ export default function Dashboard() {
   // Track when data was last refreshed for the "live" indicator
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
   const [sseActive, setSseActive] = useState(false);
-  const [, setTick] = useState(0);
+  const [now, setNow] = useState(() => new Date());
 
-  // Tick every 15 s so the "Updated X ago" label stays current
+  // Tick every 15 s so the "Updated X ago" label and stale indicators stay current
   useEffect(() => {
-    const id = setInterval(() => setTick(t => t + 1), 15_000);
+    const id = setInterval(() => setNow(new Date()), 15_000);
     return () => clearInterval(id);
   }, []);
 
@@ -786,6 +789,8 @@ export default function Dashboard() {
                       ? formatDistanceToNow(new Date(p.lastSeen), { addSuffix: true })
                       : "—";
                     const v = p.latestVitals;
+                    const vitalsAge = v?.recordedAt ? now.getTime() - new Date(v.recordedAt).getTime() : null;
+                    const vitalsStale = vitalsAge !== null && vitalsAge > STALE_VITALS_MS;
 
                     return (
                       <motion.div
@@ -812,11 +817,16 @@ export default function Dashboard() {
                           )}
                         </div>
 
-                        <div className="hidden lg:flex items-center gap-4 flex-1 min-w-0">
+                        <div className={`hidden lg:flex items-center gap-4 flex-1 min-w-0 transition-opacity ${vitalsStale ? "opacity-40" : ""}`}>
                           <VitalPill icon={Heart} value={v?.heartRate} unit=" bpm" warn={v?.heartRate > 100 || v?.heartRate < 50} />
                           <VitalPill icon={Activity} value={v?.systolicBp} unit=" sys" warn={v?.systolicBp > 140} />
                           <VitalPill icon={Droplets} value={v?.spo2} unit="%" warn={v?.spo2 < 92} />
                           <VitalPill icon={Thermometer} value={v?.temperature} unit="°C" warn={v?.temperature > 38} />
+                          {vitalsStale && (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-600 dark:text-amber-400">
+                              <WifiOff className="h-3 w-3" />Stale
+                            </span>
+                          )}
                         </div>
 
                         <div className="flex items-center gap-3 ml-auto shrink-0">
@@ -825,8 +835,12 @@ export default function Dashboard() {
                               <AlertTriangle className="h-3.5 w-3.5" />{p.activeAlertCount}
                             </span>
                           )}
-                          <span className="hidden sm:flex items-center gap-1 text-xs text-muted-foreground">
-                            <Clock className="h-3 w-3" />{lastSeen}
+                          <span className={`hidden sm:flex items-center gap-1 text-xs ${vitalsStale ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground"}`}>
+                            {vitalsStale
+                              ? <WifiOff className="h-3 w-3" />
+                              : <Clock className="h-3 w-3" />
+                            }
+                            {lastSeen}
                           </span>
                           <span className={`hidden sm:inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium border ${risk.badge}`}>
                             {risk.label}
