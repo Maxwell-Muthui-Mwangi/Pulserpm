@@ -52,9 +52,9 @@ export default function PatientDetail() {
   const [sseConnected, setSseConnected] = useState(false);
   const queryClient = useQueryClient();
 
-  const { data: patient, isLoading: pLoading } = useGetPatient(patientId, { request: withAuth(), query: { enabled: !!patientId } as any });
-  const { data: vitals, isLoading: vLoading } = useGetPatientVitals(patientId, { period, limit: 100 }, { request: withAuth(), query: { enabled: !!patientId && activeTab === "charts" } as any });
-  const { data: alerts, refetch: refetchAlerts } = useGetPatientAlerts(patientId, { status: "active" }, { request: withAuth(), query: { enabled: !!patientId } as any });
+  const { data: patient, isLoading: pLoading } = useGetPatient(patientId, { request: withAuth(), query: { enabled: !!patientId, refetchInterval: 30_000 } as any });
+  const { data: vitals, isLoading: vLoading } = useGetPatientVitals(patientId, { period, limit: 100 }, { request: withAuth(), query: { enabled: !!patientId && activeTab === "charts", refetchInterval: activeTab === "charts" ? 20_000 : false } as any });
+  const { data: alerts, refetch: refetchAlerts } = useGetPatientAlerts(patientId, { status: "active" }, { request: withAuth(), query: { enabled: !!patientId, refetchInterval: 20_000 } as any });
   const { data: thresholds } = useGetPatientThresholds(patientId, { request: withAuth(), query: { enabled: !!patientId && activeTab === "thresholds" } as any });
   
   const updateThresholds = useUpdatePatientThresholds();
@@ -446,7 +446,20 @@ export default function PatientDetail() {
         {activeTab === "overview" && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-2 space-y-6">
-              <h3 className="font-display font-bold text-lg text-foreground">Latest Readings</h3>
+              <h3 className="font-display font-bold text-lg text-foreground flex items-center gap-2">
+                Latest Readings
+                {sseConnected ? (
+                  <span className="flex items-center gap-1 text-xs font-normal text-success bg-success/10 border border-success/20 rounded-full px-2 py-0.5">
+                    <span className="h-1.5 w-1.5 rounded-full bg-success animate-pulse" />
+                    Live
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-1 text-xs font-normal text-muted-foreground">
+                    <RefreshCw className="h-3 w-3" />
+                    Auto-refreshing
+                  </span>
+                )}
+              </h3>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <Card className="border-border/50 shadow-sm bg-gradient-to-br from-card to-card">
                   <CardContent className="p-4 flex flex-col justify-center items-center text-center">

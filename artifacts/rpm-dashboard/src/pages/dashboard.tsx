@@ -76,23 +76,26 @@ function useTrends() {
   const [patientStatus, setPatientStatus] = useState<{ critical: number; warning: number; normal: number } | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    let cancelled = false;
+  const fetchTrends = useCallback(() => {
     const token = getAuthToken();
-    fetch(`${API_BASE}/api/dashboard/trends?days=7`, {
+    return window.fetch(`${API_BASE}/api/dashboard/trends?days=7`, {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then((r) => r.json())
       .then((data) => {
-        if (!cancelled) {
-          setTrend(data.trend ?? []);
-          setPatientStatus(data.patientStatus ?? null);
-        }
+        setTrend(data.trend ?? []);
+        setPatientStatus(data.patientStatus ?? null);
+        setLoading(false);
       })
-      .catch(() => {})
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
+      .catch(() => { setLoading(false); });
   }, []);
+
+  useEffect(() => {
+    fetchTrends();
+    // Poll every 60 s as a fallback when no device is pushing via SSE
+    const id = setInterval(fetchTrends, 60_000);
+    return () => clearInterval(id);
+  }, [fetchTrends]);
 
   return { trend, patientStatus, loading };
 }
@@ -266,18 +269,36 @@ function SmartWatchCard({ watch, userId, apiBase }: SmartWatchCardProps) {
 
 export default function Dashboard() {
   const { isPatient, user } = useAuth();
-  const { data: stats, isLoading: statsLoading } = useGetDashboardStats({ request: withAuth() });
+  const { data: stats, isLoading: statsLoading, dataUpdatedAt: statsUpdatedAt } = useGetDashboardStats(
+    { request: withAuth(), query: { refetchInterval: 30_000 } as any }
+  );
   const { data: alerts, isLoading: alertsLoading } = useListAlerts(
     { status: "active", limit: 5 },
-    { request: withAuth() }
+    { request: withAuth(), query: { refetchInterval: 30_000 } as any }
   );
   const { data: patients, isLoading: patientsLoading } = useListPatients(
     {},
-    { query: { enabled: !isPatient } as any, request: withAuth() }
+    { query: { enabled: !isPatient, refetchInterval: 30_000 } as any, request: withAuth() }
   );
   const { trend, patientStatus, loading: trendsLoading } = useTrends();
   const watch = useWatchKey(!!isPatient);
   const queryClient = useQueryClient();
+
+  // Track when data was last refreshed for the "live" indicator
+  const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
+  const [sseActive, setSseActive] = useState(false);
+  const [, setTick] = useState(0);
+
+  // Tick every 15 s so the "Updated X ago" label stays current
+  useEffect(() => {
+    const id = setInterval(() => setTick(t => t + 1), 15_000);
+    return () => clearInterval(id);
+  }, []);
+
+  // Update last-refresh whenever the server responds
+  useEffect(() => {
+    if (statsUpdatedAt) setLastRefresh(new Date(statsUpdatedAt));
+  }, [statsUpdatedAt]);
 
   // Real-time SSE subscription — invalidate queries when the patient's device
   // pushes new vitals so the dashboard updates without a manual refresh.
@@ -287,10 +308,13 @@ export default function Dashboard() {
     if (!token) return;
     const url = `${API_BASE}/api/device/events?patientId=${user.id}&token=${encodeURIComponent(token)}`;
     const es = new EventSource(url);
+    es.addEventListener("connected", () => setSseActive(true));
     es.addEventListener("vitals", () => {
       queryClient.invalidateQueries();
+      setLastRefresh(new Date());
     });
-    return () => es.close();
+    es.onerror = () => setSseActive(false);
+    return () => { es.close(); setSseActive(false); };
   }, [isPatient, user?.id, queryClient]);
 
   const isLoading = statsLoading || alertsLoading || (!isPatient && patientsLoading);
@@ -500,15 +524,24 @@ export default function Dashboard() {
     <Layout>
       <div className="space-y-6">
         {/* Header */}
-        <div>
-          <h1 className="text-3xl font-display font-bold text-foreground">
-            Good {new Date().getHours() < 12 ? "morning" : new Date().getHours() < 17 ? "afternoon" : "evening"}, Dr. {user?.name.split(" ").at(-1)}
-          </h1>
-          <p className="text-muted-foreground mt-1">
-            {stats?.activeAlerts
-              ? `${stats.activeAlerts} active alert${stats.activeAlerts !== 1 ? "s" : ""} require your attention.`
-              : "All patients are currently stable. No active alerts."}
-          </p>
+        <div className="flex items-start justify-between flex-wrap gap-3">
+          <div>
+            <h1 className="text-3xl font-display font-bold text-foreground">
+              Good {new Date().getHours() < 12 ? "morning" : new Date().getHours() < 17 ? "afternoon" : "evening"}, Dr. {user?.name.split(" ").at(-1)}
+            </h1>
+            <p className="text-muted-foreground mt-1">
+              {stats?.activeAlerts
+                ? `${stats.activeAlerts} active alert${stats.activeAlerts !== 1 ? "s" : ""} require your attention.`
+                : "All patients are currently stable. No active alerts."}
+            </p>
+          </div>
+          {/* Live indicator */}
+          <div className="flex items-center gap-2 bg-card border border-border/50 rounded-full px-3 py-1.5 shadow-sm text-xs text-muted-foreground">
+            <span className="h-2 w-2 rounded-full bg-success animate-pulse" />
+            <span className="font-medium text-success-foreground">Live</span>
+            <span className="text-muted-foreground/70">·</span>
+            <span>Updated {formatDistanceToNow(lastRefresh, { addSuffix: true })}</span>
+          </div>
         </div>
 
         {/* KPI row */}
