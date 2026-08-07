@@ -54,11 +54,18 @@ export default function PatientDetail() {
   const [keyCopied, setKeyCopied] = useState(false);
   const [printing, setPrinting] = useState(false);
   const [sseConnected, setSseConnected] = useState(false);
+  const [now, setNow] = useState(() => new Date());
   const queryClient = useQueryClient();
 
-  const { data: patient, isLoading: pLoading } = useGetPatient(patientId, { request: withAuth(), query: { enabled: !!patientId, refetchInterval: 30_000 } as any });
-  const { data: vitals, isLoading: vLoading } = useGetPatientVitals(patientId, { period, limit: 100 }, { request: withAuth(), query: { enabled: !!patientId && activeTab === "charts", refetchInterval: activeTab === "charts" ? 20_000 : false } as any });
-  const { data: alerts, refetch: refetchAlerts } = useGetPatientAlerts(patientId, { status: "active" }, { request: withAuth(), query: { enabled: !!patientId, refetchInterval: 20_000 } as any });
+  // Tick every 30 s so "Last synced X ago" stays current without a data refetch
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 30_000);
+    return () => clearInterval(id);
+  }, []);
+
+  const { data: patient, isLoading: pLoading } = useGetPatient(patientId, { request: withAuth(), query: { enabled: !!patientId, refetchInterval: 5_000, refetchIntervalInBackground: true } as any });
+  const { data: vitals, isLoading: vLoading } = useGetPatientVitals(patientId, { period, limit: 100 }, { request: withAuth(), query: { enabled: !!patientId && activeTab === "charts", refetchInterval: activeTab === "charts" ? 5_000 : false, refetchIntervalInBackground: true } as any });
+  const { data: alerts, refetch: refetchAlerts } = useGetPatientAlerts(patientId, { status: "active" }, { request: withAuth(), query: { enabled: !!patientId, refetchInterval: 5_000, refetchIntervalInBackground: true } as any });
   const { data: thresholds } = useGetPatientThresholds(patientId, { request: withAuth(), query: { enabled: !!patientId && activeTab === "thresholds" } as any });
   
   const updateThresholds = useUpdatePatientThresholds();
@@ -556,14 +563,22 @@ export default function PatientDetail() {
                 </Card>
               </div>
 
-              {/* Last synced timestamp */}
-              {patient.latestVitals?.recordedAt ? (
-                <p className="text-xs text-muted-foreground flex items-center gap-1.5 -mt-2">
-                  <span className="h-1.5 w-1.5 rounded-full bg-success inline-block" />
-                  Last synced {formatDistanceToNow(new Date(patient.latestVitals.recordedAt as string), { addSuffix: true })}
-                  {" · "}{format(new Date(patient.latestVitals.recordedAt as string), "MMM d 'at' h:mm a")}
-                </p>
-              ) : (
+              {/* Last synced timestamp — re-renders every 30 s via the `now` ticker */}
+              {patient.latestVitals?.recordedAt ? (() => {
+                const syncedAt = new Date(patient.latestVitals!.recordedAt as string);
+                const diffMs = now.getTime() - syncedAt.getTime();
+                const isRecent = diffMs < 5 * 60 * 1000; // < 5 minutes
+                return (
+                  <p className="text-xs text-muted-foreground flex items-center gap-1.5 -mt-2">
+                    <span className={`h-1.5 w-1.5 rounded-full inline-block ${isRecent ? "bg-green-500 animate-pulse" : "bg-muted-foreground/50"}`} />
+                    {isRecent
+                      ? <span className="text-green-600 font-medium">Just synced</span>
+                      : <>Last synced {formatDistanceToNow(syncedAt, { addSuffix: true })}</>
+                    }
+                    {" · "}{format(syncedAt, "MMM d 'at' h:mm a")}
+                  </p>
+                );
+              })() : (
                 <p className="text-xs text-muted-foreground -mt-2">No readings recorded yet</p>
               )}
 
