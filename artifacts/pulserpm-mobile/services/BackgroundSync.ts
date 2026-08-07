@@ -1,5 +1,10 @@
 /**
- * BackgroundSync — periodic Health Connect auto-sync via expo-background-fetch.
+ * BackgroundSync — periodic background sync via expo-background-fetch.
+ *
+ * On Android: syncs from Health Connect (BGAppRefreshTask equivalent via WorkManager).
+ * On iOS: registers BGAppRefreshTask so the OS wakes the app periodically.
+ *         Health Connect is not available on iOS, so the task returns NoData
+ *         until an iOS health-kit source is wired in.
  *
  * IMPORTANT: TaskManager.defineTask MUST run at module level before any React
  * rendering. This file must be imported in _layout.tsx before the Stack renders.
@@ -48,23 +53,35 @@ async function postVitals(apiKey: string, vitals: Record<string, number | string
 
 // Task definition MUST be at module scope (not inside any component or hook)
 TaskManager.defineTask(HC_SYNC_TASK, async () => {
-  if (Platform.OS !== "android") {
-    return BackgroundFetch.BackgroundFetchResult.NoData;
-  }
-
   try {
     const apiKey = await AsyncStorage.getItem(STORAGE_KEY_API);
     if (!apiKey) return BackgroundFetch.BackgroundFetchResult.NoData;
 
-    const { getHCStatus, getHCPermissions, readLatestVitals, hasAnyReading } = await import(
-      "./HealthConnectService"
-    );
+    // Branch by platform: Android uses Health Connect, iOS uses HealthKit.
+    let readLatestVitals: (hoursBack: number) => Promise<Record<string, number | undefined>>;
+    let hasAnyReading: (v: Record<string, number | undefined>) => boolean;
 
-    const status = await getHCStatus();
-    if (status !== "ready") return BackgroundFetch.BackgroundFetchResult.NoData;
-
-    const perms = await getHCPermissions();
-    if (!perms.heartRate && !perms.spo2 && !perms.bloodPressure && !perms.temperature) {
+    if (Platform.OS === "android") {
+      const hc = await import("./HealthConnectService");
+      const status = await hc.getHCStatus();
+      if (status !== "ready") return BackgroundFetch.BackgroundFetchResult.NoData;
+      const perms = await hc.getHCPermissions();
+      if (!perms.heartRate && !perms.spo2 && !perms.bloodPressure && !perms.temperature) {
+        return BackgroundFetch.BackgroundFetchResult.NoData;
+      }
+      readLatestVitals = hc.readLatestVitals as typeof readLatestVitals;
+      hasAnyReading = hc.hasAnyReading as typeof hasAnyReading;
+    } else if (Platform.OS === "ios") {
+      const hk = await import("./HealthKitService");
+      const status = await hk.getHKStatus();
+      if (status !== "ready") return BackgroundFetch.BackgroundFetchResult.NoData;
+      const perms = await hk.getHKPermissions();
+      if (!perms.heartRate && !perms.spo2 && !perms.bloodPressure && !perms.temperature) {
+        return BackgroundFetch.BackgroundFetchResult.NoData;
+      }
+      readLatestVitals = hk.readLatestVitals as typeof readLatestVitals;
+      hasAnyReading = hk.hasAnyReading as typeof hasAnyReading;
+    } else {
       return BackgroundFetch.BackgroundFetchResult.NoData;
     }
 
@@ -97,10 +114,10 @@ TaskManager.defineTask(HC_SYNC_TASK, async () => {
 });
 
 export async function registerBackgroundSync(intervalMinutes = 15): Promise<boolean> {
-  if (Platform.OS !== "android") return false;
   try {
     await BackgroundFetch.registerTaskAsync(HC_SYNC_TASK, {
       minimumInterval: intervalMinutes * 60,
+      // Android-only options; iOS ignores them gracefully
       stopOnTerminate: false,
       startOnBoot: true,
     });

@@ -271,23 +271,46 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [apiKey, ingestUrl]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /**
-   * Reads the latest Health Connect vitals (last 30 min) and syncs them.
+   * Reads the latest vitals from the platform health store and syncs them.
+   * Android: Health Connect. iOS: HealthKit.
    * Called automatically on foreground wake and exposed for manual use.
-   * Silently exits on iOS or when HC is unavailable (Expo Go).
+   * Silently exits when no health store is available (Expo Go).
    */
   const syncFromHealthConnect = useCallback(async () => {
-    if (Platform.OS !== "android" || !apiKey || hcSyncing.current) return;
+    if (!apiKey || hcSyncing.current) return;
     hcSyncing.current = true;
     try {
-      const { getHCStatus, getHCPermissions, readLatestVitals, hasAnyReading } = await import(
-        "@/services/HealthConnectService"
-      );
-      const status = await getHCStatus();
-      if (status !== "ready") return;
-      const perms = await getHCPermissions();
-      if (!perms.heartRate && !perms.spo2 && !perms.bloodPressure && !perms.temperature) return;
+      let readLatestVitals: (h: number) => Promise<{ heartRate?: number; spo2?: number; systolicBp?: number; diastolicBp?: number; temperature?: number }>;
+      let hasAnyReading: (v: object) => boolean;
+      let source: string;
 
-      // Read since last successful HC sync (or last 2 hours if never synced)
+      if (Platform.OS === "android") {
+        const { getHCStatus, getHCPermissions, readLatestVitals: rlv, hasAnyReading: har } = await import(
+          "@/services/HealthConnectService"
+        );
+        const status = await getHCStatus();
+        if (status !== "ready") return;
+        const perms = await getHCPermissions();
+        if (!perms.heartRate && !perms.spo2 && !perms.bloodPressure && !perms.temperature) return;
+        readLatestVitals = rlv;
+        hasAnyReading = har;
+        source = "health_connect";
+      } else if (Platform.OS === "ios") {
+        const { getHKStatus, getHKPermissions, readLatestVitals: rlv, hasAnyReading: har } = await import(
+          "@/services/HealthKitService"
+        );
+        const status = await getHKStatus();
+        if (status !== "ready") return;
+        const perms = await getHKPermissions();
+        if (!perms.heartRate && !perms.spo2 && !perms.bloodPressure && !perms.temperature) return;
+        readLatestVitals = rlv;
+        hasAnyReading = har;
+        source = "healthkit";
+      } else {
+        return;
+      }
+
+      // Read since last successful sync (or last 2 hours if never synced)
       let hoursBack = 2;
       const lastHCRaw = await AsyncStorage.getItem(STORAGE_KEY_LAST_HC_SYNC);
       if (lastHCRaw) {
@@ -297,14 +320,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const vitals = await readLatestVitals(hoursBack);
       if (!hasAnyReading(vitals)) return;
 
-      const ok = await syncReading({ ...vitals, source: "health_connect" });
+      const ok = await syncReading({ ...vitals, source });
       if (ok) {
         const ts = new Date().toISOString();
         await AsyncStorage.setItem(STORAGE_KEY_LAST_HC_SYNC, ts);
         setLastHCSyncTime(ts);
       }
     } catch {
-      // HC unavailable in Expo Go — silent
+      // Health store unavailable in Expo Go — silent
     } finally {
       hcSyncing.current = false;
     }

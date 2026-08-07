@@ -59,6 +59,7 @@
     "expo-background-fetch": "^56.0.14",
     "expo-camera": "^17.0.10",
     "expo-task-manager": "^56.0.14",
+    "react-native-health": "^1.19.0",
     "react-native-health-connect": "^3.5.3"
   }
 }

@@ -14,7 +14,15 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": false
+      "supportsTablet": false,
+      "infoPlist": {
+        "UIBackgroundModes": ["fetch"],
+        "NSHealthShareUsageDescription": "PulseRPM reads heart rate, oxygen saturation, blood pressure, and temperature from Apple Health to monitor your vitals and share them with your care team."
+      },
+      "entitlements": {
+        "com.apple.developer.healthkit": true,
+        "com.apple.developer.healthkit.access": []
+      }
     },
     "android": {
       "package": "com.wgeorge.pulserpm",
