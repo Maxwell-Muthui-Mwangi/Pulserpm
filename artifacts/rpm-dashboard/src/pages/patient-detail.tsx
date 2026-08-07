@@ -16,6 +16,7 @@ import {
   getGetPatientAlertsQueryKey,
   getGetDashboardStatsQueryKey,
 } from "@workspace/api-client-react";
+import { useRealtimeSync } from "@/lib/use-realtime-sync";
 import { withAuth, getAuthToken } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -86,80 +87,39 @@ export default function PatientDetail() {
     }
   }, []);
 
-  // SSE subscription with auto-reconnect (exponential backoff).
-  // Patients  → patient-specific channel.
-  // Providers → global provider channel (receives events for all patients;
-  //             vitals event includes patientId so the UI can filter if needed).
-  useEffect(() => {
-    if (!patientId) return;
-
-    let retryCount = 0;
-    let retryTimer: ReturnType<typeof setTimeout> | null = null;
-    let unmounted = false;
-    let es: EventSource | null = null;
-
-    function connect() {
-      if (unmounted) return;
-      const token = getAuthToken();
-      if (!token) return;
-
-      const url = `${API_BASE}/api/device/events?token=${encodeURIComponent(token)}`;
-      es = new EventSource(url);
-
-      es.addEventListener("connected", () => {
-        retryCount = 0;
-        setSseConnected(true);
-      });
-
-      es.addEventListener("vitals", (e: MessageEvent) => {
-        // Apply non-null vitals directly to the cache — zero-latency UI update.
-        try {
-          const data = JSON.parse(e.data) as Record<string, unknown>;
-          queryClient.setQueryData(
-            getGetPatientQueryKey(patientId),
-            (old: Record<string, unknown> | undefined) => {
-              if (!old) return old;
-              const prev = (old.latestVitals ?? {}) as Record<string, unknown>;
-              const patch: Record<string, unknown> = {};
-              // Only overwrite non-null fields (preserves getLatestVitalsPerField semantics)
-              if (data.heartRate     != null) patch.heartRate     = data.heartRate;
-              if (data.systolicBp    != null) patch.systolicBp    = data.systolicBp;
-              if (data.diastolicBp   != null) patch.diastolicBp   = data.diastolicBp;
-              if (data.spo2          != null) patch.spo2          = data.spo2;
-              if (data.temperature   != null) patch.temperature   = data.temperature;
-              if (data.caloriesBurned != null) patch.caloriesBurned = data.caloriesBurned;
-              if (data.recordedAt)             patch.recordedAt   = data.recordedAt;
-              return { ...old, latestVitals: { ...prev, ...patch } };
-            },
-          );
-        } catch { /* ignore parse errors */ }
-        // Targeted refetch for data NOT in the SSE payload (alerts, chart history)
-        void queryClient.invalidateQueries({ queryKey: getGetPatientAlertsQueryKey(patientId) });
-        void queryClient.invalidateQueries({ queryKey: getGetPatientVitalsQueryKey(patientId) });
-        void queryClient.invalidateQueries({ queryKey: getGetDashboardStatsQueryKey() });
-      });
-
-      es.onerror = () => {
-        if (unmounted) return;
-        setSseConnected(false);
-        es?.close();
-        es = null;
-        // Exponential backoff: 1 s → 2 s → 4 s → … → 30 s max
-        const delay = Math.min(1_000 * Math.pow(2, retryCount), 30_000);
-        retryCount = Math.min(retryCount + 1, 10);
-        retryTimer = setTimeout(connect, delay);
-      };
-    }
-
-    connect();
-
-    return () => {
-      unmounted = true;
-      es?.close();
-      if (retryTimer) clearTimeout(retryTimer);
-      setSseConnected(false);
-    };
-  }, [patientId, queryClient]);
+  // Real-time SSE — bulletproof hook handles reconnect, heartbeat watchdog,
+  // tab visibility, and network events so vitals never go stale.
+  useRealtimeSync({
+    userId: patientId,
+    setConnected: setSseConnected,
+    onVitals: (data) => {
+      // Apply non-null vitals directly to the cache — zero-latency UI update
+      queryClient.setQueryData(
+        getGetPatientQueryKey(patientId),
+        (old: Record<string, unknown> | undefined) => {
+          if (!old) return old;
+          const prev = (old.latestVitals ?? {}) as Record<string, unknown>;
+          const patch: Record<string, unknown> = {};
+          if (data.heartRate      != null) patch.heartRate      = data.heartRate;
+          if (data.systolicBp     != null) patch.systolicBp     = data.systolicBp;
+          if (data.diastolicBp    != null) patch.diastolicBp    = data.diastolicBp;
+          if (data.spo2           != null) patch.spo2           = data.spo2;
+          if (data.temperature    != null) patch.temperature    = data.temperature;
+          if (data.caloriesBurned != null) patch.caloriesBurned = data.caloriesBurned;
+          if (data.recordedAt)             patch.recordedAt     = data.recordedAt;
+          return { ...old, latestVitals: { ...prev, ...patch } };
+        },
+      );
+      // Targeted refetch for data NOT in the SSE payload (alerts, chart history)
+      void queryClient.invalidateQueries({ queryKey: getGetPatientAlertsQueryKey(patientId) });
+      void queryClient.invalidateQueries({ queryKey: getGetPatientVitalsQueryKey(patientId) });
+      void queryClient.invalidateQueries({ queryKey: getGetDashboardStatsQueryKey() });
+    },
+    onReconnect: () => {
+      // Catch up on anything missed while the stream was down
+      void queryClient.invalidateQueries();
+    },
+  });
 
   useEffect(() => {
     if (activeTab === "device" && isPatient) {
