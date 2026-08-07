@@ -14,15 +14,25 @@ import { Platform } from "react-native";
 
 export const HC_SYNC_TASK = "pulserpm-hc-background-sync";
 
-const STORAGE_KEY_API = "pulserpm_api_key";
-export const STORAGE_KEY_LAST_HC_SYNC = "pulserpm_last_hc_sync";
+const STORAGE_KEY_API        = "pulserpm_api_key";
+const STORAGE_KEY_INGEST_URL = "pulserpm_ingest_url";   // saved at pair-time
+export const STORAGE_KEY_LAST_HC_SYNC    = "pulserpm_last_hc_sync";
 export const STORAGE_KEY_BG_SYNC_ENABLED = "pulserpm_bg_sync_enabled";
 
+/**
+ * Post vitals to the API.
+ * Reads the ingest URL that was saved at pair-time (from /device/connect response)
+ * so background syncs always reach the same environment as the foreground app.
+ * Falls back to the build-time EXPO_PUBLIC_DOMAIN if no URL has been stored yet.
+ */
 async function postVitals(apiKey: string, vitals: Record<string, number | string>): Promise<boolean> {
-  const domain = process.env.EXPO_PUBLIC_DOMAIN ?? "";
-  if (!domain) return false;
+  const storedUrl = await AsyncStorage.getItem(STORAGE_KEY_INGEST_URL);
+  const fallbackDomain = process.env.EXPO_PUBLIC_DOMAIN ?? "";
+  const ingestUrl = storedUrl || (fallbackDomain ? `https://${fallbackDomain}/api/device/ingest` : "");
+  if (!ingestUrl) return false;
+
   try {
-    const res = await fetch(`https://${domain}/api/device/ingest`, {
+    const res = await fetch(ingestUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -59,7 +69,6 @@ TaskManager.defineTask(HC_SYNC_TASK, async () => {
     }
 
     // Read vitals since the last successful sync (or last 2 hours if never synced)
-    // so no readings are missed even if a sync interval is skipped
     const lastSyncRaw = await AsyncStorage.getItem(STORAGE_KEY_LAST_HC_SYNC);
     let hoursBack = 2;
     if (lastSyncRaw) {

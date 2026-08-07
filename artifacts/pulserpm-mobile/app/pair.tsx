@@ -19,18 +19,37 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useApp } from "@/context/AppContext";
 import { useColors } from "@/hooks/useColors";
 
-const DOMAIN = process.env.EXPO_PUBLIC_DOMAIN ?? "";
+const FALLBACK_DOMAIN = process.env.EXPO_PUBLIC_DOMAIN ?? "";
 
-async function validateApiKey(key: string): Promise<{ valid: boolean; patientName?: string }> {
+/**
+ * Call the connect endpoint to validate the key AND retrieve the correct
+ * ingestUrl for this environment (dev or production).
+ * Falls back to the status endpoint for manually-entered keys that have no URL.
+ */
+async function callConnectEndpoint(
+  connectUrl: string
+): Promise<{ valid: boolean; apiKey?: string; ingestUrl?: string; patientName?: string }> {
   try {
-    const url = DOMAIN
-      ? `https://${DOMAIN}/api/device/status`
-      : "/api/device/status";
-    const res = await fetch(url, {
-      headers: { "X-Device-Api-Key": key },
-    });
+    const res = await fetch(connectUrl);
     const data = await res.json();
-    return { valid: !!data.valid, patientName: data.patientName };
+    return {
+      valid: !!data.valid,
+      apiKey: data.apiKey,
+      ingestUrl: data.ingestUrl,
+    };
+  } catch {
+    return { valid: false };
+  }
+}
+
+async function validateApiKeyManual(key: string): Promise<{ valid: boolean; ingestUrl?: string }> {
+  try {
+    const base = FALLBACK_DOMAIN ? `https://${FALLBACK_DOMAIN}` : "";
+    if (!base) return { valid: false };
+    // Use the connect endpoint so we get ingestUrl even for manual entries
+    const res = await fetch(`${base}/api/device/connect?apiKey=${encodeURIComponent(key)}`);
+    const data = await res.json();
+    return { valid: !!data.valid, ingestUrl: data.ingestUrl };
   } catch {
     return { valid: false };
   }
@@ -39,7 +58,7 @@ async function validateApiKey(key: string): Promise<{ valid: boolean; patientNam
 export default function PairScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { setApiKey } = useApp();
+  const { setApiKey, setApiKeyWithIngestUrl } = useApp();
   const [permission, requestPermission] = useCameraPermissions();
   const [mode, setMode] = useState<"choose" | "camera" | "manual">("choose");
   const [manualKey, setManualKey] = useState("");
@@ -47,18 +66,44 @@ export default function PairScreen() {
   const [error, setError] = useState("");
   const scanned = useRef(false);
 
-  async function connectWithKey(key: string) {
+  /**
+   * connectWithKey — called for both QR and manual entry.
+   * connectUrl: the full /device/connect?apiKey=... URL from the QR (preferred).
+   *             When absent (manual entry), we build it from FALLBACK_DOMAIN.
+   */
+  async function connectWithKey(key: string, connectUrl?: string | null) {
     setSaving(true);
     setError("");
-    const { valid, patientName } = await validateApiKey(key);
+
+    let ingestUrl: string | undefined;
+    let valid = false;
+
+    if (connectUrl) {
+      // QR path: call the exact URL encoded in the QR — works for any env
+      const result = await callConnectEndpoint(connectUrl);
+      valid = result.valid;
+      ingestUrl = result.ingestUrl;
+    } else {
+      // Manual-entry path: build the connect URL from the build-time domain
+      const result = await validateApiKeyManual(key);
+      valid = result.valid;
+      ingestUrl = result.ingestUrl;
+    }
+
     if (!valid) {
       setSaving(false);
       setError("Invalid API key. Please check and try again, or generate a new QR code from the dashboard.");
       return;
     }
-    await setApiKey(key);
+
+    if (ingestUrl) {
+      await setApiKeyWithIngestUrl(key, ingestUrl);
+    } else {
+      await setApiKey(key);
+    }
+
     setSaving(false);
-    console.log(`[pair] Connected as ${patientName ?? "patient"}`);
+    console.log(`[pair] Paired — ingestUrl: ${ingestUrl ?? "(fallback)"}`);
     router.replace("/(tabs)");
   }
 
@@ -66,22 +111,32 @@ export default function PairScreen() {
     if (scanned.current || saving) return;
     scanned.current = true;
     await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+
     let key: string | null = null;
+    let connectUrl: string | null = null;
+
     try {
-      const url = new URL(data);
-      key = url.searchParams.get("apiKey");
+      const parsed = new URL(data);
+      key = parsed.searchParams.get("apiKey");
+      // If the QR encodes the /device/connect endpoint, use the full URL
+      // so the ingestUrl comes back from the correct environment.
+      if (parsed.pathname.includes("/device/connect") && key) {
+        connectUrl = data;
+      }
     } catch {
       try {
-        const parsed = JSON.parse(data);
-        key = parsed.apiKey ?? null;
+        const obj = JSON.parse(data);
+        key = obj.apiKey ?? null;
+        connectUrl = obj.connectUrl ?? null;
       } catch {
         key = null;
       }
     }
+
     if (key) {
       setMode("choose");
-      await connectWithKey(key);
-      if (saving === false) scanned.current = false;
+      await connectWithKey(key, connectUrl);
+      if (!saving) scanned.current = false;
     } else {
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       setError("QR code not recognized. Try entering the API key manually.");
@@ -93,7 +148,7 @@ export default function PairScreen() {
   async function handleManualSave() {
     const key = manualKey.trim();
     if (!key) { setError("Please enter your API key."); return; }
-    await connectWithKey(key);
+    await connectWithKey(key, null);
   }
 
   async function openCamera() {

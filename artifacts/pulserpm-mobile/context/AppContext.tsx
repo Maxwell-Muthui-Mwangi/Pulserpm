@@ -4,13 +4,20 @@ import { AppState as RNAppState, AppStateStatus, Platform } from "react-native";
 
 import { STORAGE_KEY_LAST_HC_SYNC, registerBackgroundSync } from "@/services/BackgroundSync";
 
-const DOMAIN = process.env.EXPO_PUBLIC_DOMAIN ?? "";
-const INGEST_URL = `https://${DOMAIN}/api/device/ingest`;
+/**
+ * Build-time fallback domain for local dev / Expo Go.
+ * In production, the ingest URL is stored at pairing time from the connect
+ * endpoint response so data always reaches the correct API server.
+ */
+const FALLBACK_INGEST_URL = process.env.EXPO_PUBLIC_DOMAIN
+  ? `https://${process.env.EXPO_PUBLIC_DOMAIN}/api/device/ingest`
+  : "";
 
-const STORAGE_KEY_API = "pulserpm_api_key";
-const STORAGE_KEY_LOGS = "pulserpm_sync_logs";
-const STORAGE_KEY_PENDING = "pulserpm_pending";
-const STORAGE_KEY_TOTAL = "pulserpm_total_synced";
+const STORAGE_KEY_API        = "pulserpm_api_key";
+const STORAGE_KEY_INGEST_URL = "pulserpm_ingest_url";   // saved at pair-time
+const STORAGE_KEY_LOGS       = "pulserpm_sync_logs";
+const STORAGE_KEY_PENDING    = "pulserpm_pending";
+const STORAGE_KEY_TOTAL      = "pulserpm_total_synced";
 
 export interface VitalReading {
   heartRate?: number;
@@ -33,6 +40,7 @@ export interface SyncLog {
 
 interface AppContextType {
   apiKey: string | null;
+  ingestUrl: string | null;
   loading: boolean;
   paired: boolean;
   syncStatus: "idle" | "syncing" | "success" | "error";
@@ -42,6 +50,7 @@ interface AppContextType {
   totalSynced: number;
   pendingCount: number;
   setApiKey: (key: string) => Promise<void>;
+  setApiKeyWithIngestUrl: (key: string, ingestUrl: string) => Promise<void>;
   clearApiKey: () => Promise<void>;
   syncReading: (reading: VitalReading) => Promise<boolean>;
   retryPending: () => Promise<void>;
@@ -52,6 +61,7 @@ const AppContext = createContext<AppContextType>({} as AppContextType);
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [apiKey, setApiKeyState] = useState<string | null>(null);
+  const [ingestUrl, setIngestUrlState] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [syncStatus, setSyncStatus] = useState<"idle" | "syncing" | "success" | "error">("idle");
   const [lastSyncTime, setLastSyncTime] = useState<string | null>(null);
@@ -68,14 +78,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   async function loadStoredState() {
     try {
-      const [key, logsJson, totalStr, pendingJson, lastHC] = await Promise.all([
+      const [key, storedIngestUrl, logsJson, totalStr, pendingJson, lastHC] = await Promise.all([
         AsyncStorage.getItem(STORAGE_KEY_API),
+        AsyncStorage.getItem(STORAGE_KEY_INGEST_URL),
         AsyncStorage.getItem(STORAGE_KEY_LOGS),
         AsyncStorage.getItem(STORAGE_KEY_TOTAL),
         AsyncStorage.getItem(STORAGE_KEY_PENDING),
         AsyncStorage.getItem(STORAGE_KEY_LAST_HC_SYNC),
       ]);
       if (key) setApiKeyState(key);
+      if (storedIngestUrl) setIngestUrlState(storedIngestUrl);
       if (logsJson) {
         const logs: SyncLog[] = JSON.parse(logsJson);
         setSyncLogs(logs.slice(0, 50));
@@ -92,19 +104,36 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setLoading(false);
   }
 
+  /** Pair with API key only (manual entry fallback — uses build-time domain). */
   async function setApiKey(key: string) {
     await AsyncStorage.setItem(STORAGE_KEY_API, key);
     setApiKeyState(key);
   }
 
+  /**
+   * Pair with API key + the exact ingest URL returned by /device/connect.
+   * This is the preferred path: the URL is always correct for the environment
+   * (dev or production) without depending on a build-time variable.
+   */
+  async function setApiKeyWithIngestUrl(key: string, url: string) {
+    await Promise.all([
+      AsyncStorage.setItem(STORAGE_KEY_API, key),
+      AsyncStorage.setItem(STORAGE_KEY_INGEST_URL, url),
+    ]);
+    setApiKeyState(key);
+    setIngestUrlState(url);
+  }
+
   async function clearApiKey() {
     await Promise.all([
       AsyncStorage.removeItem(STORAGE_KEY_API),
+      AsyncStorage.removeItem(STORAGE_KEY_INGEST_URL),
       AsyncStorage.removeItem(STORAGE_KEY_LOGS),
       AsyncStorage.removeItem(STORAGE_KEY_PENDING),
       AsyncStorage.removeItem(STORAGE_KEY_TOTAL),
     ]);
     setApiKeyState(null);
+    setIngestUrlState(null);
     setSyncLogs([]);
     setLastSyncTime(null);
     setTotalSynced(0);
@@ -112,11 +141,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setSyncStatus("idle");
   }
 
+  /**
+   * Resolve the effective ingest URL.
+   * Priority: stored URL from pair-time > build-time fallback.
+   * The stored URL is correct for both dev and production because it comes
+   * from the /device/connect endpoint which uses req.protocol + req.get("host").
+   */
+  function resolveIngestUrl(): string {
+    return ingestUrl || FALLBACK_INGEST_URL;
+  }
+
   async function postReading(
     key: string,
     reading: VitalReading
   ): Promise<{ ok: boolean; alertsTriggered?: number }> {
-    // Use the reading's source field; fall back to "mobile" if not specified
+    const url = resolveIngestUrl();
+    if (!url) return { ok: false };
+
     const payload: Record<string, number | string> = {
       source: reading.source ?? "mobile",
     };
@@ -126,7 +167,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (reading.systolicBp != null) payload.systolicBp = reading.systolicBp;
     if (reading.diastolicBp != null) payload.diastolicBp = reading.diastolicBp;
 
-    const res = await fetch(INGEST_URL, {
+    const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-Device-Api-Key": key },
       body: JSON.stringify(payload),
@@ -195,7 +236,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         return false;
       }
     },
-    [apiKey]
+    [apiKey, ingestUrl] // eslint-disable-line react-hooks/exhaustive-deps
   );
 
   const retryPending = useCallback(async () => {
@@ -227,7 +268,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setPendingCount(remaining.length);
     setSyncStatus(remaining.length === 0 ? "success" : "error");
     setTimeout(() => setSyncStatus("idle"), 3000);
-  }, [apiKey]);
+  }, [apiKey, ingestUrl]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /**
    * Reads the latest Health Connect vitals (last 30 min) and syncs them.
@@ -247,7 +288,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (!perms.heartRate && !perms.spo2 && !perms.bloodPressure && !perms.temperature) return;
 
       // Read since last successful HC sync (or last 2 hours if never synced)
-      // so foreground wake-ups never miss readings recorded while the app was closed
       let hoursBack = 2;
       const lastHCRaw = await AsyncStorage.getItem(STORAGE_KEY_LAST_HC_SYNC);
       if (lastHCRaw) {
@@ -294,6 +334,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     <AppContext.Provider
       value={{
         apiKey,
+        ingestUrl,
         loading,
         paired: !!apiKey,
         syncStatus,
@@ -303,6 +344,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         totalSynced,
         pendingCount,
         setApiKey,
+        setApiKeyWithIngestUrl,
         clearApiKey,
         syncReading,
         retryPending,
