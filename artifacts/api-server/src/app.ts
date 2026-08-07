@@ -53,6 +53,14 @@ app.use(express.urlencoded({ extended: true, limit: "1mb" }));
 app.use("/api", apiLimiter);
 app.use("/api/device/ingest", deviceLimiter);
 app.use("/api", auditMiddleware);
+
+// Prevent browser and proxy caching of all API responses so the dashboard
+// always receives fresh data. SSE routes override this with their own headers.
+app.use("/api", (_req, res, next) => {
+  res.setHeader("Cache-Control", "no-store");
+  next();
+});
+
 app.use("/api", router);
 
 export default app;

@@ -3,7 +3,7 @@ import { db, patientsTable, vitalsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { requireAuth } from "../middlewares/auth.js";
 import { evaluateVitals, getOrCreateThresholds, processAndSaveAlerts } from "../lib/alertEngine.js";
-import { broadcastVitals, subscribe } from "../lib/deviceSSE.js";
+import { broadcastVitals, subscribePatient, subscribeProvider } from "../lib/deviceSSE.js";
 import { verifyToken } from "../lib/auth.js";
 import crypto from "crypto";
 
@@ -286,6 +286,10 @@ router.get("/device/connect", async (req, res) => {
 // Dashboard tabs subscribe here; EventSource can't set headers so JWT is
 // passed as a query param (?token=...).  Nginx proxy buffering is disabled via
 // the X-Accel-Buffering header.
+//
+// Routing:
+//   Patient JWT  → subscribes to their own patient-specific events
+//   Provider JWT → subscribes to the global provider channel (all patients)
 router.get("/device/events", async (req, res) => {
   // Authenticate via query-param token (EventSource cannot set headers)
   const token = req.query.token as string | undefined;
@@ -300,32 +304,26 @@ router.get("/device/events", async (req, res) => {
     return;
   }
 
-  // Determine which patient's events to stream
-  let patientId: number;
-  if (payload.role === "patient") {
-    patientId = payload.id as number;
-  } else {
-    // Provider: requires explicit patientId query param
-    const qp = parseInt(req.query.patientId as string, 10);
-    if (!qp || isNaN(qp)) {
-      res.status(400).json({ error: "Missing patientId for provider SSE" });
-      return;
-    }
-    patientId = qp;
-  }
-
-  // Set SSE headers
+  // Set SSE headers (override the app-level no-store with no-cache for streaming)
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");
   res.setHeader("Connection", "keep-alive");
   res.setHeader("X-Accel-Buffering", "no"); // disable nginx proxy buffering
   res.flushHeaders();
 
-  // Register subscriber
-  const unsubscribe = subscribe(patientId, res);
+  let unsubscribe: () => void;
 
-  // Send initial connected event
-  res.write(`event: connected\ndata: ${JSON.stringify({ patientId })}\n\n`);
+  if (payload.role === "patient") {
+    // Patient: subscribe to their own patient-specific vitals channel
+    const patientId = payload.id as number;
+    unsubscribe = subscribePatient(patientId, res);
+    res.write(`event: connected\ndata: ${JSON.stringify({ patientId })}\n\n`);
+  } else {
+    // Provider: subscribe to the global channel — receives events for ALL patients
+    // so the dashboard updates instantly whenever any patient's device pushes data.
+    unsubscribe = subscribeProvider(res);
+    res.write(`event: connected\ndata: ${JSON.stringify({ role: "provider" })}\n\n`);
+  }
 
   // Heartbeat every 25 s to keep the connection alive through proxies
   const heartbeat = setInterval(() => {

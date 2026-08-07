@@ -300,22 +300,57 @@ export default function Dashboard() {
     if (statsUpdatedAt) setLastRefresh(new Date(statsUpdatedAt));
   }, [statsUpdatedAt]);
 
-  // Real-time SSE subscription — invalidate queries when the patient's device
-  // pushes new vitals so the dashboard updates without a manual refresh.
+  // Real-time SSE subscription with auto-reconnect (exponential backoff).
+  // Patients  → patient-specific channel for their own vitals.
+  // Providers → global provider channel: receives events for ALL patients so
+  //             the dashboard updates the moment any device pushes data.
   useEffect(() => {
-    if (!isPatient || !user?.id) return;
-    const token = getAuthToken();
-    if (!token) return;
-    const url = `${API_BASE}/api/device/events?patientId=${user.id}&token=${encodeURIComponent(token)}`;
-    const es = new EventSource(url);
-    es.addEventListener("connected", () => setSseActive(true));
-    es.addEventListener("vitals", () => {
-      queryClient.invalidateQueries();
-      setLastRefresh(new Date());
-    });
-    es.onerror = () => setSseActive(false);
-    return () => { es.close(); setSseActive(false); };
-  }, [isPatient, user?.id, queryClient]);
+    if (!user?.id) return;
+
+    let retryCount = 0;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    let unmounted = false;
+    let es: EventSource | null = null;
+
+    function connect() {
+      if (unmounted) return;
+      const token = getAuthToken();
+      if (!token) return;
+
+      const url = `${API_BASE}/api/device/events?token=${encodeURIComponent(token)}`;
+      es = new EventSource(url);
+
+      es.addEventListener("connected", () => {
+        retryCount = 0;
+        setSseActive(true);
+      });
+
+      es.addEventListener("vitals", () => {
+        queryClient.invalidateQueries();
+        setLastRefresh(new Date());
+      });
+
+      es.onerror = () => {
+        if (unmounted) return;
+        setSseActive(false);
+        es?.close();
+        es = null;
+        // Exponential backoff: 1 s → 2 s → 4 s → … → 30 s max
+        const delay = Math.min(1_000 * Math.pow(2, retryCount), 30_000);
+        retryCount = Math.min(retryCount + 1, 10);
+        retryTimer = setTimeout(connect, delay);
+      };
+    }
+
+    connect();
+
+    return () => {
+      unmounted = true;
+      es?.close();
+      if (retryTimer) clearTimeout(retryTimer);
+      setSseActive(false);
+    };
+  }, [user?.id, queryClient]);
 
   const isLoading = statsLoading || alertsLoading || (!isPatient && patientsLoading);
 

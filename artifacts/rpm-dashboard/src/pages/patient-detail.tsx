@@ -75,21 +75,56 @@ export default function PatientDetail() {
     }
   }, []);
 
-  // SSE subscription — receive real-time vitals push and invalidate queries
-  const patientIdRef = useRef(patientId);
-  patientIdRef.current = patientId;
+  // SSE subscription with auto-reconnect (exponential backoff).
+  // Patients  → patient-specific channel.
+  // Providers → global provider channel (receives events for all patients;
+  //             vitals event includes patientId so the UI can filter if needed).
   useEffect(() => {
-    const token = getAuthToken();
-    if (!token || !patientId) return;
-    const url = `${API_BASE}/api/device/events?patientId=${patientId}&token=${encodeURIComponent(token)}`;
-    const es = new EventSource(url);
-    es.addEventListener("connected", () => setSseConnected(true));
-    es.addEventListener("vitals", () => {
-      // Invalidate all queries so vitals, alerts, and patient summary refresh
-      queryClient.invalidateQueries();
-    });
-    es.onerror = () => setSseConnected(false);
-    return () => { es.close(); setSseConnected(false); };
+    if (!patientId) return;
+
+    let retryCount = 0;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    let unmounted = false;
+    let es: EventSource | null = null;
+
+    function connect() {
+      if (unmounted) return;
+      const token = getAuthToken();
+      if (!token) return;
+
+      const url = `${API_BASE}/api/device/events?token=${encodeURIComponent(token)}`;
+      es = new EventSource(url);
+
+      es.addEventListener("connected", () => {
+        retryCount = 0;
+        setSseConnected(true);
+      });
+
+      es.addEventListener("vitals", () => {
+        // Invalidate all queries so vitals, alerts, and patient summary refresh
+        queryClient.invalidateQueries();
+      });
+
+      es.onerror = () => {
+        if (unmounted) return;
+        setSseConnected(false);
+        es?.close();
+        es = null;
+        // Exponential backoff: 1 s → 2 s → 4 s → … → 30 s max
+        const delay = Math.min(1_000 * Math.pow(2, retryCount), 30_000);
+        retryCount = Math.min(retryCount + 1, 10);
+        retryTimer = setTimeout(connect, delay);
+      };
+    }
+
+    connect();
+
+    return () => {
+      unmounted = true;
+      es?.close();
+      if (retryTimer) clearTimeout(retryTimer);
+      setSseConnected(false);
+    };
   }, [patientId, queryClient]);
 
   useEffect(() => {
