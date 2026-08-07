@@ -352,7 +352,7 @@ router.get("/device/connect", async (req, res) => {
     }
 
     const [patient] = await db
-      .select({ id: patientsTable.id })
+      .select({ id: patientsTable.id, name: patientsTable.name })
       .from(patientsTable)
       .where(eq(patientsTable.deviceApiKey, apiKey))
       .limit(1);

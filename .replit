@@ -26,6 +26,10 @@ author = "agent"
 task = "workflow.run"
 args = "artifacts/scheduler-api: Scheduler API"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "sse-pipeline"
+
 [[workflows.workflow]]
 name = "artifacts/scheduler-api: Scheduler API"
 author = "agent"
@@ -37,6 +41,17 @@ waitForPort = 3001
 
 [workflows.workflow.metadata]
 outputType = "console"
+
+[[workflows.workflow]]
+name = "sse-pipeline"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "pnpm --filter @workspace/api-server test"
+
+[workflows.workflow.metadata]
+isValidation = true
 
 [agent]
 stack = "PNPM_WORKSPACE"
