@@ -29,7 +29,7 @@ import { format, formatDistanceToNow } from "date-fns";
 import { 
   Heart, Activity, Droplets, Thermometer, ArrowLeft, Settings, Bell, 
   CheckCircle2, XCircle, Loader2, Smartphone, Copy, RefreshCw, Trash2,
-  Wifi, Apple, Watch, Printer
+  Wifi, Apple, Watch, Printer, WifiOff
 } from "lucide-react";
 import { Link } from "wouter";
 import { 
@@ -38,6 +38,10 @@ import {
 } from "recharts";
 
 const API_BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+// Threshold after which a wearable device is considered to have a data gap.
+// Must stay in sync with the same constant in patients.tsx.
+const DATA_GAP_THRESHOLD_MS = 30 * 60 * 1000; // 30 minutes
 
 export default function PatientDetail() {
   const [, params] = useRoute("/patients/:id");
@@ -528,15 +532,31 @@ export default function PatientDetail() {
                 const syncedAt = new Date(patient.latestVitals!.recordedAt as string);
                 const diffMs = now.getTime() - syncedAt.getTime();
                 const isRecent = diffMs < 5 * 60 * 1000; // < 5 minutes
+                const isDataGap = patient.deviceType === "wearable" && diffMs > DATA_GAP_THRESHOLD_MS;
                 return (
-                  <p className="text-xs text-muted-foreground flex items-center gap-1.5 -mt-2">
-                    <span className={`h-1.5 w-1.5 rounded-full inline-block ${isRecent ? "bg-green-500 animate-pulse" : "bg-muted-foreground/50"}`} />
-                    {isRecent
-                      ? <span className="text-green-600 font-medium">Just synced</span>
-                      : <>Last synced {formatDistanceToNow(syncedAt, { addSuffix: true })}</>
-                    }
-                    {" · "}{format(syncedAt, "MMM d 'at' h:mm a")}
-                  </p>
+                  <>
+                    {isDataGap && (
+                      <div className="flex items-start gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 -mt-2">
+                        <WifiOff className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+                        <div>
+                          <p className="text-sm font-semibold text-amber-700 dark:text-amber-400">
+                            Data gap detected — no reading for {Math.round(diffMs / 60_000)} minutes
+                          </p>
+                          <p className="text-xs text-amber-600/80 dark:text-amber-400/70 mt-0.5">
+                            The patient's device may be offline, battery-depleted, or suspended by the OS. Displayed values are from the last successful sync.
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                    <p className="text-xs text-muted-foreground flex items-center gap-1.5 -mt-2">
+                      <span className={`h-1.5 w-1.5 rounded-full inline-block ${isRecent ? "bg-green-500 animate-pulse" : isDataGap ? "bg-amber-500" : "bg-muted-foreground/50"}`} />
+                      {isRecent
+                        ? <span className="text-green-600 font-medium">Just synced</span>
+                        : <>Last synced {formatDistanceToNow(syncedAt, { addSuffix: true })}</>
+                      }
+                      {" · "}{format(syncedAt, "MMM d 'at' h:mm a")}
+                    </p>
+                  </>
                 );
               })() : (
                 <p className="text-xs text-muted-foreground -mt-2">No readings recorded yet</p>

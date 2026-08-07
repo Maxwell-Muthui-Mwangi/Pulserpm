@@ -111,6 +111,18 @@ export const PatientSummaryRiskLevel = {
   critical: "critical",
 } as const;
 
+/**
+ * Device registration type for this patient. "wearable" means a hardware device is paired via API key; "manual" means readings are entered by hand or not via a registered device.
+
+ */
+export type PatientSummaryDeviceType =
+  (typeof PatientSummaryDeviceType)[keyof typeof PatientSummaryDeviceType];
+
+export const PatientSummaryDeviceType = {
+  wearable: "wearable",
+  manual: "manual",
+} as const;
+
 export interface VitalsSnapshot {
   /** @nullable */
   heartRate?: number | null;
@@ -137,6 +149,9 @@ export interface PatientSummary {
   riskLevel: PatientSummaryRiskLevel;
   latestVitals?: VitalsSnapshot;
   activeAlertCount: number;
+  /** Device registration type for this patient. "wearable" means a hardware device is paired via API key; "manual" means readings are entered by hand or not via a registered device.
+   */
+  deviceType?: PatientSummaryDeviceType;
   lastSeen?: string;
 }
 

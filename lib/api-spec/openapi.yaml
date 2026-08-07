@@ -1495,6 +1495,13 @@ components:
           $ref: "#/components/schemas/VitalsSnapshot"
         activeAlertCount:
           type: integer
+        deviceType:
+          type: string
+          enum: [wearable, manual]
+          description: >
+            Device registration type for this patient.
+            "wearable" means a hardware device is paired via API key;
+            "manual" means readings are entered by hand or not via a registered device.
         lastSeen:
           type: string
           format: date-time

@@ -106,6 +106,12 @@ export const ListPatientsResponseItem = zod.object({
     })
     .optional(),
   activeAlertCount: zod.number(),
+  deviceType: zod
+    .enum(["wearable", "manual"])
+    .optional()
+    .describe(
+      'Device registration type for this patient. \"wearable\" means a hardware device is paired via API key; \"manual\" means readings are entered by hand or not via a registered device.\n',
+    ),
   lastSeen: zod.date().optional(),
 });
 export const ListPatientsResponse = zod.array(ListPatientsResponseItem);

@@ -68,6 +68,7 @@ export * from "./patientDetailRiskLevel";
 export * from "./patientDeviceType";
 export * from "./patientGender";
 export * from "./patientSummary";
+export * from "./patientSummaryDeviceType";
 export * from "./patientSummaryRiskLevel";
 export * from "./provider";
 export * from "./rescheduleAssignmentRequest";

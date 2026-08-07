@@ -182,6 +182,7 @@ router.get("/patients", requireAuth, async (req, res) => {
           conditions: p.conditions ?? [],
           riskLevel: risk,
           activeAlertCount: Number(alertCount.count),
+          deviceType: p.deviceType,
           lastSeen: latestVitals?.recordedAt ?? null,
           latestVitals: latestVitals
             ? {

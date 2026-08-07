@@ -5,6 +5,7 @@
  * Remote Patient Monitoring API + Academic Assignment Scheduler API
  * OpenAPI spec version: 1.0.0
  */
+import type { PatientSummaryDeviceType } from "./patientSummaryDeviceType";
 import type { PatientSummaryRiskLevel } from "./patientSummaryRiskLevel";
 import type { VitalsSnapshot } from "./vitalsSnapshot";
 
@@ -17,5 +18,8 @@ export interface PatientSummary {
   riskLevel: PatientSummaryRiskLevel;
   latestVitals?: VitalsSnapshot;
   activeAlertCount: number;
+  /** Device registration type for this patient. "wearable" means a hardware device is paired via API key; "manual" means readings are entered by hand or not via a registered device.
+   */
+  deviceType?: PatientSummaryDeviceType;
   lastSeen?: Date;
 }

@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { Link, useLocation } from "wouter";
-import { Search, Filter, Activity, Heart, Thermometer, Droplets, Users, UserPlus, X, CheckCircle2, Loader2, Plus } from "lucide-react";
+import { Search, Filter, Activity, Heart, Thermometer, Droplets, Users, UserPlus, X, CheckCircle2, Loader2, Plus, WifiOff } from "lucide-react";
 import { useListPatients, ListPatientsRiskLevel } from "@workspace/api-client-react";
 import { withAuth, getAuthToken } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
@@ -14,6 +14,20 @@ import { useToast } from "@/hooks/use-toast";
 import { formatDistanceToNow } from "date-fns";
 
 const API_BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+// Alert providers when a wearable device hasn't sent any reading in this window.
+// Chosen to be long enough to absorb normal background-sync jitter (15–20 min)
+// but short enough to catch genuine OS suspension or connectivity loss.
+const DATA_GAP_THRESHOLD_MS = 30 * 60 * 1000; // 30 minutes
+
+function isDataGap(
+  patient: { deviceType?: string | null | undefined; lastSeen?: string | Date | null },
+  now: Date,
+): boolean {
+  if (patient.deviceType !== "wearable") return false;
+  if (!patient.lastSeen) return false;
+  return now.getTime() - new Date(patient.lastSeen).getTime() > DATA_GAP_THRESHOLD_MS;
+}
 
 interface PendingPatient {
   id: number;
@@ -225,6 +239,14 @@ export default function Patients() {
   const [pendingCount, setPendingCount] = useState(0);
   const { toast } = useToast();
 
+  // Tick every 30 s so data-gap badges appear/disappear at the threshold
+  // without requiring a user interaction or a full data refetch.
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 30_000);
+    return () => clearInterval(id);
+  }, []);
+
   useEffect(() => {
     if (isPatient && user) setLocation(`/patients/${user.id}`);
   }, [isPatient, user, setLocation]);
@@ -339,6 +361,11 @@ export default function Patients() {
                         {patient.activeAlertCount > 0 && (
                           <Badge variant="destructive" className="h-5 px-1.5 text-[10px]">
                             {patient.activeAlertCount} alert{patient.activeAlertCount > 1 ? "s" : ""}
+                          </Badge>
+                        )}
+                        {isDataGap(patient, now) && (
+                          <Badge className="h-5 px-1.5 text-[10px] bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/30 hover:bg-amber-500/20 flex items-center gap-1">
+                            <WifiOff className="h-2.5 w-2.5" /> Data Gap
                           </Badge>
                         )}
                       </div>
