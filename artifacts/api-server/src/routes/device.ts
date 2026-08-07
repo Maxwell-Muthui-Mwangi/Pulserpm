@@ -105,6 +105,7 @@ router.get("/device/status", async (req, res) => {
 // Accepts health data from wearables/apps authenticated via device API key.
 // Supports multiple data formats:
 //   Standard:     { heartRate, systolicBp, diastolicBp, spo2, temperature, caloriesBurned, recordedAt }
+//   HealthWatch:  { heartRate, heart_rate, systolic, systolicBp, diastolic, diastolicBp, spo2, bloodOxygen, temperature, temp, steps, source, device, recordedAt, timestamp }
 //   Apple Health: { HeartRate, BloodPressureSystolic, BloodPressureDiastolic, OxygenSaturation, BodyTemperature, ActiveEnergyBurned, StartDate }
 //   Fitbit:       { heart: { restingHeartRate }, spo2: { value }, tempSkin: { value }, calories: { value } }
 //   Google Fit:   { heartRate: { bpm }, bloodPressure: { systolic, diastolic }, oxygen: { saturation }, temperature: { celsius } }
@@ -165,13 +166,13 @@ async function handleIngest(req: import("express").Request, res: import("express
     );
 
     const spo2 = normalizeField(body,
-      ["spo2", "OxygenSaturation", "oxygen_saturation", "SpO2"],
+      ["spo2", "OxygenSaturation", "oxygen_saturation", "SpO2", "bloodOxygen", "blood_oxygen"],
       body.spo2?.value,
       body.oxygen?.saturation
     );
 
     const temperature = normalizeField(body,
-      ["temperature", "BodyTemperature", "body_temperature", "tempSkin"],
+      ["temperature", "BodyTemperature", "body_temperature", "tempSkin", "temp"],
       body.tempSkin?.value,
       body.temperature?.celsius
     );
@@ -226,7 +227,9 @@ async function handleIngest(req: import("express").Request, res: import("express
       alertsTriggered: triggeredAlerts.length,
     });
 
-    res.status(201).json({ 
+    // Return 200 (not 201) — several companion apps (including HealthWatch) only
+    // mark a sync as "Synced" on a 200 response; a 201 causes silent retries.
+    res.status(200).json({ 
       success: true, 
       message: "Vitals recorded successfully",
       vitalsId: inserted.id,
