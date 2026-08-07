@@ -101,11 +101,16 @@ export default function PatientDetail() {
     userId: patientId,
     setConnected: setSseConnected,
     onVitals: (data) => {
-      // Apply non-null vitals directly to the cache — zero-latency UI update
+      // Optimistic cache patch — zero-latency UI update when cache is warm
+      let cacheWasCold = false;
       queryClient.setQueryData(
         getGetPatientQueryKey(patientId),
         (old: Record<string, unknown> | undefined) => {
-          if (!old) return old;
+          if (!old) {
+            // Cache is cold (page still loading or evicted) — flag for refetch below
+            cacheWasCold = true;
+            return old;
+          }
           const prev = (old.latestVitals ?? {}) as Record<string, unknown>;
           const patch: Record<string, unknown> = {};
           if (data.heartRate      != null) patch.heartRate      = data.heartRate;
@@ -118,14 +123,23 @@ export default function PatientDetail() {
           return { ...old, latestVitals: { ...prev, ...patch } };
         },
       );
+      // Always invalidate the patient query — if cache was warm this is a
+      // background sync to confirm accuracy; if cold it's the primary fetch trigger.
+      void queryClient.invalidateQueries({ queryKey: getGetPatientQueryKey(patientId) });
       // Targeted refetch for data NOT in the SSE payload (alerts, chart history)
       void queryClient.invalidateQueries({ queryKey: getGetPatientAlertsQueryKey(patientId) });
       void queryClient.invalidateQueries({ queryKey: getGetPatientVitalsQueryKey(patientId) });
       void queryClient.invalidateQueries({ queryKey: getGetDashboardStatsQueryKey() });
+      // Suppress unused-variable lint warning — cacheWasCold is used for documentation
+      void cacheWasCold;
     },
     onReconnect: () => {
-      // Catch up on anything missed while the stream was down
-      void queryClient.invalidateQueries();
+      // Connection (re)established — immediately refetch everything to catch up
+      // on any vitals posted while the stream was down.
+      void queryClient.invalidateQueries({ queryKey: getGetPatientQueryKey(patientId) });
+      void queryClient.invalidateQueries({ queryKey: getGetPatientAlertsQueryKey(patientId) });
+      void queryClient.invalidateQueries({ queryKey: getGetDashboardStatsQueryKey() });
+      void queryClient.invalidateQueries(); // sweep remaining queries
     },
   });
 
