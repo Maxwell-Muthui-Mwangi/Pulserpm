@@ -10,7 +10,11 @@ import {
   useGetPatientThresholds,
   useUpdatePatientThresholds,
   useAcknowledgeAlert,
-  useResolveAlert
+  useResolveAlert,
+  getGetPatientQueryKey,
+  getGetPatientVitalsQueryKey,
+  getGetPatientAlertsQueryKey,
+  getGetDashboardStatsQueryKey,
 } from "@workspace/api-client-react";
 import { withAuth, getAuthToken } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
@@ -100,9 +104,32 @@ export default function PatientDetail() {
         setSseConnected(true);
       });
 
-      es.addEventListener("vitals", () => {
-        // Invalidate all queries so vitals, alerts, and patient summary refresh
-        queryClient.invalidateQueries();
+      es.addEventListener("vitals", (e: MessageEvent) => {
+        // Apply non-null vitals directly to the cache — zero-latency UI update.
+        try {
+          const data = JSON.parse(e.data) as Record<string, unknown>;
+          queryClient.setQueryData(
+            getGetPatientQueryKey(patientId),
+            (old: Record<string, unknown> | undefined) => {
+              if (!old) return old;
+              const prev = (old.latestVitals ?? {}) as Record<string, unknown>;
+              const patch: Record<string, unknown> = {};
+              // Only overwrite non-null fields (preserves getLatestVitalsPerField semantics)
+              if (data.heartRate     != null) patch.heartRate     = data.heartRate;
+              if (data.systolicBp    != null) patch.systolicBp    = data.systolicBp;
+              if (data.diastolicBp   != null) patch.diastolicBp   = data.diastolicBp;
+              if (data.spo2          != null) patch.spo2          = data.spo2;
+              if (data.temperature   != null) patch.temperature   = data.temperature;
+              if (data.caloriesBurned != null) patch.caloriesBurned = data.caloriesBurned;
+              if (data.recordedAt)             patch.recordedAt   = data.recordedAt;
+              return { ...old, latestVitals: { ...prev, ...patch } };
+            },
+          );
+        } catch { /* ignore parse errors */ }
+        // Targeted refetch for data NOT in the SSE payload (alerts, chart history)
+        void queryClient.invalidateQueries({ queryKey: getGetPatientAlertsQueryKey(patientId) });
+        void queryClient.invalidateQueries({ queryKey: getGetPatientVitalsQueryKey(patientId) });
+        void queryClient.invalidateQueries({ queryKey: getGetDashboardStatsQueryKey() });
       });
 
       es.onerror = () => {

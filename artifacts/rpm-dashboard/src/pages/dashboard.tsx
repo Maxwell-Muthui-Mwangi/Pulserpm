@@ -26,7 +26,11 @@ import {
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend
 } from "recharts";
-import { useGetDashboardStats, useListAlerts, useListPatients } from "@workspace/api-client-react";
+import { 
+  useGetDashboardStats, useListAlerts, useListPatients,
+  getGetPatientQueryKey,
+  getGetDashboardStatsQueryKey,
+} from "@workspace/api-client-react";
 import { withAuth, getAuthToken } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 import Layout from "@/components/layout";
@@ -325,8 +329,35 @@ export default function Dashboard() {
         setSseActive(true);
       });
 
-      es.addEventListener("vitals", () => {
-        queryClient.invalidateQueries();
+      es.addEventListener("vitals", (e: MessageEvent) => {
+        // Apply non-null vitals directly to the specific patient's cache entry —
+        // zero-latency update so the patient card reflects new data instantly.
+        try {
+          const data = JSON.parse(e.data) as Record<string, unknown>;
+          const pid = data.patientId as number | undefined;
+          if (pid) {
+            queryClient.setQueryData(
+              getGetPatientQueryKey(pid),
+              (old: Record<string, unknown> | undefined) => {
+                if (!old) return old;
+                const prev = (old.latestVitals ?? {}) as Record<string, unknown>;
+                const patch: Record<string, unknown> = {};
+                if (data.heartRate      != null) patch.heartRate      = data.heartRate;
+                if (data.systolicBp     != null) patch.systolicBp     = data.systolicBp;
+                if (data.diastolicBp    != null) patch.diastolicBp    = data.diastolicBp;
+                if (data.spo2           != null) patch.spo2           = data.spo2;
+                if (data.temperature    != null) patch.temperature    = data.temperature;
+                if (data.caloriesBurned != null) patch.caloriesBurned = data.caloriesBurned;
+                if (data.recordedAt)              patch.recordedAt    = data.recordedAt;
+                return { ...old, latestVitals: { ...prev, ...patch } };
+              },
+            );
+          }
+        } catch { /* ignore parse errors */ }
+        // Refetch stats (alert counts, risk levels) and the patients list summary
+        void queryClient.invalidateQueries({ queryKey: getGetDashboardStatsQueryKey() });
+        void queryClient.invalidateQueries({ queryKey: ["/api/patients"] });
+        void queryClient.invalidateQueries({ queryKey: ["/api/alerts"] });
         setLastRefresh(new Date());
       });
 
