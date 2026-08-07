@@ -1,6 +1,8 @@
 import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import Layout from "@/components/layout";
 import { useListAlerts, useAcknowledgeAlert, useResolveAlert, ListAlertsStatus } from "@workspace/api-client-react";
+import { useRealtimeSync } from "@/lib/use-realtime-sync";
 import { useAuth } from "@/lib/auth-context";
 import { withAuth } from "@/lib/utils";
 import { Card, CardContent } from "@/components/ui/card";
@@ -14,10 +16,11 @@ import { Link } from "wouter";
 export default function Alerts() {
   const [statusFilter, setStatusFilter] = useState<ListAlertsStatus>("active");
   const { toast } = useToast();
+  const queryClient = useQueryClient();
 
   const { data: alerts, isLoading, refetch } = useListAlerts(
     { status: statusFilter, limit: 100 }, 
-    { request: withAuth() }
+    { request: withAuth(), query: { refetchInterval: 5_000, refetchIntervalInBackground: true } as any }
   );
 
   const ackAlert = useAcknowledgeAlert();
@@ -33,7 +36,18 @@ export default function Alerts() {
     });
   };
 
-  const { isPatient } = useAuth();
+  const { isPatient, user } = useAuth();
+
+  // Real-time SSE: new alerts surface instantly when vitals are ingested
+  useRealtimeSync({
+    userId: user?.id,
+    onVitals: () => {
+      void queryClient.invalidateQueries({ queryKey: ["/api/alerts"] });
+    },
+    onReconnect: () => {
+      void queryClient.invalidateQueries({ queryKey: ["/api/alerts"] });
+    },
+  });
 
   return (
     <Layout>

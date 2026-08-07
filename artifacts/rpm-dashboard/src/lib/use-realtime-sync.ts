@@ -52,14 +52,14 @@ interface Options {
    */
   onReconnect?: () => void;
   /** Called whenever the SSE connection status changes. */
-  setConnected: (connected: boolean) => void;
+  setConnected?: (connected: boolean) => void;
 }
 
 export function useRealtimeSync({
   userId,
   onVitals,
   onReconnect,
-  setConnected,
+  setConnected = () => {},
 }: Options): void {
   // Stable refs so the effect never needs to re-run due to callback identity changes
   const onVitalsRef    = useRef(onVitals);

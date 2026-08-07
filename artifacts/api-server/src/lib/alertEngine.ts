@@ -168,13 +168,41 @@ function computeAge(dateOfBirth: string | null | undefined): number | null {
   return age;
 }
 
+/**
+ * Deduplication window: suppress a new alert if the same patientId+vitalType+severity
+ * was already alerted within this period. Uses an in-process Map so the check-and-set
+ * is atomic with no DB race-condition window (works reliably on a single-server deploy).
+ */
+const DEDUP_WINDOW_MS = 5 * 60 * 1_000; // 5 minutes
+
+/** key: `patientId:vitalType:severity` → timestamp of last fire (ms) */
+const recentAlertMap = new Map<string, number>();
+
+function isDuplicateAlert(patientId: number, vitalType: string, severity: string): boolean {
+  const key = `${patientId}:${vitalType}:${severity}`;
+  const lastFired = recentAlertMap.get(key);
+  const now = Date.now();
+  if (lastFired && now - lastFired < DEDUP_WINDOW_MS) return true;
+  recentAlertMap.set(key, now);
+  return false;
+}
+
 export async function processAndSaveAlerts(
   patientId: number,
   candidates: AlertCandidate[]
 ): Promise<typeof alertsTable.$inferSelect[]> {
   if (candidates.length === 0) return [];
 
-  const toInsert: InsertAlert[] = candidates.map((c) => ({
+  // ── Deduplication: skip any candidate whose vitalType+severity fired recently.
+  //    In-process Map is checked-and-set atomically (single event-loop tick) so
+  //    burst requests can't race past each other.
+  const dedupedCandidates = candidates.filter(
+    (c) => !isDuplicateAlert(patientId, c.vitalType, c.severity)
+  );
+
+  if (dedupedCandidates.length === 0) return [];
+
+  const toInsert: InsertAlert[] = dedupedCandidates.map((c) => ({
     patientId,
     vitalType: c.vitalType,
     severity: c.severity,
