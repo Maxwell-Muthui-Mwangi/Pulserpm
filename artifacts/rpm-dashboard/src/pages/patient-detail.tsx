@@ -67,6 +67,9 @@ export default function PatientDetail() {
   const [keyCopied, setKeyCopied] = useState(false);
   const [printing, setPrinting] = useState(false);
   const [sseConnected, setSseConnected] = useState(false);
+  // Tracks the last time any SSE vital event arrived (backlog or live).
+  // SSE fires on every ingest so this is a reliable device-is-communicating signal.
+  const [sseLastEventAt, setSseLastEventAt] = useState<Date | null>(null);
   const [now, setNow] = useState(() => new Date());
   const queryClient = useQueryClient();
 
@@ -85,13 +88,24 @@ export default function PatientDetail() {
   const ackAlert = useAcknowledgeAlert();
   const resAlert = useResolveAlert();
 
-  // Use server receipt time (receivedAt = DB created_at) for all staleness checks.
-  // The Kotlin companion app sends buffered readings with old recordedAt timestamps;
-  // receivedAt is always server-side NOW() so it stays accurate regardless of what
-  // the device claims the reading time was.
+  // Liveness signal cascade — each fallback proves the device is connected:
+  //  1. receivedAt  = server DB insertion time (accurate even with buffered timestamps)
+  //  2. sseLastEventAt = last SSE vital event received in this browser session
+  //     (SSE fires on every ingest including backlog, so this proves communication)
+  //  3. latestAlertAt = most recent active alert triggeredAt — alerts are only
+  //     created when new vitals arrive, so a recent alert proves data is flowing
+  //  4. recordedAt  = device-reported timestamp (last resort; may be stale)
   const effectiveSyncAt: Date | null = (() => {
     const rv = patient?.latestVitals?.receivedAt;
     if (rv) return new Date(rv);
+    if (sseLastEventAt) return sseLastEventAt;
+    const alertsList = Array.isArray(alerts) ? alerts : ((alerts as any)?.data ?? []);
+    const latestAlertTs = (alertsList[0] as any)?.triggeredAt ?? null;
+    if (latestAlertTs) {
+      const alertDate = new Date(latestAlertTs);
+      const ra2 = patient?.latestVitals?.recordedAt ? new Date(patient.latestVitals.recordedAt) : new Date(0);
+      if (alertDate > ra2) return alertDate;
+    }
     const ra = patient?.latestVitals?.recordedAt;
     if (ra) return new Date(ra);
     return null;
@@ -120,6 +134,8 @@ export default function PatientDetail() {
     userId: patientId,
     setConnected: setSseConnected,
     onVitals: (data) => {
+      // Every SSE vital event (backlog or live) proves the device is communicating.
+      setSseLastEventAt(new Date());
       // Optimistic cache patch — zero-latency UI update when cache is warm
       let cacheWasCold = false;
       queryClient.setQueryData(

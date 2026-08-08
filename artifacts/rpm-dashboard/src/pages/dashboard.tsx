@@ -295,6 +295,9 @@ export default function Dashboard() {
   // Track when data was last refreshed for the "live" indicator
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
   const [sseActive, setSseActive] = useState(false);
+  // Per-patient SSE event timestamps — client-side liveness signal used when
+  // the API's receivedAt is unavailable (old deployed binary).
+  const [sseLastEventByPatient, setSseLastEventByPatient] = useState<Record<number, Date>>({});
   const [now, setNow] = useState(() => new Date());
 
   // Tick every 15 s so the "Updated X ago" label and stale indicators stay current
@@ -317,6 +320,8 @@ export default function Dashboard() {
       // Apply non-null vitals directly to the patient cache — zero-latency update
       const pid = data.patientId as number | undefined;
       if (pid) {
+        // Record SSE event time per patient for client-side liveness tracking
+        setSseLastEventByPatient(prev => ({ ...prev, [pid]: new Date() }));
         queryClient.setQueryData(
           getGetPatientQueryKey(pid),
           (old: Record<string, unknown> | undefined) => {
@@ -797,9 +802,8 @@ export default function Dashboard() {
                       ? formatDistanceToNow(new Date(p.lastSeen), { addSuffix: true })
                       : "—";
                     const v = p.latestVitals;
-                    // Use receivedAt (server time) for staleness — avoids false "stale"
-                    // when a device sends buffered readings with old recordedAt timestamps.
-                    const effectiveVitalsTime = v?.receivedAt ?? v?.recordedAt;
+                    // Liveness cascade: server receivedAt → SSE event time → recordedAt
+                    const effectiveVitalsTime = v?.receivedAt ?? sseLastEventByPatient[p.id] ?? v?.recordedAt;
                     const vitalsAge = effectiveVitalsTime ? now.getTime() - new Date(effectiveVitalsTime).getTime() : null;
                     const vitalsStale = vitalsAge !== null && vitalsAge > STALE_VITALS_MS;
 
