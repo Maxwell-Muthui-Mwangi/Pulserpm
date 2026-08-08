@@ -39,9 +39,16 @@ async function getLatestVitalsPerField(patientId: number): Promise<{
          ORDER BY CASE WHEN recorded_at > NOW() - INTERVAL '2 hours' THEN 0 ELSE 1 END, created_at DESC LIMIT 1) AS temperature,
       (SELECT calories_burned FROM vitals WHERE patient_id = ${patientId} AND calories_burned IS NOT NULL
          ORDER BY CASE WHEN recorded_at > NOW() - INTERVAL '2 hours' THEN 0 ELSE 1 END, created_at DESC LIMIT 1) AS calories_burned,
-      (SELECT recorded_at     FROM vitals WHERE patient_id = ${patientId}
-         ORDER BY CASE WHEN recorded_at > NOW() - INTERVAL '2 hours' THEN 0 ELSE 1 END, created_at DESC LIMIT 1) AS recorded_at,
-      (SELECT created_at      FROM vitals WHERE patient_id = ${patientId} ORDER BY created_at DESC LIMIT 1) AS received_at
+      -- recorded_at: prefer a genuine live device timestamp (within 2 h); when the
+      -- device is only sending backlogged data, substitute the server receipt time
+      -- (MAX created_at) so that every version of the dashboard JS — including old
+      -- cached builds that read recordedAt directly — never sees a stale timestamp
+      -- while the device is actively communicating.
+      COALESCE(
+        (SELECT recorded_at FROM vitals WHERE patient_id = ${patientId} AND recorded_at > NOW() - INTERVAL '2 hours' ORDER BY created_at DESC LIMIT 1),
+        (SELECT created_at  FROM vitals WHERE patient_id = ${patientId} ORDER BY created_at DESC LIMIT 1)
+      ) AS recorded_at,
+      (SELECT created_at FROM vitals WHERE patient_id = ${patientId} ORDER BY created_at DESC LIMIT 1) AS received_at
   `);
   const row = result.rows[0] as Record<string, unknown> | undefined;
   if (!row || (row.recorded_at == null && row.received_at == null)) return null;

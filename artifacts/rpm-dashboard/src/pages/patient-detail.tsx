@@ -109,9 +109,16 @@ export default function PatientDetail() {
   //  4. recordedAt      = device-reported timestamp — last resort; may be stale if
   //                       the device batches readings with old timestamps
   const effectiveSyncAt: Date | null = (() => {
+    // 1. receivedAt = MAX(created_at) from API — always current when device syncs
     const rv = patient?.latestVitals?.receivedAt;
     if (rv) return new Date(rv);
+    // 2. lastSeen = receivedAt ?? recordedAt (server-side); with the API fix,
+    //    this also reflects MAX(created_at) and works with any API build
+    const ls = (patient as any)?.lastSeen;
+    if (ls) return new Date(ls);
+    // 3. SSE event time — fires on every ingest (persisted in sessionStorage)
     if (sseLastEventAt) return sseLastEventAt;
+    // 4. Alert triggeredAt — alerts are only created when new vitals arrive
     const alertsList = Array.isArray(alerts) ? alerts : ((alerts as any)?.data ?? []);
     const latestAlertTs = (alertsList[0] as any)?.triggeredAt ?? null;
     if (latestAlertTs) {
@@ -119,6 +126,7 @@ export default function PatientDetail() {
       const ra2 = patient?.latestVitals?.recordedAt ? new Date(patient.latestVitals.recordedAt) : new Date(0);
       if (alertDate > ra2) return alertDate;
     }
+    // 5. recordedAt — device timestamp, last resort (may be stale during backlog)
     const ra = patient?.latestVitals?.recordedAt;
     if (ra) return new Date(ra);
     return null;
