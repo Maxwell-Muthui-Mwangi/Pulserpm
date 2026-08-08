@@ -182,6 +182,13 @@ async function handleIngest(req: import("express").Request, res: import("express
       body.calories?.value
     );
 
+    // Steps from pedometer/wearable — stored in caloriesBurned column (closest
+    // available field) and accepted as a valid sync signal even without vitals.
+    // This lets the TK65 / HealthWatch companion app keep the "last synced"
+    // timestamp current while the watch isn't actively measuring HR/SpO₂/BP.
+    const steps = normalizeField(body, ["steps", "stepCount", "step_count", "dailySteps"]);
+    const effectiveCalories = caloriesBurned ?? steps;
+
     const recordedAt = body.recordedAt || body.StartDate || body.startDate || body.timestamp || new Date().toISOString();
 
     // Accept source from body (e.g. "oraimo", "healthwatch"), fall back to "wearable"
@@ -190,7 +197,7 @@ async function handleIngest(req: import("express").Request, res: import("express
       ? body.source
       : "wearable";
 
-    if (!heartRate && !systolicBp && !spo2 && !temperature) {
+    if (!heartRate && !systolicBp && !spo2 && !temperature && !effectiveCalories) {
       res.status(400).json({ error: "Bad Request", message: "No recognizable vital signs in payload" });
       return;
     }
@@ -202,7 +209,7 @@ async function handleIngest(req: import("express").Request, res: import("express
       diastolicBp: diastolicBp ? Math.round(diastolicBp) : null,
       spo2: spo2 ? Math.round(spo2) : null,
       temperature: temperature ? Number(temperature.toFixed(1)) : null,
-      caloriesBurned: caloriesBurned ? Math.round(caloriesBurned) : null,
+      caloriesBurned: effectiveCalories ? Math.round(effectiveCalories) : null,
       source,
       recordedAt: new Date(recordedAt),
     }).returning();
