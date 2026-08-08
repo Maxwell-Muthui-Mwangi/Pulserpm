@@ -26,6 +26,18 @@ import {
 } from "lucide-react";
 
 const STALE_VITALS_MS = 60 * 60 * 1000; // 60 minutes
+
+function formatSyncAge(diffMs: number): string {
+  const totalSec = Math.floor(diffMs / 1000);
+  if (totalSec < 5)  return "just now";
+  if (totalSec < 60) return `${totalSec}s ago`;
+  const minutes = Math.floor(totalSec / 60);
+  const seconds = totalSec % 60;
+  if (minutes < 60)  return seconds > 0 ? `${minutes}m ${seconds}s ago` : `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  const mins  = minutes % 60;
+  return mins > 0 ? `${hours}h ${mins}m ago` : `${hours}h ago`;
+}
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend
 } from "recharts";
@@ -300,9 +312,9 @@ export default function Dashboard() {
   const [sseLastEventByPatient, setSseLastEventByPatient] = useState<Record<number, Date>>({});
   const [now, setNow] = useState(() => new Date());
 
-  // Tick every 15 s so the "Updated X ago" label and stale indicators stay current
+  // Tick every second so "last synced Xs ago" stays precise in real time
   useEffect(() => {
-    const id = setInterval(() => setNow(new Date()), 15_000);
+    const id = setInterval(() => setNow(new Date()), 1_000);
     return () => clearInterval(id);
   }, []);
 
@@ -798,9 +810,9 @@ export default function Dashboard() {
                   {sortedPatients.map((patient, idx) => {
                     const p = patient as any;
                     const risk = riskBadge[p.riskLevel] ?? riskBadge.normal;
-                    const lastSeen = p.lastSeen && !isNaN(new Date(p.lastSeen).getTime())
-                      ? formatDistanceToNow(new Date(p.lastSeen), { addSuffix: true })
-                      : "—";
+                    const lastSeenMs = p.lastSeen && !isNaN(new Date(p.lastSeen).getTime())
+                      ? now.getTime() - new Date(p.lastSeen).getTime() : null;
+                    const lastSeen = lastSeenMs !== null ? formatSyncAge(lastSeenMs) : "—";
                     const v = p.latestVitals;
                     // Liveness cascade: server receivedAt → SSE event time → recordedAt
                     const effectiveVitalsTime = v?.receivedAt ?? sseLastEventByPatient[p.id] ?? v?.recordedAt;

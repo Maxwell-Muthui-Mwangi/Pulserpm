@@ -146,73 +146,13 @@ async function handleIngest(req: import("express").Request, res: import("express
       return;
     }
 
-    const body = req.body;
-
-    // Normalize data from multiple formats
-    const heartRate = normalizeField(body,
-      ["heartRate", "HeartRate", "heart_rate", "bpm"],
-      body.heart?.restingHeartRate,
-      body.heartRate?.bpm
-    );
-
-    const systolicBp = normalizeField(body,
-      ["systolicBp", "BloodPressureSystolic", "systolic_bp", "systolic"],
-      body.bloodPressure?.systolic
-    );
-
-    const diastolicBp = normalizeField(body,
-      ["diastolicBp", "BloodPressureDiastolic", "diastolic_bp", "diastolic"],
-      body.bloodPressure?.diastolic
-    );
-
-    const spo2 = normalizeField(body,
-      ["spo2", "OxygenSaturation", "oxygen_saturation", "SpO2", "bloodOxygen", "blood_oxygen"],
-      body.spo2?.value,
-      body.oxygen?.saturation
-    );
-
-    const temperature = normalizeField(body,
-      ["temperature", "BodyTemperature", "body_temperature", "tempSkin", "temp"],
-      body.tempSkin?.value,
-      body.temperature?.celsius
-    );
-
-    const caloriesBurned = normalizeField(body,
-      ["caloriesBurned", "ActiveEnergyBurned", "calories_burned", "calories"],
-      body.calories?.value
-    );
-
-    // Steps from pedometer/wearable — stored in caloriesBurned column (closest
-    // available field) and accepted as a valid sync signal even without vitals.
-    // This lets the TK65 / HealthWatch companion app keep the "last synced"
-    // timestamp current while the watch isn't actively measuring HR/SpO₂/BP.
-    const steps = normalizeField(body, ["steps", "stepCount", "step_count", "dailySteps"]);
-    const effectiveCalories = caloriesBurned ?? steps;
-
-    const recordedAt = body.recordedAt || body.StartDate || body.startDate || body.timestamp || new Date().toISOString();
-
-    // Accept source from body (e.g. "oraimo", "healthwatch"), fall back to "wearable"
-    const ALLOWED_SOURCES = ["oraimo", "healthwear", "healthwatch", "wearable", "manual", "apple_health", "google_fit", "fitbit", "tk65", "health_connect", "mobile"];
-    const source = (typeof body.source === "string" && ALLOWED_SOURCES.includes(body.source))
-      ? body.source
-      : "wearable";
-
-    if (!heartRate && !systolicBp && !spo2 && !temperature && !effectiveCalories) {
+    const normalized = normalizeVitalReading(req.body, patient.id);
+    if (!normalized) {
       res.status(400).json({ error: "Bad Request", message: "No recognizable vital signs in payload" });
       return;
     }
 
-    const [inserted] = await db.insert(vitalsTable).values({
-      patientId: patient.id,
-      heartRate: heartRate ? Math.round(heartRate) : null,
-      systolicBp: systolicBp ? Math.round(systolicBp) : null,
-      diastolicBp: diastolicBp ? Math.round(diastolicBp) : null,
-      spo2: spo2 ? Math.round(spo2) : null,
-      temperature: temperature ? Number(temperature.toFixed(1)) : null,
-      caloriesBurned: effectiveCalories ? Math.round(effectiveCalories) : null,
-      source,
-      recordedAt: new Date(recordedAt),
-    }).returning();
+    const [inserted] = await db.insert(vitalsTable).values(normalized).returning();
 
     // Run alert engine
     const thresholds = await getOrCreateThresholds(patient.id);
@@ -258,10 +198,109 @@ async function handleIngest(req: import("express").Request, res: import("express
   }
 }
 
+// ─── Batch ingest endpoint ────────────────────────────────────────────────────
+// Accepts an array of readings in one HTTP request — dramatically faster backlog
+// clearing vs. one-reading-per-request. Up to 200 readings per call.
+// Body: { readings: [...] }  OR  a bare array  [...].
+async function handleBatchIngest(req: import("express").Request, res: import("express").Response) {
+  try {
+    const apiKey = resolveApiKey(req);
+    if (!apiKey) {
+      res.status(401).json({ error: "Unauthorized", message: "Missing X-Device-Api-Key header, Authorization: Bearer <key>, or apiKey query param" });
+      return;
+    }
+
+    const [patient] = await db.select().from(patientsTable).where(eq(patientsTable.deviceApiKey, apiKey));
+    if (!patient) {
+      res.status(401).json({ error: "Unauthorized", message: "Invalid device API key" });
+      return;
+    }
+
+    const body = req.body;
+    const rawReadings: any[] = Array.isArray(body) ? body
+      : Array.isArray(body?.readings) ? body.readings : [];
+
+    if (rawReadings.length === 0) {
+      res.status(400).json({ error: "Bad Request", message: "readings array is empty or missing — send { readings: [...] } or a bare array" });
+      return;
+    }
+
+    const MAX_BATCH = 200;
+    const batch = rawReadings.slice(0, MAX_BATCH);
+    const normalized = batch
+      .map(r => normalizeVitalReading(r, patient.id))
+      .filter(Boolean) as NonNullable<ReturnType<typeof normalizeVitalReading>>[];
+
+    if (normalized.length === 0) {
+      res.status(400).json({ error: "Bad Request", message: "No recognizable vital signs in any of the provided readings" });
+      return;
+    }
+
+    // Single bulk INSERT — far faster than N individual round-trips
+    const insertedRows = await db.insert(vitalsTable).values(normalized).returning();
+
+    // Run alert engine only on real-time (non-backlog) readings — avoids
+    // flooding alerts with old historical data while still catching live events.
+    const thresholds = await getOrCreateThresholds(patient.id);
+    let alertsTriggered = 0;
+    let latestRealtime: (typeof insertedRows)[0] | null = null;
+    let latestBacklog:  (typeof insertedRows)[0] | null = null;
+
+    for (const row of insertedRows) {
+      const isBacklog = (row.createdAt.getTime() - row.recordedAt.getTime()) > 2 * 60 * 60 * 1000;
+      if (!isBacklog) {
+        const candidates = evaluateVitals(row, thresholds);
+        const triggered  = await processAndSaveAlerts(patient.id, candidates);
+        alertsTriggered += triggered.length;
+        if (!latestRealtime || row.createdAt > latestRealtime.createdAt) latestRealtime = row;
+      } else {
+        if (!latestBacklog || row.createdAt > latestBacklog.createdAt) latestBacklog = row;
+      }
+    }
+
+    // Broadcast once — prefer the latest real-time reading; fall back to latest
+    // backlog so the dashboard still knows the device is communicating.
+    const bcast = latestRealtime ?? latestBacklog!;
+    broadcastVitals(patient.id, {
+      vitalsId:       bcast.id,
+      patientId:      patient.id,
+      heartRate:      bcast.heartRate,
+      systolicBp:     bcast.systolicBp,
+      diastolicBp:    bcast.diastolicBp,
+      spo2:           bcast.spo2,
+      temperature:    bcast.temperature,
+      caloriesBurned: bcast.caloriesBurned,
+      source:         bcast.source,
+      recordedAt:     bcast.recordedAt,
+      receivedAt:     bcast.createdAt,
+      isBacklog:      !latestRealtime,
+      alertsTriggered,
+    });
+
+    res.status(200).json({
+      success: true,
+      message: `${insertedRows.length} reading${insertedRows.length !== 1 ? "s" : ""} recorded`,
+      inserted: insertedRows.length,
+      skipped:  batch.length - normalized.length,
+      ...(rawReadings.length > MAX_BATCH ? { truncated: true, limit: MAX_BATCH, received: rawReadings.length } : {}),
+      alertsTriggered,
+    });
+  } catch (err) {
+    console.error("Batch ingest error:", err);
+    res.status(500).json({ error: "Internal Server Error", message: "Failed to ingest batch" });
+  }
+}
+
 // Primary ingest route + path aliases for companion app compatibility
-router.post("/device/ingest", handleIngest);
-router.post("/device/sync",   handleIngest);  // alias: HealthWatch may use /sync
-router.post("/ingest",        handleIngest);  // alias: short path
+router.post("/device/ingest",       handleIngest);
+router.post("/device/sync",         handleIngest);  // alias: HealthWatch may use /sync
+router.post("/ingest",              handleIngest);  // alias: short path
+
+// Batch ingest — send up to 200 readings per HTTP request for fast backlog clearing
+router.post("/device/ingest/batch", handleBatchIngest);
+router.post("/device/batch",        handleBatchIngest);  // alias
+router.post("/ingest/batch",        handleBatchIngest);  // alias
+router.post("/batch",               handleBatchIngest);  // alias: short path
 
 function normalizeField(body: Record<string, unknown>, keys: string[], ...fallbacks: (number | undefined | null)[]): number | null {
   for (const key of keys) {
@@ -274,6 +313,55 @@ function normalizeField(body: Record<string, unknown>, keys: string[], ...fallba
     if (fallback !== undefined && fallback !== null && !isNaN(fallback)) return fallback;
   }
   return null;
+}
+
+// ─── Vital normalization helper ───────────────────────────────────────────────
+// Shared by single and batch ingest. Returns null when the payload has no
+// recognisable vital signs so the caller can skip/reject cleanly.
+const ALLOWED_SOURCES = ["oraimo", "healthwear", "healthwatch", "wearable", "manual",
+  "apple_health", "google_fit", "fitbit", "tk65", "health_connect", "mobile"] as const;
+
+function normalizeVitalReading(body: any, patientId: number) {
+  const heartRate = normalizeField(body,
+    ["heartRate", "HeartRate", "heart_rate", "bpm"],
+    body.heart?.restingHeartRate, body.heartRate?.bpm);
+  const systolicBp = normalizeField(body,
+    ["systolicBp", "BloodPressureSystolic", "systolic_bp", "systolic"],
+    body.bloodPressure?.systolic);
+  const diastolicBp = normalizeField(body,
+    ["diastolicBp", "BloodPressureDiastolic", "diastolic_bp", "diastolic"],
+    body.bloodPressure?.diastolic);
+  const spo2 = normalizeField(body,
+    ["spo2", "OxygenSaturation", "oxygen_saturation", "SpO2", "bloodOxygen", "blood_oxygen"],
+    body.spo2?.value, body.oxygen?.saturation);
+  const temperature = normalizeField(body,
+    ["temperature", "BodyTemperature", "body_temperature", "tempSkin", "temp"],
+    body.tempSkin?.value, body.temperature?.celsius);
+  const caloriesBurned = normalizeField(body,
+    ["caloriesBurned", "ActiveEnergyBurned", "calories_burned", "calories"],
+    body.calories?.value);
+  // Steps stored in caloriesBurned column — keeps "last synced" current even
+  // when the watch isn't actively measuring HR/SpO₂/BP.
+  const steps = normalizeField(body, ["steps", "stepCount", "step_count", "dailySteps"]);
+  const effectiveCalories = caloriesBurned ?? steps;
+
+  if (!heartRate && !systolicBp && !spo2 && !temperature && !effectiveCalories) return null;
+
+  const rawTs = body.recordedAt || body.StartDate || body.startDate || body.timestamp || new Date().toISOString();
+  const source = (typeof body.source === "string" && (ALLOWED_SOURCES as readonly string[]).includes(body.source))
+    ? body.source : "wearable";
+
+  return {
+    patientId,
+    heartRate:      heartRate      ? Math.round(heartRate)            : null,
+    systolicBp:     systolicBp     ? Math.round(systolicBp)           : null,
+    diastolicBp:    diastolicBp    ? Math.round(diastolicBp)          : null,
+    spo2:           spo2           ? Math.round(spo2)                 : null,
+    temperature:    temperature    ? Number(temperature.toFixed(1))   : null,
+    caloriesBurned: effectiveCalories ? Math.round(effectiveCalories) : null,
+    source,
+    recordedAt: new Date(rawTs),
+  };
 }
 
 // ─── Shared identity response builder ────────────────────────────────────────

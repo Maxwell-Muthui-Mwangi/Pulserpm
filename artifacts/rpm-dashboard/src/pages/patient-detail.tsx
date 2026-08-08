@@ -47,6 +47,20 @@ const DATA_GAP_THRESHOLD_MS = 30 * 60 * 1000; // 30 minutes
 // degrades to warn the provider that data may no longer reflect reality.
 const STALE_VITALS_MS = 60 * 60 * 1000; // 60 minutes
 
+// Returns a human-readable "X ago" string with second-level precision for
+// recent events — updated every second by the 1s ticker below.
+function formatSyncAge(diffMs: number): string {
+  const totalSec = Math.floor(diffMs / 1000);
+  if (totalSec < 5)  return "just now";
+  if (totalSec < 60) return `${totalSec}s ago`;
+  const minutes = Math.floor(totalSec / 60);
+  const seconds = totalSec % 60;
+  if (minutes < 60)  return seconds > 0 ? `${minutes}m ${seconds}s ago` : `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  const mins  = minutes % 60;
+  return mins > 0 ? `${hours}h ${mins}m ago` : `${hours}h ago`;
+}
+
 export default function PatientDetail() {
   const [, params] = useRoute("/patients/:id");
   const patientId = parseInt(params?.id || "0", 10);
@@ -84,9 +98,9 @@ export default function PatientDetail() {
   const [now, setNow] = useState(() => new Date());
   const queryClient = useQueryClient();
 
-  // Tick every 30 s so "Last synced X ago" stays current without a data refetch
+  // Tick every second so "Last synced Xs ago" stays precise in real time
   useEffect(() => {
-    const id = setInterval(() => setNow(new Date()), 30_000);
+    const id = setInterval(() => setNow(new Date()), 1_000);
     return () => clearInterval(id);
   }, []);
 
@@ -662,7 +676,6 @@ export default function PatientDetail() {
               {effectiveSyncAt ? (() => {
                 const syncedAt = effectiveSyncAt;
                 const diffMs = now.getTime() - syncedAt.getTime();
-                const isRecent = diffMs < 5 * 60 * 1000; // < 5 minutes
                 // Gate both banners on !isDeviceActive — SSE events arriving proves
                 // the device is online even if the displayed timestamp looks old.
                 const isStale = !isDeviceActive && diffMs > STALE_VITALS_MS;
@@ -671,6 +684,8 @@ export default function PatientDetail() {
                 const staleLabel = staleHours >= 1
                   ? `${Math.floor(staleHours)} hour${Math.floor(staleHours) !== 1 ? "s" : ""}`
                   : `${Math.round(diffMs / 60_000)} minutes`;
+                const syncAgeLabel = formatSyncAge(diffMs);
+                const isVeryRecent = diffMs < 60_000; // < 1 minute
                 return (
                   <>
                     {isStale && (
@@ -700,11 +715,10 @@ export default function PatientDetail() {
                       </div>
                     )}
                     <p className="text-xs text-muted-foreground flex items-center gap-1.5 -mt-2">
-                      <span className={`h-1.5 w-1.5 rounded-full inline-block ${isDeviceActive || isRecent ? "bg-green-500 animate-pulse" : isStale ? "bg-orange-500" : isDataGap ? "bg-amber-500" : "bg-muted-foreground/50"}`} />
-                      {isRecent
-                        ? <span className="text-green-600 font-medium">Just synced</span>
-                        : <>Last synced {formatDistanceToNow(syncedAt, { addSuffix: true })}</>
-                      }
+                      <span className={`h-1.5 w-1.5 rounded-full inline-block ${isDeviceActive || isVeryRecent ? "bg-green-500 animate-pulse" : isStale ? "bg-orange-500" : isDataGap ? "bg-amber-500" : "bg-muted-foreground/50"}`} />
+                      <span className={isVeryRecent || isDeviceActive ? "text-green-600 font-medium" : ""}>
+                        Last synced {syncAgeLabel}
+                      </span>
                       {" · "}{format(syncedAt, "MMM d 'at' h:mm a")}
                     </p>
                   </>
@@ -944,7 +958,7 @@ export default function PatientDetail() {
                     <WifiOff className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
                     <div>
                       <p className="font-semibold text-amber-900 text-sm">
-                        Device offline — last synced {formatDistanceToNow(syncedAt!, { addSuffix: true })}
+                        Device offline — last synced {formatSyncAge(now.getTime() - syncedAt!.getTime())}
                       </p>
                       <p className="text-xs text-amber-800 mt-1 leading-relaxed">
                         To resume syncing, open the <strong>PulseRPM</strong> app on your phone and
