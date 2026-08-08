@@ -90,10 +90,10 @@ export default function PatientDetail() {
   // receivedAt is always server-side NOW() so it stays accurate regardless of what
   // the device claims the reading time was.
   const effectiveSyncAt: Date | null = (() => {
-    const rv = (patient?.latestVitals as any)?.receivedAt;
-    if (rv) return new Date(rv as string);
+    const rv = patient?.latestVitals?.receivedAt;
+    if (rv) return new Date(rv);
     const ra = patient?.latestVitals?.recordedAt;
-    if (ra) return new Date(ra as string);
+    if (ra) return new Date(ra);
     return null;
   })();
 
@@ -858,7 +858,11 @@ export default function PatientDetail() {
 
             {/* ── Offline reconnection alert ─────────────────────────────────── */}
             {(() => {
-              const syncedAt = effectiveSyncAt;
+              const syncedAt = effectiveSyncAt ?? (
+                (patient as any)?.latestVitals?.recordedAt
+                  ? new Date((patient as any).latestVitals.recordedAt)
+                  : null
+              );
               const msSince = syncedAt ? now.getTime() - syncedAt.getTime() : null;
               if (!msSince || msSince < STALE_VITALS_MS) return null;
               return (

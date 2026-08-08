@@ -138,6 +138,13 @@ export interface VitalsSnapshot {
   caloriesBurned?: number | null;
   /** @nullable */
   recordedAt?: string | null;
+  /**
+   * Server receipt time (DB created_at). Use this for staleness checks —
+   * it reflects when data actually arrived, regardless of the device-reported
+   * recordedAt timestamp.
+   * @nullable
+   */
+  receivedAt?: string | null;
 }
 
 export interface PatientSummary {
