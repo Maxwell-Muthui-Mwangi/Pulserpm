@@ -69,7 +69,18 @@ export default function PatientDetail() {
   const [sseConnected, setSseConnected] = useState(false);
   // Tracks the last time any SSE vital event arrived (backlog or live).
   // SSE fires on every ingest so this is a reliable device-is-communicating signal.
-  const [sseLastEventAt, setSseLastEventAt] = useState<Date | null>(null);
+  // Persisted in sessionStorage so a page refresh doesn't reset it to null and
+  // flash STALE before the SSE stream reconnects (~1-3 s after load).
+  const [sseLastEventAt, setSseLastEventAt] = useState<Date | null>(() => {
+    try {
+      const stored = sessionStorage.getItem("pulserpm_sseLastEventAt");
+      if (stored) {
+        const d = new Date(stored);
+        if (!isNaN(d.getTime()) && Date.now() - d.getTime() < STALE_VITALS_MS) return d;
+      }
+    } catch { /* SSR / incognito — ignore */ }
+    return null;
+  });
   const [now, setNow] = useState(() => new Date());
   const queryClient = useQueryClient();
 
@@ -88,13 +99,15 @@ export default function PatientDetail() {
   const ackAlert = useAcknowledgeAlert();
   const resAlert = useResolveAlert();
 
-  // Liveness signal cascade — each fallback proves the device is connected:
-  //  1. receivedAt  = server DB insertion time (accurate even with buffered timestamps)
-  //  2. sseLastEventAt = last SSE vital event received in this browser session
-  //     (SSE fires on every ingest including backlog, so this proves communication)
-  //  3. latestAlertAt = most recent active alert triggeredAt — alerts are only
-  //     created when new vitals arrive, so a recent alert proves data is flowing
-  //  4. recordedAt  = device-reported timestamp (last resort; may be stale)
+  // ── Liveness signal cascade ────────────────────────────────────────────────
+  // Each level proves the device is connected with decreasing certainty:
+  //  1. receivedAt      = server DB insertion time — always NOW when data arrives
+  //  2. sseLastEventAt  = last SSE vital event in this session (survives refresh
+  //                       via sessionStorage) — fires on every ingest incl. backlog
+  //  3. latestAlertAt   = most recent alert triggeredAt — alerts can ONLY be created
+  //                       when new vitals arrive, so a fresh alert proves data flow
+  //  4. recordedAt      = device-reported timestamp — last resort; may be stale if
+  //                       the device batches readings with old timestamps
   const effectiveSyncAt: Date | null = (() => {
     const rv = patient?.latestVitals?.receivedAt;
     if (rv) return new Date(rv);
@@ -109,6 +122,19 @@ export default function PatientDetail() {
     const ra = patient?.latestVitals?.recordedAt;
     if (ra) return new Date(ra);
     return null;
+  })();
+
+  // ── Single source of truth for device activity ────────────────────────────
+  // True when we have strong evidence the device is actively communicating.
+  // ALL STALE badges, offline banners, and data-gap warnings read from this one
+  // boolean — so nothing disagrees and the logic stays in one place.
+  const isDeviceActive = (() => {
+    const recentCutoff = now.getTime() - STALE_VITALS_MS; // 60 min ago
+    // SSE event time is the strongest signal — updated on every ingest
+    if (sseLastEventAt && sseLastEventAt.getTime() > recentCutoff) return true;
+    // Any other liveness signal (receivedAt, alert, recordedAt) within threshold
+    if (effectiveSyncAt && effectiveSyncAt.getTime() > recentCutoff) return true;
+    return false;
   })();
 
   const fetchDeviceKey = useCallback(async () => {
@@ -135,7 +161,10 @@ export default function PatientDetail() {
     setConnected: setSseConnected,
     onVitals: (data) => {
       // Every SSE vital event (backlog or live) proves the device is communicating.
-      setSseLastEventAt(new Date());
+      // Persist to sessionStorage so a page refresh doesn't flash STALE mid-session.
+      const sseEventTime = new Date();
+      setSseLastEventAt(sseEventTime);
+      try { sessionStorage.setItem("pulserpm_sseLastEventAt", sseEventTime.toISOString()); } catch { /* incognito */ }
       // Optimistic cache patch — zero-latency UI update when cache is warm
       let cacheWasCold = false;
       queryClient.setQueryData(
@@ -557,10 +586,15 @@ export default function PatientDetail() {
             <div className="lg:col-span-2 space-y-6">
               <h3 className="font-display font-bold text-lg text-foreground flex items-center gap-2">
                 Latest Readings
-                {sseConnected ? (
+                {isDeviceActive ? (
                   <span className="flex items-center gap-1 text-xs font-normal text-success bg-success/10 border border-success/20 rounded-full px-2 py-0.5">
                     <span className="h-1.5 w-1.5 rounded-full bg-success animate-pulse" />
                     Live
+                  </span>
+                ) : sseConnected ? (
+                  <span className="flex items-center gap-1 text-xs font-normal text-blue-500 bg-blue-500/10 border border-blue-500/20 rounded-full px-2 py-0.5">
+                    <span className="h-1.5 w-1.5 rounded-full bg-blue-400 animate-pulse" />
+                    Monitoring
                   </span>
                 ) : (
                   <span className="flex items-center gap-1 text-xs font-normal text-muted-foreground">
@@ -572,7 +606,9 @@ export default function PatientDetail() {
               {(() => {
                 const syncedAt = effectiveSyncAt;
                 const diffMs = syncedAt ? now.getTime() - syncedAt.getTime() : 0;
-                const isStaleCards = syncedAt ? diffMs > STALE_VITALS_MS : false;
+                // Suppress STALE on cards when device is actively communicating —
+                // buffered old timestamps must not dim the display while data flows.
+                const isStaleCards = !isDeviceActive && (syncedAt ? diffMs > STALE_VITALS_MS : false);
                 return (
                   <div className={`grid grid-cols-2 md:grid-cols-4 gap-4 transition-opacity duration-300 ${isStaleCards ? "opacity-50" : ""}`}>
                     <Card className="border-border/50 shadow-sm bg-gradient-to-br from-card to-card">
@@ -619,8 +655,10 @@ export default function PatientDetail() {
                 const syncedAt = effectiveSyncAt;
                 const diffMs = now.getTime() - syncedAt.getTime();
                 const isRecent = diffMs < 5 * 60 * 1000; // < 5 minutes
-                const isStale = diffMs > STALE_VITALS_MS; // > 60 minutes — hard stale
-                const isDataGap = !isStale && patient.deviceType === "wearable" && diffMs > DATA_GAP_THRESHOLD_MS; // 30–60 min wearable gap
+                // Gate both banners on !isDeviceActive — SSE events arriving proves
+                // the device is online even if the displayed timestamp looks old.
+                const isStale = !isDeviceActive && diffMs > STALE_VITALS_MS;
+                const isDataGap = !isDeviceActive && !isStale && patient.deviceType === "wearable" && diffMs > DATA_GAP_THRESHOLD_MS;
                 const staleHours = diffMs / 3_600_000;
                 const staleLabel = staleHours >= 1
                   ? `${Math.floor(staleHours)} hour${Math.floor(staleHours) !== 1 ? "s" : ""}`
@@ -654,7 +692,7 @@ export default function PatientDetail() {
                       </div>
                     )}
                     <p className="text-xs text-muted-foreground flex items-center gap-1.5 -mt-2">
-                      <span className={`h-1.5 w-1.5 rounded-full inline-block ${isRecent ? "bg-green-500 animate-pulse" : isStale ? "bg-orange-500" : isDataGap ? "bg-amber-500" : "bg-muted-foreground/50"}`} />
+                      <span className={`h-1.5 w-1.5 rounded-full inline-block ${isDeviceActive || isRecent ? "bg-green-500 animate-pulse" : isStale ? "bg-orange-500" : isDataGap ? "bg-amber-500" : "bg-muted-foreground/50"}`} />
                       {isRecent
                         ? <span className="text-green-600 font-medium">Just synced</span>
                         : <>Last synced {formatDistanceToNow(syncedAt, { addSuffix: true })}</>
@@ -890,7 +928,8 @@ export default function PatientDetail() {
                   : null
               );
               const msSince = syncedAt ? now.getTime() - syncedAt.getTime() : null;
-              if (!msSince || msSince < STALE_VITALS_MS) return null;
+              // Don't warn about offline when SSE events are proving device activity
+              if (isDeviceActive || !msSince || msSince < STALE_VITALS_MS) return null;
               return (
                 <Card className="border-amber-300 bg-amber-50 shadow-sm">
                   <CardContent className="p-4 flex gap-3 items-start">
@@ -925,7 +964,7 @@ export default function PatientDetail() {
                   <CardHeader className="pb-2 text-center">
                     <CardTitle className="text-xl font-bold flex items-center justify-center gap-2 text-violet-700">
                       <Smartphone className="h-5 w-5" /> Connect PulseRPM App
-                      {sseConnected && (
+                      {isDeviceActive && (
                         <span className="flex items-center gap-1 text-xs font-normal text-success bg-success/10 border border-success/20 rounded-full px-2 py-0.5 ml-1">
                           <span className="h-1.5 w-1.5 rounded-full bg-success animate-pulse" />
                           Live

@@ -805,7 +805,9 @@ export default function Dashboard() {
                     // Liveness cascade: server receivedAt → SSE event time → recordedAt
                     const effectiveVitalsTime = v?.receivedAt ?? sseLastEventByPatient[p.id] ?? v?.recordedAt;
                     const vitalsAge = effectiveVitalsTime ? now.getTime() - new Date(effectiveVitalsTime).getTime() : null;
-                    const vitalsStale = vitalsAge !== null && vitalsAge > STALE_VITALS_MS;
+                    const isPatientActive = !!(sseLastEventByPatient[p.id] &&
+                      now.getTime() - sseLastEventByPatient[p.id].getTime() < STALE_VITALS_MS);
+                    const vitalsStale = !isPatientActive && vitalsAge !== null && vitalsAge > STALE_VITALS_MS;
 
                     return (
                       <motion.div
