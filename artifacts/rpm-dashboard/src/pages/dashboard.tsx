@@ -789,7 +789,10 @@ export default function Dashboard() {
                       ? formatDistanceToNow(new Date(p.lastSeen), { addSuffix: true })
                       : "—";
                     const v = p.latestVitals;
-                    const vitalsAge = v?.recordedAt ? now.getTime() - new Date(v.recordedAt).getTime() : null;
+                    // Use receivedAt (server time) for staleness — avoids false "stale"
+                    // when a device sends buffered readings with old recordedAt timestamps.
+                    const effectiveVitalsTime = v?.receivedAt ?? v?.recordedAt;
+                    const vitalsAge = effectiveVitalsTime ? now.getTime() - new Date(effectiveVitalsTime).getTime() : null;
                     const vitalsStale = vitalsAge !== null && vitalsAge > STALE_VITALS_MS;
 
                     return (

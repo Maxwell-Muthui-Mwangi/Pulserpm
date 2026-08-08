@@ -19,6 +19,7 @@ async function getLatestVitalsPerField(patientId: number): Promise<{
   temperature: number | null;
   caloriesBurned: number | null;
   recordedAt: Date | null;
+  receivedAt: Date | null; // server insertion time — accurate even when device sends old timestamps
 } | null> {
   const result = await db.execute(sql`
     SELECT
@@ -28,10 +29,11 @@ async function getLatestVitalsPerField(patientId: number): Promise<{
       (SELECT spo2            FROM vitals WHERE patient_id = ${patientId} AND spo2            IS NOT NULL ORDER BY recorded_at DESC LIMIT 1) AS spo2,
       (SELECT temperature     FROM vitals WHERE patient_id = ${patientId} AND temperature     IS NOT NULL ORDER BY recorded_at DESC LIMIT 1) AS temperature,
       (SELECT calories_burned FROM vitals WHERE patient_id = ${patientId} AND calories_burned IS NOT NULL ORDER BY recorded_at DESC LIMIT 1) AS calories_burned,
-      (SELECT recorded_at     FROM vitals WHERE patient_id = ${patientId}                                 ORDER BY recorded_at DESC LIMIT 1) AS recorded_at
+      (SELECT recorded_at     FROM vitals WHERE patient_id = ${patientId}                                 ORDER BY recorded_at DESC LIMIT 1) AS recorded_at,
+      (SELECT created_at      FROM vitals WHERE patient_id = ${patientId}                                 ORDER BY created_at  DESC LIMIT 1) AS received_at
   `);
   const row = result.rows[0] as Record<string, unknown> | undefined;
-  if (!row || row.recorded_at == null) return null;
+  if (!row || (row.recorded_at == null && row.received_at == null)) return null;
   return {
     heartRate:     row.heart_rate      as number | null,
     systolicBp:    row.systolic_bp     as number | null,
@@ -39,7 +41,8 @@ async function getLatestVitalsPerField(patientId: number): Promise<{
     spo2:          row.spo2            as number | null,
     temperature:   row.temperature     as number | null,
     caloriesBurned:row.calories_burned as number | null,
-    recordedAt:    row.recorded_at     as Date,
+    recordedAt:    row.recorded_at     as Date | null,
+    receivedAt:    row.received_at     as Date | null,
   };
 }
 
@@ -183,7 +186,7 @@ router.get("/patients", requireAuth, async (req, res) => {
           riskLevel: risk,
           activeAlertCount: Number(alertCount.count),
           deviceType: p.deviceType,
-          lastSeen: latestVitals?.recordedAt ?? null,
+          lastSeen: latestVitals?.receivedAt ?? latestVitals?.recordedAt ?? null,
           latestVitals: latestVitals
             ? {
                 heartRate: latestVitals.heartRate,
@@ -193,6 +196,7 @@ router.get("/patients", requireAuth, async (req, res) => {
                 caloriesBurned: latestVitals.caloriesBurned,
                 temperature: latestVitals.temperature,
                 recordedAt: latestVitals.recordedAt,
+                receivedAt: latestVitals.receivedAt,
               }
             : null,
         };
@@ -307,6 +311,7 @@ router.get("/patients/:patientId", requireAuth, async (req, res) => {
             caloriesBurned: latestVitals.caloriesBurned,
             temperature: latestVitals.temperature,
             recordedAt: latestVitals.recordedAt,
+            receivedAt: latestVitals.receivedAt,
           }
         : null,
       thresholds,

@@ -85,6 +85,18 @@ export default function PatientDetail() {
   const ackAlert = useAcknowledgeAlert();
   const resAlert = useResolveAlert();
 
+  // Use server receipt time (receivedAt = DB created_at) for all staleness checks.
+  // The Kotlin companion app sends buffered readings with old recordedAt timestamps;
+  // receivedAt is always server-side NOW() so it stays accurate regardless of what
+  // the device claims the reading time was.
+  const effectiveSyncAt: Date | null = (() => {
+    const rv = (patient?.latestVitals as any)?.receivedAt;
+    if (rv) return new Date(rv as string);
+    const ra = patient?.latestVitals?.recordedAt;
+    if (ra) return new Date(ra as string);
+    return null;
+  })();
+
   const fetchDeviceKey = useCallback(async () => {
     setKeyLoading(true);
     try {
@@ -532,7 +544,7 @@ export default function PatientDetail() {
                 )}
               </h3>
               {(() => {
-                const syncedAt = patient.latestVitals?.recordedAt ? new Date(patient.latestVitals.recordedAt as string) : null;
+                const syncedAt = effectiveSyncAt;
                 const diffMs = syncedAt ? now.getTime() - syncedAt.getTime() : 0;
                 const isStaleCards = syncedAt ? diffMs > STALE_VITALS_MS : false;
                 return (
@@ -577,8 +589,8 @@ export default function PatientDetail() {
               })()}
 
               {/* Last synced timestamp — re-renders every 30 s via the `now` ticker */}
-              {patient.latestVitals?.recordedAt ? (() => {
-                const syncedAt = new Date(patient.latestVitals!.recordedAt as string);
+              {effectiveSyncAt ? (() => {
+                const syncedAt = effectiveSyncAt;
                 const diffMs = now.getTime() - syncedAt.getTime();
                 const isRecent = diffMs < 5 * 60 * 1000; // < 5 minutes
                 const isStale = diffMs > STALE_VITALS_MS; // > 60 minutes — hard stale
@@ -846,9 +858,7 @@ export default function PatientDetail() {
 
             {/* ── Offline reconnection alert ─────────────────────────────────── */}
             {(() => {
-              const syncedAt = (patient as any)?.latestVitals?.recordedAt
-                ? new Date((patient as any).latestVitals.recordedAt)
-                : null;
+              const syncedAt = effectiveSyncAt;
               const msSince = syncedAt ? now.getTime() - syncedAt.getTime() : null;
               if (!msSince || msSince < STALE_VITALS_MS) return null;
               return (
