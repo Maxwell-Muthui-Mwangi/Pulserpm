@@ -323,13 +323,21 @@ export default function Dashboard() {
             if (!old) return old;
             const prev = (old.latestVitals ?? {}) as Record<string, unknown>;
             const patch: Record<string, unknown> = {};
-            if (data.heartRate      != null) patch.heartRate      = data.heartRate;
-            if (data.systolicBp     != null) patch.systolicBp     = data.systolicBp;
-            if (data.diastolicBp    != null) patch.diastolicBp    = data.diastolicBp;
-            if (data.spo2           != null) patch.spo2           = data.spo2;
-            if (data.temperature    != null) patch.temperature    = data.temperature;
-            if (data.caloriesBurned != null) patch.caloriesBurned = data.caloriesBurned;
-            if (data.recordedAt)              patch.recordedAt    = data.recordedAt;
+
+            // receivedAt always updates — proves device is connected regardless
+            // of whether the reading is live or a backlogged historical batch.
+            if (data.receivedAt) patch.receivedAt = data.receivedAt;
+
+            // Backlogged readings must not overwrite live vital values in the cache.
+            if (!data.isBacklog) {
+              if (data.heartRate      != null) patch.heartRate      = data.heartRate;
+              if (data.systolicBp     != null) patch.systolicBp     = data.systolicBp;
+              if (data.diastolicBp    != null) patch.diastolicBp    = data.diastolicBp;
+              if (data.spo2           != null) patch.spo2           = data.spo2;
+              if (data.temperature    != null) patch.temperature    = data.temperature;
+              if (data.caloriesBurned != null) patch.caloriesBurned = data.caloriesBurned;
+              if (data.recordedAt)              patch.recordedAt    = data.recordedAt;
+            }
             return { ...old, latestVitals: { ...prev, ...patch } };
           },
         );

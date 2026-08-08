@@ -21,16 +21,27 @@ async function getLatestVitalsPerField(patientId: number): Promise<{
   recordedAt: Date | null;
   receivedAt: Date | null; // server insertion time — accurate even when device sends old timestamps
 } | null> {
+  // Priority ordering: live readings (recorded_at within 2 h) first, then most
+  // recently RECEIVED by the server (created_at). This prevents the Kotlin app's
+  // backlogged Aug-6/7 batches from overwriting a genuine real-time reading while
+  // still showing something useful when only backlog data is available.
   const result = await db.execute(sql`
     SELECT
-      (SELECT heart_rate      FROM vitals WHERE patient_id = ${patientId} AND heart_rate      IS NOT NULL ORDER BY recorded_at DESC LIMIT 1) AS heart_rate,
-      (SELECT systolic_bp     FROM vitals WHERE patient_id = ${patientId} AND systolic_bp     IS NOT NULL ORDER BY recorded_at DESC LIMIT 1) AS systolic_bp,
-      (SELECT diastolic_bp    FROM vitals WHERE patient_id = ${patientId} AND diastolic_bp    IS NOT NULL ORDER BY recorded_at DESC LIMIT 1) AS diastolic_bp,
-      (SELECT spo2            FROM vitals WHERE patient_id = ${patientId} AND spo2            IS NOT NULL ORDER BY recorded_at DESC LIMIT 1) AS spo2,
-      (SELECT temperature     FROM vitals WHERE patient_id = ${patientId} AND temperature     IS NOT NULL ORDER BY recorded_at DESC LIMIT 1) AS temperature,
-      (SELECT calories_burned FROM vitals WHERE patient_id = ${patientId} AND calories_burned IS NOT NULL ORDER BY recorded_at DESC LIMIT 1) AS calories_burned,
-      (SELECT recorded_at     FROM vitals WHERE patient_id = ${patientId}                                 ORDER BY recorded_at DESC LIMIT 1) AS recorded_at,
-      (SELECT created_at      FROM vitals WHERE patient_id = ${patientId}                                 ORDER BY created_at  DESC LIMIT 1) AS received_at
+      (SELECT heart_rate      FROM vitals WHERE patient_id = ${patientId} AND heart_rate      IS NOT NULL
+         ORDER BY CASE WHEN recorded_at > NOW() - INTERVAL '2 hours' THEN 0 ELSE 1 END, created_at DESC LIMIT 1) AS heart_rate,
+      (SELECT systolic_bp     FROM vitals WHERE patient_id = ${patientId} AND systolic_bp     IS NOT NULL
+         ORDER BY CASE WHEN recorded_at > NOW() - INTERVAL '2 hours' THEN 0 ELSE 1 END, created_at DESC LIMIT 1) AS systolic_bp,
+      (SELECT diastolic_bp    FROM vitals WHERE patient_id = ${patientId} AND diastolic_bp    IS NOT NULL
+         ORDER BY CASE WHEN recorded_at > NOW() - INTERVAL '2 hours' THEN 0 ELSE 1 END, created_at DESC LIMIT 1) AS diastolic_bp,
+      (SELECT spo2            FROM vitals WHERE patient_id = ${patientId} AND spo2            IS NOT NULL
+         ORDER BY CASE WHEN recorded_at > NOW() - INTERVAL '2 hours' THEN 0 ELSE 1 END, created_at DESC LIMIT 1) AS spo2,
+      (SELECT temperature     FROM vitals WHERE patient_id = ${patientId} AND temperature     IS NOT NULL
+         ORDER BY CASE WHEN recorded_at > NOW() - INTERVAL '2 hours' THEN 0 ELSE 1 END, created_at DESC LIMIT 1) AS temperature,
+      (SELECT calories_burned FROM vitals WHERE patient_id = ${patientId} AND calories_burned IS NOT NULL
+         ORDER BY CASE WHEN recorded_at > NOW() - INTERVAL '2 hours' THEN 0 ELSE 1 END, created_at DESC LIMIT 1) AS calories_burned,
+      (SELECT recorded_at     FROM vitals WHERE patient_id = ${patientId}
+         ORDER BY CASE WHEN recorded_at > NOW() - INTERVAL '2 hours' THEN 0 ELSE 1 END, created_at DESC LIMIT 1) AS recorded_at,
+      (SELECT created_at      FROM vitals WHERE patient_id = ${patientId} ORDER BY created_at DESC LIMIT 1) AS received_at
   `);
   const row = result.rows[0] as Record<string, unknown> | undefined;
   if (!row || (row.recorded_at == null && row.received_at == null)) return null;

@@ -219,6 +219,12 @@ async function handleIngest(req: import("express").Request, res: import("express
     const candidates = evaluateVitals(inserted, thresholds);
     const triggeredAlerts = await processAndSaveAlerts(patient.id, candidates);
 
+    // Classify: is this a real-time reading or a backlogged one?
+    // Backlog = device-reported timestamp is >2 h older than server receipt time.
+    // Dashboards use this flag to skip overwriting live vital values with stale
+    // historical data while still updating receivedAt (proving device is connected).
+    const isBacklog = (inserted.createdAt.getTime() - inserted.recordedAt.getTime()) > 2 * 60 * 60 * 1000;
+
     // Push real-time vitals event to any subscribed dashboard tabs
     broadcastVitals(patient.id, {
       vitalsId: inserted.id,
@@ -231,6 +237,8 @@ async function handleIngest(req: import("express").Request, res: import("express
       caloriesBurned: inserted.caloriesBurned,
       source: inserted.source,
       recordedAt: inserted.recordedAt,
+      receivedAt: inserted.createdAt,  // server receipt timestamp — always current
+      isBacklog,                        // true = old device timestamp, skip vital overwrite
       alertsTriggered: triggeredAlerts.length,
     });
 

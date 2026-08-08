@@ -132,13 +132,23 @@ export default function PatientDetail() {
           }
           const prev = (old.latestVitals ?? {}) as Record<string, unknown>;
           const patch: Record<string, unknown> = {};
-          if (data.heartRate      != null) patch.heartRate      = data.heartRate;
-          if (data.systolicBp     != null) patch.systolicBp     = data.systolicBp;
-          if (data.diastolicBp    != null) patch.diastolicBp    = data.diastolicBp;
-          if (data.spo2           != null) patch.spo2           = data.spo2;
-          if (data.temperature    != null) patch.temperature    = data.temperature;
-          if (data.caloriesBurned != null) patch.caloriesBurned = data.caloriesBurned;
-          if (data.recordedAt)             patch.recordedAt     = data.recordedAt;
+
+          // receivedAt = server receipt time — always update so "last synced"
+          // stays current even when the device sends backlogged old-timestamped data.
+          if (data.receivedAt) patch.receivedAt = data.receivedAt;
+
+          // For backlogged readings (device timestamp >2 h behind server receipt),
+          // skip patching vital values and recordedAt — the cache already holds a
+          // more recent live reading and we don't want historical data to overwrite it.
+          if (!data.isBacklog) {
+            if (data.heartRate      != null) patch.heartRate      = data.heartRate;
+            if (data.systolicBp     != null) patch.systolicBp     = data.systolicBp;
+            if (data.diastolicBp    != null) patch.diastolicBp    = data.diastolicBp;
+            if (data.spo2           != null) patch.spo2           = data.spo2;
+            if (data.temperature    != null) patch.temperature    = data.temperature;
+            if (data.caloriesBurned != null) patch.caloriesBurned = data.caloriesBurned;
+            if (data.recordedAt)             patch.recordedAt     = data.recordedAt;
+          }
           return { ...old, latestVitals: { ...prev, ...patch } };
         },
       );
