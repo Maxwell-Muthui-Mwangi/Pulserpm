@@ -62,6 +62,8 @@ export default function PatientDetail() {
   const [deviceLoading, setDeviceLoading] = useState(false);
   // Starts true when the tab loads so we never flash "No QR code yet" while fetching
   const [keyLoading, setKeyLoading] = useState(defaultTab === "device");
+  // Briefly true after Regenerate so the patient knows to scan the new QR immediately
+  const [justRegenerated, setJustRegenerated] = useState(false);
   const [keyCopied, setKeyCopied] = useState(false);
   const [printing, setPrinting] = useState(false);
   const [sseConnected, setSseConnected] = useState(false);
@@ -155,6 +157,7 @@ export default function PatientDetail() {
   }, [activeTab, isPatient, fetchDeviceKey]);
 
   const handleGenerateKey = async () => {
+    const isRegenerate = !!deviceApiKey; // true when replacing an existing key
     setDeviceLoading(true);
     try {
       const res = await fetch(`${API_BASE}/api/device/generate-key`, {
@@ -164,7 +167,19 @@ export default function PatientDetail() {
       if (res.ok) {
         const data = await res.json();
         setDeviceApiKey(data.apiKey);
-        toast({ title: "Device key generated", description: "Your new API key is ready to use." });
+        if (isRegenerate) {
+          // Flash the "scan now" banner for 60 s so the patient doesn't miss it
+          setJustRegenerated(true);
+          setTimeout(() => setJustRegenerated(false), 60_000);
+          toast({
+            title: "New QR code ready",
+            description: "Your app shows 'Link Expired' — scan the new QR code below to reconnect.",
+          });
+        } else {
+          toast({ title: "QR code generated", description: "Scan it with the PulseRPM app to connect your device." });
+        }
+      } else {
+        toast({ title: "Failed to generate key", variant: "destructive" });
       }
     } catch {
       toast({ title: "Failed to generate key", variant: "destructive" });
@@ -882,18 +897,33 @@ export default function PatientDetail() {
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="flex flex-col items-center gap-5 pt-2">
-                    <div className="p-4 bg-white rounded-2xl shadow-lg border border-violet-100 ring-2 ring-violet-200">
+                    {/* "Scan now" banner — shown for 60 s after Regenerate */}
+                    {justRegenerated && (
+                      <div className="w-full flex items-center gap-2 bg-green-50 border border-green-300 rounded-xl px-4 py-3">
+                        <CheckCircle2 className="h-4 w-4 text-green-600 shrink-0" />
+                        <div>
+                          <p className="text-sm font-semibold text-green-800">New QR code generated</p>
+                          <p className="text-xs text-green-700">Open your app and tap <strong>Re-scan QR</strong> to reconnect</p>
+                        </div>
+                      </div>
+                    )}
+                    {/* Pulsing ring on the QR for 60 s after regeneration */}
+                    <div className={`p-4 bg-white rounded-2xl shadow-lg border transition-all duration-500 ${
+                      justRegenerated
+                        ? "border-green-400 ring-4 ring-green-300 ring-offset-2 animate-pulse"
+                        : "border-violet-100 ring-2 ring-violet-200"
+                    }`}>
                       <QRCodeSVG
                         value={`${window.location.origin}/api/device/connect?apiKey=${deviceApiKey}`}
                         size={220}
                         level="M"
                         includeMargin={false}
-                        fgColor="#7c3aed"
+                        fgColor={justRegenerated ? "#15803d" : "#7c3aed"}
                       />
                     </div>
                     <ol className="text-sm text-muted-foreground space-y-2 list-decimal list-inside w-full">
                       <li>Open the <strong>PulseRPM</strong> app on your phone</li>
-                      <li>Tap <strong>"Scan QR Code"</strong> on the connect screen</li>
+                      <li>Tap <strong>{justRegenerated ? "Re-scan QR" : "Scan QR Code"}</strong> on the connect screen</li>
                       <li>Point at this QR — the app links and syncs instantly</li>
                     </ol>
                   </CardContent>
