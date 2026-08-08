@@ -250,7 +250,7 @@ export async function processAndSaveAlerts(
         patientAge: computeAge(patient.dateOfBirth),
         patientGender: patient.gender,
         patientConditions: patient.conditions ?? [],
-        alerts: candidates.map((c) => ({
+        alerts: dedupedCandidates.map((c) => ({
           vitalType: c.vitalType,
           severity: c.severity,
           message: c.message,

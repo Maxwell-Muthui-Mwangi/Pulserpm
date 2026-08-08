@@ -32,7 +32,7 @@ router.get("/providers", requireAuth, async (_req, res) => {
   }
 });
 
-router.post("/providers", async (req, res) => {
+router.post("/providers", requireAuth, async (req, res) => {
   try {
     const { name, email, password, specialty } = req.body;
     if (!name || !email || !password) {
