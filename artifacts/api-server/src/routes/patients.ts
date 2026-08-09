@@ -344,6 +344,7 @@ router.get("/patients/:patientId", requireAuth, async (req, res) => {
       deviceType: patient.deviceType,
       riskLevel: risk,
       activeAlertCount: Number(alertCount.count),
+      lastSeen: latestVitals?.receivedAt ?? latestVitals?.recordedAt ?? null,
       latestVitals: latestVitals
         ? {
             heartRate: latestVitals.heartRate,
