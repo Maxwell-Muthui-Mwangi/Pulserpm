@@ -8,6 +8,30 @@ import { sendPatientApprovedEmail } from "../lib/email.js";
 
 const router = Router();
 
+/**
+ * Convert a raw pg timestamp string (or Date) to a proper UTC Date.
+ *
+ * PostgreSQL `timestamp without time zone` columns are stored in UTC but the
+ * pg driver returns them as plain strings ("2026-08-09 02:47:21.591381") with
+ * no timezone marker.  If the browser receives that string and calls
+ * `new Date("2026-08-09 02:47:21.591381")` it interprets it as *local* time
+ * (e.g. EAT = UTC+3), making the timestamp appear 3 hours in the past.
+ *
+ * This helper normalises the value to a UTC Date so JSON.stringify produces
+ * "2026-08-09T02:47:21.591Z" — unambiguously UTC in every browser.
+ */
+function toUtcDate(val: unknown): Date | null {
+  if (val == null) return null;
+  if (val instanceof Date) return val;
+  const s = String(val).trim();
+  // Replace the space separator pg uses with 'T', then append 'Z' if there is
+  // no timezone offset already present.
+  const iso = (s.includes("T") ? s : s.replace(" ", "T")) +
+    (s.endsWith("Z") || /[+-]\d{2}:?\d{2}$/.test(s) ? "" : "Z");
+  const d = new Date(iso);
+  return isNaN(d.getTime()) ? null : d;
+}
+
 // Returns the latest non-null value for each vital field independently.
 // One partial sync (e.g. only heart rate) will never blank out BP / SpO2 /
 // temperature that arrived in an earlier sync from a different device cycle.
@@ -59,8 +83,8 @@ async function getLatestVitalsPerField(patientId: number): Promise<{
     spo2:          row.spo2            as number | null,
     temperature:   row.temperature     as number | null,
     caloriesBurned:row.calories_burned as number | null,
-    recordedAt:    row.recorded_at     as Date | null,
-    receivedAt:    row.received_at     as Date | null,
+    recordedAt:    toUtcDate(row.recorded_at),
+    receivedAt:    toUtcDate(row.received_at),
   };
 }
 
