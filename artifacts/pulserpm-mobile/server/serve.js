@@ -82,6 +82,11 @@ function serveLandingPage(req, res, landingPageTemplate, appName) {
 }
 
 function serveStaticFile(urlPath, res) {
+  // Path-traversal mitigation:
+  //  1. path.normalize strips redundant separators and resolves ".." segments.
+  //  2. The leading-traversal regex removes any remaining "../../" prefix.
+  //  3. The startsWith(STATIC_ROOT) check is the hard boundary — any path that
+  //     escapes the static root is rejected with 403 regardless of how it arrived.
   const safePath = path.normalize(urlPath).replace(/^(\.\.(\/|\\|$))+/, "");
   const filePath = path.join(STATIC_ROOT, safePath);
 
