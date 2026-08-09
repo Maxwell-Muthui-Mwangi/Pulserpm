@@ -221,6 +221,41 @@ export default function PatientDetail() {
           return { ...old, latestVitals: { ...prev, ...patch } };
         },
       );
+
+      // Zero-latency chart update: push the new reading directly into every
+      // active vitals query cache so Recharts re-renders immediately, without
+      // waiting for the server round-trip triggered by invalidateQueries below.
+      // We only do this for live readings (not backlog) to avoid polluting the
+      // chart with out-of-order historical points.
+      if (!data.isBacklog && data.recordedAt) {
+        const newReading = {
+          id:             (data.vitalsId as number)             ?? Date.now(),
+          patientId,
+          heartRate:      (data.heartRate      as number | null) ?? null,
+          systolicBp:     (data.systolicBp     as number | null) ?? null,
+          diastolicBp:    (data.diastolicBp    as number | null) ?? null,
+          spo2:           (data.spo2           as number | null) ?? null,
+          temperature:    (data.temperature    as number | null) ?? null,
+          caloriesBurned: (data.caloriesBurned as number | null) ?? null,
+          steps:          null,
+          glucoseLevel:   null,
+          weight:         null,
+          source:         (data.source as string | undefined)    ?? "wearable",
+          recordedAt:     data.recordedAt as string,
+          createdAt:      (data.receivedAt as string)            ?? new Date().toISOString(),
+        };
+        queryClient.setQueriesData(
+          { queryKey: getGetPatientVitalsQueryKey(patientId) },
+          (old: unknown) => {
+            if (!Array.isArray(old)) return old;
+            // Skip if this exact timestamp is already in the cache
+            if (old.some((v: Record<string, unknown>) => v.recordedAt === newReading.recordedAt)) return old;
+            // Append newest reading; trim to stay within the 100-reading limit
+            return [...old, newReading].slice(-100);
+          },
+        );
+      }
+
       // Always invalidate the patient query — if cache was warm this is a
       // background sync to confirm accuracy; if cold it's the primary fetch trigger.
       void queryClient.invalidateQueries({ queryKey: getGetPatientQueryKey(patientId) });

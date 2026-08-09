@@ -55,7 +55,7 @@ export default function Layout({ children }: LayoutProps) {
 
   const { data: dangerAlerts } = useListAlerts(
     { status: "active", limit: 20 },
-    { request: withAuth(), query: { enabled: !isPatient } as any }
+    { request: withAuth(), query: { enabled: !isPatient, refetchInterval: 30_000 } as any }
   );
 
   const filteredDangerAlerts = (dangerAlerts ?? []).filter(

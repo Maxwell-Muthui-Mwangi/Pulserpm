@@ -113,8 +113,8 @@ function useTrends() {
 
   useEffect(() => {
     fetchTrends();
-    // Poll every 60 s as a fallback when no device is pushing via SSE
-    const id = setInterval(fetchTrends, 60_000);
+    // Poll every 30 s as a fallback when no device is pushing via SSE
+    const id = setInterval(fetchTrends, 30_000);
     return () => clearInterval(id);
   }, [fetchTrends]);
 
@@ -336,6 +336,9 @@ export default function Dashboard() {
       if (pid) {
         // Record SSE event time per patient for client-side liveness tracking
         setSseLastEventByPatient(prev => ({ ...prev, [pid]: new Date() }));
+        const freshSyncAt = (data.receivedAt ?? data.recordedAt) as string | undefined;
+
+        // 1. Patch the individual patient detail cache (zero-latency)
         queryClient.setQueryData(
           getGetPatientQueryKey(pid),
           (old: Record<string, unknown> | undefined) => {
@@ -360,8 +363,22 @@ export default function Dashboard() {
             return { ...old, latestVitals: { ...prev, ...patch } };
           },
         );
+
+        // 2. Patch lastSeen in the patients LIST cache so the sync badge on the
+        //    dashboard card updates instantly — no need to wait for the list refetch.
+        if (freshSyncAt) {
+          queryClient.setQueriesData(
+            { queryKey: ["/api/patients"] },
+            (old: unknown) => {
+              if (!Array.isArray(old)) return old;
+              return old.map((p: Record<string, unknown>) =>
+                p.id === pid ? { ...p, lastSeen: freshSyncAt } : p,
+              );
+            },
+          );
+        }
       }
-      // Refetch stats and lists (not in the SSE payload)
+      // Refetch stats and lists to catch anything not in the SSE payload
       void queryClient.invalidateQueries({ queryKey: getGetDashboardStatsQueryKey() });
       void queryClient.invalidateQueries({ queryKey: ["/api/patients"] });
       void queryClient.invalidateQueries({ queryKey: ["/api/alerts"] });

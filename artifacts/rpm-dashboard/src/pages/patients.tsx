@@ -253,7 +253,7 @@ export default function Patients() {
 
   const { data: patients, isLoading, refetch: refetchPatients } = useListPatients(
     { search: search || undefined, riskLevel: riskFilter !== "all" ? riskFilter : undefined },
-    { request: withAuth(), query: { enabled: !isPatient } as any }
+    { request: withAuth(), query: { enabled: !isPatient, refetchInterval: 30_000 } as any }
   );
 
   const fetchPendingCount = useCallback(async () => {
