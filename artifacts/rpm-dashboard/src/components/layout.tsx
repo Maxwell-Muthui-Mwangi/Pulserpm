@@ -17,6 +17,7 @@ import {
   HeartPulse,
   Shield,
   ShieldCheck,
+  Globe,
 } from "lucide-react";
 import { removeAuthToken, withAuth, getAuthToken } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
@@ -24,7 +25,7 @@ import { useListAlerts } from "@workspace/api-client-react";
 import { queryClient } from "@/lib/query-client";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { format } from "date-fns";
+import { useTimezone, TIMEZONE_OPTIONS } from "@/lib/timezone-context";
 
 const API_BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -35,6 +36,7 @@ interface LayoutProps {
 export default function Layout({ children }: LayoutProps) {
   const [location, setLocation] = useLocation();
   const { user, isLoading, isPatient } = useAuth();
+  const { timezone, setTimezone, fmt } = useTimezone();
   const [notifOpen, setNotifOpen] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
   const [welcomeDismissed, setWelcomeDismissed] = useState(false);
@@ -183,6 +185,24 @@ export default function Layout({ children }: LayoutProps) {
               <div className="text-xs text-muted-foreground capitalize">{user.role}</div>
             </div>
           </div>
+
+          {/* Timezone picker */}
+          <div className="flex items-center gap-2 px-1 mb-2">
+            <Globe className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+            <select
+              value={timezone}
+              onChange={(e) => setTimezone(e.target.value)}
+              className="flex-1 text-xs bg-transparent border-none outline-none text-muted-foreground hover:text-foreground cursor-pointer truncate"
+              title="Display timezone"
+            >
+              {TIMEZONE_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
           <Button variant="ghost" className="w-full justify-start text-muted-foreground hover:text-destructive hover:bg-destructive/10" onClick={handleLogout}>
             <LogOut className="h-4 w-4 mr-2" />
             Sign Out
@@ -287,7 +307,7 @@ export default function Layout({ children }: LayoutProps) {
                               <p className="text-xs text-muted-foreground truncate">{alert.message}</p>
                               <p className="text-[10px] text-muted-foreground/70 mt-0.5">
                                 {alert.triggeredAt && !isNaN(new Date(alert.triggeredAt).getTime())
-                                  ? format(new Date(alert.triggeredAt), "MMM d, h:mm a")
+                                  ? fmt(new Date(alert.triggeredAt), "MMM d, h:mm a")
                                   : "—"}
                                 {" · "}{(alert.vitalType ?? "").replace("_", " ")}
                               </p>

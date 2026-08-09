@@ -9,13 +9,14 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { format } from "date-fns";
+import { useTimezone } from "@/lib/timezone-context";
 import { AlertCircle, CheckCircle2, XCircle, Search, Filter, Loader2, ArrowRight } from "lucide-react";
 import { Link } from "wouter";
 
 export default function Alerts() {
   const [statusFilter, setStatusFilter] = useState<ListAlertsStatus>("active");
   const { toast } = useToast();
+  const { fmt } = useTimezone();
   const queryClient = useQueryClient();
 
   const { data: alerts, isLoading, refetch } = useListAlerts(
@@ -121,7 +122,7 @@ export default function Alerts() {
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-muted-foreground">
-                        {alert.triggeredAt && !isNaN(new Date(alert.triggeredAt).getTime()) ? format(new Date(alert.triggeredAt), 'MMM dd, h:mm a') : '—'}
+                        {alert.triggeredAt && !isNaN(new Date(alert.triggeredAt).getTime()) ? fmt(new Date(alert.triggeredAt), 'MMM dd, h:mm a') : '—'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right">
                         {isPatient ? (

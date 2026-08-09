@@ -53,7 +53,8 @@ import Layout from "@/components/layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { format, formatDistanceToNow } from "date-fns";
+import { formatDistanceToNow } from "date-fns";
+import { useTimezone } from "@/lib/timezone-context";
 
 const API_BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -289,6 +290,7 @@ function SmartWatchCard({ watch, userId, apiBase }: SmartWatchCardProps) {
 
 export default function Dashboard() {
   const { isPatient, user } = useAuth();
+  const { fmt, timezone } = useTimezone();
   const { data: stats, isLoading: statsLoading, dataUpdatedAt: statsUpdatedAt } = useGetDashboardStats(
     { request: withAuth(), query: { refetchInterval: 30_000 } as any }
   );
@@ -518,7 +520,7 @@ export default function Dashboard() {
                               {alert.severity === "warning" ? "average" : alert.severity}
                             </Badge>
                             <span className="text-xs text-muted-foreground">
-                              {alert.triggeredAt && !isNaN(new Date(alert.triggeredAt).getTime()) ? format(new Date(alert.triggeredAt), "MMM d, h:mm a") : "—"}
+                              {alert.triggeredAt && !isNaN(new Date(alert.triggeredAt).getTime()) ? fmt(new Date(alert.triggeredAt), "MMM d, h:mm a") : "—"}
                             </span>
                           </div>
                         </div>
@@ -560,7 +562,7 @@ export default function Dashboard() {
     let dateLabel = d.date ?? "";
     if (dateLabel) {
       try {
-        dateLabel = format(new Date(dateLabel + "T12:00:00"), "MMM d");
+        dateLabel = fmt(new Date(dateLabel + "T12:00:00"), "MMM d");
       } catch {
         dateLabel = dateLabel.slice(5);
       }
@@ -582,7 +584,7 @@ export default function Dashboard() {
         <div className="flex items-start justify-between flex-wrap gap-3">
           <div>
             <h1 className="text-3xl font-display font-bold text-foreground">
-              Good {new Date().getHours() < 12 ? "morning" : new Date().getHours() < 17 ? "afternoon" : "evening"}, Dr. {user?.name.split(" ").at(-1)}
+              Good {(() => { const h = parseInt(fmt(new Date(), "H")); return h < 12 ? "morning" : h < 17 ? "afternoon" : "evening"; })()}, Dr. {user?.name.split(" ").at(-1)}
             </h1>
             <p className="text-muted-foreground mt-1">
               {stats?.activeAlerts
@@ -924,7 +926,7 @@ export default function Dashboard() {
                             </Badge>
                             <span className="text-xs text-muted-foreground">
                               {alert.triggeredAt && !isNaN(new Date(alert.triggeredAt).getTime())
-                                ? format(new Date(alert.triggeredAt), "MMM d, h:mm a") : "—"}
+                                ? fmt(new Date(alert.triggeredAt), "MMM d, h:mm a") : "—"}
                             </span>
                           </div>
                         </div>

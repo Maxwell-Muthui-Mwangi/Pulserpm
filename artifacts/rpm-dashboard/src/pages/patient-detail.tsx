@@ -25,7 +25,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { format, formatDistanceToNow } from "date-fns";
+import { formatDistanceToNow } from "date-fns";
+import { useTimezone } from "@/lib/timezone-context";
 import { 
   Heart, Activity, Droplets, Thermometer, ArrowLeft, Settings, Bell, 
   CheckCircle2, XCircle, Loader2, Smartphone, Copy, RefreshCw, Trash2,
@@ -66,6 +67,7 @@ export default function PatientDetail() {
   const patientId = parseInt(params?.id || "0", 10);
   const { toast } = useToast();
   const { isPatient } = useAuth();
+  const { fmt } = useTimezone();
   
   const urlTab = new URLSearchParams(window.location.search).get("tab") as "overview" | "charts" | "thresholds" | "device" | null;
   const defaultTab = (isPatient && urlTab) ? urlTab : "overview";
@@ -339,7 +341,7 @@ export default function PatientDetail() {
       doc.setFont("helvetica", "normal");
       doc.text("Remote Patient Monitoring — Health Report", MARGIN, 22);
       doc.setFontSize(8);
-      doc.text(`Generated: ${format(new Date(), "dd MMM yyyy, HH:mm")}`, W - MARGIN, 22, { align: "right" });
+      doc.text(`Generated: ${fmt(new Date(), "dd MMM yyyy, HH:mm")}`, W - MARGIN, 22, { align: "right" });
 
       y = 42;
 
@@ -456,7 +458,7 @@ export default function PatientDetail() {
 
           const d = v.recordedAt ? new Date(v.recordedAt) : null;
           const vals = [
-            d && !isNaN(d.getTime()) ? format(d, "dd MMM yyyy HH:mm") : "—",
+            d && !isNaN(d.getTime()) ? fmt(d, "dd MMM yyyy HH:mm") : "—",
             v.heartRate ? `${v.heartRate} bpm` : "—",
             v.systolicBp ? `${v.systolicBp}/${v.diastolicBp}` : "—",
             v.spo2 ? `${v.spo2}%` : "—",
@@ -485,7 +487,7 @@ export default function PatientDetail() {
         doc.text(`Page ${p} of ${pageCount}`, W - MARGIN, 291, { align: "right" });
       }
 
-      const fileName = `PulseRPM_${patient.name.replace(/\s+/g, "_")}_${format(new Date(), "yyyy-MM-dd")}.pdf`;
+      const fileName = `PulseRPM_${patient.name.replace(/\s+/g, "_")}_${fmt(new Date(), "yyyy-MM-dd")}.pdf`;
       doc.save(fileName);
       toast({ title: "Report downloaded", description: fileName });
     } catch (err) {
@@ -527,7 +529,7 @@ export default function PatientDetail() {
     const date = v.recordedAt ? new Date(v.recordedAt) : null;
     const isValid = date && !isNaN(date.getTime());
     return {
-      time: isValid ? format(date!, period === 'day' ? 'HH:mm' : 'MMM dd') : '—',
+      time: isValid ? fmt(date!, period === 'day' ? 'HH:mm' : 'MMM dd') : '—',
       hr: v.heartRate,
       sys: v.systolicBp,
       dia: v.diastolicBp,
@@ -719,7 +721,7 @@ export default function PatientDetail() {
                       <span className={isVeryRecent || isDeviceActive ? "text-green-600 font-medium" : ""}>
                         Last synced {syncAgeLabel}
                       </span>
-                      {" · "}{format(syncedAt, "MMM d 'at' h:mm a")}
+                      {" · "}{fmt(syncedAt, "MMM d 'at' h:mm a")}
                     </p>
                   </>
                 );
@@ -780,7 +782,7 @@ export default function PatientDetail() {
                           <Badge variant={alert.severity === 'critical' ? 'critical' : 'amber'} className="capitalize">
                             {isPatient && alert.severity === 'warning' ? 'average' : alert.severity}
                           </Badge>
-                          <span className="text-xs text-muted-foreground">{alert.triggeredAt && !isNaN(new Date(alert.triggeredAt).getTime()) ? format(new Date(alert.triggeredAt), 'h:mm a') : '—'}</span>
+                          <span className="text-xs text-muted-foreground">{alert.triggeredAt && !isNaN(new Date(alert.triggeredAt).getTime()) ? fmt(new Date(alert.triggeredAt), 'h:mm a') : '—'}</span>
                         </div>
                         <p className="font-medium text-sm text-foreground">{alert.message}</p>
                         <p className="text-xs text-muted-foreground mt-1 mb-3">Value: <span className="font-semibold text-foreground">{alert.value}</span> (Threshold: {alert.threshold})</p>

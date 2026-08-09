@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Shield, RefreshCw, Filter, CheckCircle2, XCircle, AlertTriangle, Clock, User, Monitor, Search } from "lucide-react";
-import { format, formatDistanceToNow } from "date-fns";
+import { formatDistanceToNow } from "date-fns";
+import { useTimezone } from "@/lib/timezone-context";
 import { getAuthToken } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 import Layout from "@/components/layout";
@@ -90,6 +91,7 @@ const LIMIT = 25;
 
 export default function AuditLogPage() {
   const { user } = useAuth();
+  const { fmt, abbr } = useTimezone();
   const [logs, setLogs] = useState<AuditLog[]>([]);
   const [total, setTotal] = useState(0);
   const [offset, setOffset] = useState(0);
@@ -256,7 +258,7 @@ export default function AuditLogPage() {
                       <div className="flex items-center gap-1.5">
                         <Clock className="h-3.5 w-3.5 text-muted-foreground/60 shrink-0" />
                         <div>
-                          <div className="font-medium text-foreground text-xs">{format(new Date(log.timestamp), "MMM d, HH:mm:ss")}</div>
+                          <div className="font-medium text-foreground text-xs">{fmt(new Date(log.timestamp), "MMM d, HH:mm:ss")} <span className="text-muted-foreground/60">{abbr}</span></div>
                           <div className="text-[10px] text-muted-foreground">{formatDistanceToNow(new Date(log.timestamp), { addSuffix: true })}</div>
                         </div>
                       </div>
