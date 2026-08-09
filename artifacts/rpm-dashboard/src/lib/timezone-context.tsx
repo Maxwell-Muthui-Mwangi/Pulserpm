@@ -5,8 +5,17 @@
  * Default: "Africa/Nairobi" (EAT, UTC+3).
  * The preference is persisted to localStorage so it survives page refreshes.
  *
+ * Hardening guarantees:
+ *  • Invalid / corrupted localStorage values are rejected and fall back to EAT
+ *    using the browser-native Intl.DateTimeFormat validator.
+ *  • setTimezone() only accepts values present in TIMEZONE_OPTIONS.
+ *  • fmt() is fully safe: null / undefined / NaN-date → "—", every branch is
+ *    wrapped in try/catch, and bare Postgres timestamp strings (no Z suffix) are
+ *    normalised to UTC before formatting — so even a cached API response from
+ *    before the server-side fix was deployed will render correctly.
+ *
  * Usage:
- *   const { timezone, setTimezone, fmt } = useTimezone();
+ *   const { fmt } = useTimezone();
  *   fmt(someDate, "h:mm a")  // → "5:47 AM" in the selected timezone
  */
 
@@ -37,38 +46,98 @@ export const TIMEZONE_OPTIONS: TimezoneOption[] = [
   { value: "Australia/Sydney",     label: "Sydney (AEST/AEDT)",    abbr: "AEST" },
 ];
 
+// ─── IANA timezone validator (uses the browser's built-in Intl engine) ───────
+
+function isValidTimezone(tz: string): boolean {
+  if (!tz || typeof tz !== "string") return false;
+  try {
+    Intl.DateTimeFormat(undefined, { timeZone: tz });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// ─── Bare-Postgres-string → UTC Date normaliser ───────────────────────────────
+// The API now sends "...Z" ISO strings, but old cached responses or edge-case
+// code paths may still produce bare strings like "2026-08-09 02:47:21.591381".
+// JS treats those as LOCAL time (wrong on non-UTC machines/browsers).
+// This helper forces them to be interpreted as UTC.
+
+function toSafeDate(value: Date | string | number | null | undefined): Date | null {
+  if (value == null) return null;
+  if (value instanceof Date) return isNaN(value.getTime()) ? null : value;
+  if (typeof value === "number") {
+    const d = new Date(value);
+    return isNaN(d.getTime()) ? null : d;
+  }
+  const s = String(value).trim();
+  if (!s) return null;
+  // Append "Z" if no timezone offset is present (handles bare Postgres timestamps)
+  const iso =
+    (s.includes("T") ? s : s.replace(" ", "T")) +
+    (s.endsWith("Z") || /[+-]\d{2}:?\d{2}$/.test(s) ? "" : "Z");
+  const d = new Date(iso);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+// ─── Context types ────────────────────────────────────────────────────────────
+
 interface TimezoneCtx {
   timezone:    string;
   setTimezone: (tz: string) => void;
-  /** Format a Date (or ISO string) in the selected timezone. */
-  fmt:         (date: Date | string | number | null | undefined, formatStr: string) => string;
-  /** The timezone abbreviation for the current selection (e.g. "EAT"). */
-  abbr:        string;
+  /**
+   * Format a Date (or ISO/Postgres string, or epoch ms) in the selected timezone.
+   * Returns "—" for null / undefined / invalid dates. Never throws.
+   */
+  fmt:  (date: Date | string | number | null | undefined, formatStr: string) => string;
+  /** Abbreviation for the current selection (e.g. "EAT"). */
+  abbr: string;
 }
 
 const TimezoneContext = createContext<TimezoneCtx | null>(null);
 
+// ─── Provider ─────────────────────────────────────────────────────────────────
+
 export function TimezoneProvider({ children }: { children: ReactNode }) {
   const [timezone, setTimezoneRaw] = useState<string>(() => {
     try {
-      return localStorage.getItem(STORAGE_KEY) ?? DEFAULT_TZ;
+      const stored = localStorage.getItem(STORAGE_KEY);
+      // Reject if not in our known list (fast) OR not a valid IANA zone (safe fallback)
+      if (stored && TIMEZONE_OPTIONS.some((o) => o.value === stored) && isValidTimezone(stored)) {
+        return stored;
+      }
     } catch {
-      return DEFAULT_TZ;
+      // localStorage unavailable (SSR, incognito restrictions, quota exceeded)
     }
+    return DEFAULT_TZ;
   });
 
   const setTimezone = (tz: string) => {
+    // Whitelist — only accept values from TIMEZONE_OPTIONS; ignore anything else
+    if (!TIMEZONE_OPTIONS.some((o) => o.value === tz)) return;
     setTimezoneRaw(tz);
-    try { localStorage.setItem(STORAGE_KEY, tz); } catch { /* ignore */ }
+    try {
+      localStorage.setItem(STORAGE_KEY, tz);
+    } catch {
+      // ignore quota / incognito errors
+    }
   };
 
+  /**
+   * Timezone-aware formatter. Safe against every bad input:
+   *   • null / undefined            → "—"
+   *   • NaN Date                    → "—"
+   *   • bare Postgres timestamp str → auto-normalised to UTC before formatting
+   *   • formatInTimeZone throws     → caught, returns "—"
+   */
   const fmt = (date: Date | string | number | null | undefined, formatStr: string): string => {
-    if (date == null) return "—";
+    const d = toSafeDate(date);
+    if (!d) return "—";
     try {
-      const d = date instanceof Date ? date : new Date(date);
-      if (isNaN(d.getTime())) return "—";
       return formatInTimeZone(d, timezone, formatStr);
     } catch {
+      // Defensive: formatInTimeZone can throw for malformed format strings too
       return "—";
     }
   };
@@ -81,6 +150,8 @@ export function TimezoneProvider({ children }: { children: ReactNode }) {
     </TimezoneContext.Provider>
   );
 }
+
+// ─── Hook ─────────────────────────────────────────────────────────────────────
 
 export function useTimezone(): TimezoneCtx {
   const ctx = useContext(TimezoneContext);
