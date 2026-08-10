@@ -184,6 +184,16 @@ export default function PatientDetail() {
     userId: patientId,
     setConnected: setSseConnected,
     onVitals: (data) => {
+      // ── Patient isolation guard ────────────────────────────────────────────
+      // Providers receive a GLOBAL SSE stream — every patient's vitals flow
+      // through one connection. We must discard events that belong to a
+      // different patient before touching ANY local state or cache. Failure
+      // to do this causes one device's readings to appear on the wrong
+      // patient's detail page (the exact bug seen in the screenshots).
+      const incomingPatientId = typeof data.patientId === "number" ? data.patientId : undefined;
+      if (incomingPatientId != null && incomingPatientId !== patientId) return;
+      // ── End isolation guard ────────────────────────────────────────────────
+
       // Every SSE vital event (backlog or live) proves the device is communicating.
       // Persist to sessionStorage so a page refresh doesn't flash STALE mid-session.
       const sseEventTime = new Date();
