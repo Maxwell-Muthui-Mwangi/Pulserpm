@@ -568,7 +568,8 @@ export default function PatientDetail() {
       hr: v.heartRate,
       sys: v.systolicBp,
       dia: v.diastolicBp,
-      spo2: v.spo2
+      spo2: v.spo2,
+      temp: v.temperature,
     };
   }).reverse() || [];
 
@@ -896,6 +897,40 @@ export default function PatientDetail() {
                         <RechartsTooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
                         <Line type="monotone" dataKey="sys" name="Systolic" stroke="#3b82f6" strokeWidth={2} dot={false} />
                         <Line type="monotone" dataKey="dia" name="Diastolic" stroke="#8b5cf6" strokeWidth={2} dot={false} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                </Card>
+
+                <Card className="border-border/50 shadow-sm p-4">
+                  <h4 className="font-medium text-sm text-muted-foreground mb-4">SpO₂ (%)</h4>
+                  <div className="h-72 w-full">
+                    <ResponsiveContainer>
+                      <LineChart data={chartData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                        <XAxis dataKey="time" stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} />
+                        <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} domain={['auto', 100]} />
+                        <RechartsTooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} formatter={(v: number) => [`${v}%`, 'SpO₂']} />
+                        {thresholds?.spo2Min && <ReferenceLine y={thresholds.spo2Min} stroke="hsl(var(--warning))" strokeDasharray="3 3" />}
+                        {thresholds?.spo2CriticalMin && <ReferenceLine y={thresholds.spo2CriticalMin} stroke="hsl(var(--destructive))" strokeDasharray="3 3" />}
+                        <Line type="monotone" dataKey="spo2" name="SpO₂" stroke="#06b6d4" strokeWidth={2} dot={{ r: 3, fill: '#06b6d4', strokeWidth: 0 }} activeDot={{ r: 5 }} connectNulls />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                </Card>
+
+                <Card className="border-border/50 shadow-sm p-4">
+                  <h4 className="font-medium text-sm text-muted-foreground mb-4">Temperature (°C)</h4>
+                  <div className="h-72 w-full">
+                    <ResponsiveContainer>
+                      <LineChart data={chartData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                        <XAxis dataKey="time" stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} />
+                        <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} domain={['auto', 'auto']} />
+                        <RechartsTooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} formatter={(v: number) => [`${v}°C`, 'Temp']} />
+                        {thresholds?.temperatureMax && <ReferenceLine y={thresholds.temperatureMax} stroke="hsl(var(--warning))" strokeDasharray="3 3" />}
+                        {thresholds?.temperatureCriticalMax && <ReferenceLine y={thresholds.temperatureCriticalMax} stroke="hsl(var(--destructive))" strokeDasharray="3 3" />}
+                        <Line type="monotone" dataKey="temp" name="Temperature" stroke="#f59e0b" strokeWidth={2} dot={{ r: 3, fill: '#f59e0b', strokeWidth: 0 }} activeDot={{ r: 5 }} connectNulls />
                       </LineChart>
                     </ResponsiveContainer>
                   </div>
