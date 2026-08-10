@@ -13,7 +13,7 @@ export const patientsTable = pgTable("patients", {
   conditions: text("conditions").array().notNull().default([]),
   providerId: integer("provider_id").references(() => providersTable.id),
   deviceType: text("device_type").default("manual"),
-  deviceApiKey: uuid("device_api_key"),
+  deviceApiKey: uuid("device_api_key").unique(),
   role: text("role").notNull().default("patient"),
   approvalWelcomePending: boolean("approval_welcome_pending").notNull().default(false),
   passwordResetCode: text("password_reset_code"),

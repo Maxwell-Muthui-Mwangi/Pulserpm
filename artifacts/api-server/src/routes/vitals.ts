@@ -155,27 +155,75 @@ router.post("/vitals/ingest-batch", requireAuth, async (req, res) => {
 
     for (const reading of readings) {
       try {
-        const { patientId, vitals: v } = reading;
-        const [saved] = await db
-          .insert(vitalsTable)
-          .values({
-            patientId,
-            heartRate: v.heartRate ?? null,
-            systolicBp: v.systolicBp ?? null,
-            diastolicBp: v.diastolicBp ?? null,
-            spo2: v.spo2 ?? null,
-            caloriesBurned: v.caloriesBurned ?? null,
-            temperature: v.temperature ?? null,
-            source: v.source || "manual",
-            recordedAt: v.recordedAt ? new Date(v.recordedAt) : new Date(),
-          })
-          .returning();
+        // ── Ownership enforcement ──────────────────────────────────────────────
+        // patientId MUST be verified server-side — never trusted from the body.
+        // A patient can only write to their own record.
+        // A provider can only write to a patient they own.
+        // Any other combination is rejected with 403 before any DB write.
+        const bodyPatientId = Number(reading.patientId);
+        if (!Number.isFinite(bodyPatientId) || bodyPatientId <= 0) {
+          errors.push(`Reading skipped: missing or invalid patientId`);
+          continue;
+        }
 
-        const thresholds = await getOrCreateThresholds(patientId);
-        const candidates = evaluateVitals(saved, thresholds);
-        const alerts = await processAndSaveAlerts(patientId, candidates);
-        alertsTriggered += alerts.length;
-        processed++;
+        if (req.user!.role === "patient") {
+          if (req.user!.id !== bodyPatientId) {
+            // Patient attempting to write to another patient's record — hard block.
+            res.status(403).json({ error: "Forbidden", message: "Patients can only submit their own vitals" });
+            return;
+          }
+          const patientId = req.user!.id; // authoritative — from JWT, not body
+          const v = reading.vitals ?? reading;
+          const [saved] = await db
+            .insert(vitalsTable)
+            .values({
+              patientId,
+              heartRate: v.heartRate ?? null,
+              systolicBp: v.systolicBp ?? null,
+              diastolicBp: v.diastolicBp ?? null,
+              spo2: v.spo2 ?? null,
+              caloriesBurned: v.caloriesBurned ?? null,
+              temperature: v.temperature ?? null,
+              source: v.source || "manual",
+              recordedAt: v.recordedAt ? new Date(v.recordedAt) : new Date(),
+            })
+            .returning();
+          const thresholds = await getOrCreateThresholds(patientId);
+          const candidates = evaluateVitals(saved, thresholds);
+          const alerts = await processAndSaveAlerts(patientId, candidates);
+          alertsTriggered += alerts.length;
+          processed++;
+        } else if (req.user!.role === "provider") {
+          // Provider path: verify they own this patient before writing.
+          const owned = await assertProviderOwnsPatient(bodyPatientId, req.user!.id, res);
+          if (!owned) return; // assertProviderOwnsPatient already sent 403/404
+
+          const patientId = owned.id; // authoritative — from DB row, not body
+          const v = reading.vitals ?? reading;
+          const [saved] = await db
+            .insert(vitalsTable)
+            .values({
+              patientId,
+              heartRate: v.heartRate ?? null,
+              systolicBp: v.systolicBp ?? null,
+              diastolicBp: v.diastolicBp ?? null,
+              spo2: v.spo2 ?? null,
+              caloriesBurned: v.caloriesBurned ?? null,
+              temperature: v.temperature ?? null,
+              source: v.source || "manual",
+              recordedAt: v.recordedAt ? new Date(v.recordedAt) : new Date(),
+            })
+            .returning();
+          const thresholds = await getOrCreateThresholds(patientId);
+          const candidates = evaluateVitals(saved, thresholds);
+          const alerts = await processAndSaveAlerts(patientId, candidates);
+          alertsTriggered += alerts.length;
+          processed++;
+        } else {
+          // Unknown role — deny
+          res.status(403).json({ error: "Forbidden", message: "Insufficient permissions" });
+          return;
+        }
       } catch (e) {
         errors.push(`Patient ${reading.patientId}: ${String(e)}`);
       }
