@@ -111,18 +111,25 @@ router.get("/device/status", async (req, res) => {
 //   Google Fit:   { heartRate: { bpm }, bloodPressure: { systolic, diastolic }, oxygen: { saturation }, temperature: { celsius } }
 // Shared helper – resolves an API key from any of the auth styles companion
 // apps use: X-Device-Api-Key header, Authorization: Bearer <key>, or ?apiKey=
+//
+// Security: ALL three paths validate UUID format AND enforce a length cap before
+// returning the key. This prevents malformed or oversized strings from ever
+// reaching the database query layer.
 function resolveApiKey(req: import("express").Request): string | null {
+  // UUIDs are exactly 36 characters — anything longer is invalid.
+  const UUID_LEN = 36;
+
   const headerKey = req.headers["x-device-api-key"] as string | undefined;
-  if (headerKey) return headerKey;
+  if (headerKey && headerKey.length === UUID_LEN && UUID_REGEX.test(headerKey)) return headerKey;
 
   const auth = req.headers["authorization"] as string | undefined;
   if (auth?.toLowerCase().startsWith("bearer ")) {
     const candidate = auth.slice(7).trim();
-    if (UUID_REGEX.test(candidate)) return candidate;
+    if (candidate.length === UUID_LEN && UUID_REGEX.test(candidate)) return candidate;
   }
 
   const queryKey = req.query.apiKey as string | undefined;
-  if (queryKey) return queryKey;
+  if (queryKey && queryKey.length === UUID_LEN && UUID_REGEX.test(queryKey)) return queryKey;
 
   return null;
 }
@@ -321,7 +328,56 @@ function normalizeField(body: Record<string, unknown>, keys: string[], ...fallba
 const ALLOWED_SOURCES = ["oraimo", "healthwear", "healthwatch", "wearable", "manual",
   "apple_health", "google_fit", "fitbit", "tk65", "health_connect", "mobile"] as const;
 
+// ─── Physiological range guards ───────────────────────────────────────────────
+// Values outside these ranges are physically impossible for a living person.
+// Storing them would corrupt trend charts, trigger false alerts, and make
+// accurate clinical review impossible — so we reject them outright (null).
+const VITAL_RANGES = {
+  heartRate:      { min: 20,     max: 300    },  // bpm
+  systolicBp:     { min: 50,     max: 300    },  // mmHg
+  diastolicBp:    { min: 20,     max: 200    },  // mmHg
+  spo2:           { min: 50,     max: 100    },  // %
+  temperature:    { min: 30.0,   max: 45.0   },  // °C
+  caloriesBurned: { min: 0,      max: 20_000 },  // kcal / day
+} as const;
+
+function clampVital(value: number | null, field: keyof typeof VITAL_RANGES): number | null {
+  if (value === null) return null;
+  const { min, max } = VITAL_RANGES[field];
+  // Out-of-range → discard entirely rather than silently cap; a capped value
+  // would still appear plausible in the UI but was never a real reading.
+  return value >= min && value <= max ? value : null;
+}
+
+// ─── Timestamp guard ──────────────────────────────────────────────────────────
+// recordedAt comes from the device — validate it so a bad clock or a malicious
+// payload can never push readings to an absurd point on the timeline.
+//   • Too old  (> 30 days): clamp to 30 days ago (device backlog, still stored)
+//   • Too new  (> 5 min in future): reject and use server time instead
+//   • Unparseable: use server time
+const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1_000;
+const FIVE_MIN_MS    =  5 * 60 * 1_000;
+
+function safeRecordedAt(raw: unknown): Date {
+  const now = Date.now();
+  const parsed = new Date(raw as string);
+  if (isNaN(parsed.getTime())) return new Date(now);              // unparseable → now
+  if (parsed.getTime() > now + FIVE_MIN_MS)  return new Date(now); // future     → now
+  if (parsed.getTime() < now - THIRTY_DAYS_MS) return new Date(now - THIRTY_DAYS_MS); // ancient → 30d ago
+  return parsed;
+}
+
 function normalizeVitalReading(body: any, patientId: number) {
+  // Defense-in-depth: strip any patientId fields from the payload before
+  // processing. The authoritative patientId is always the one resolved from the
+  // API-key DB lookup by the calling handler — never anything in the body.
+  if (body && typeof body === "object") {
+    delete body.patientId;
+    delete body.patient_id;
+    delete body.userId;
+    delete body.user_id;
+  }
+
   const heartRate = normalizeField(body,
     ["heartRate", "HeartRate", "heart_rate", "bpm"],
     body.heart?.restingHeartRate, body.heartRate?.bpm);
@@ -345,22 +401,32 @@ function normalizeVitalReading(body: any, patientId: number) {
   const steps = normalizeField(body, ["steps", "stepCount", "step_count", "dailySteps"]);
   const effectiveCalories = caloriesBurned ?? steps;
 
-  if (!heartRate && !systolicBp && !spo2 && !temperature && !effectiveCalories) return null;
+  // Apply physiological range guards — discard any value that is physically
+  // impossible so it cannot corrupt charts or fire false clinical alerts.
+  const safeHr    = clampVital(heartRate      ? Math.round(heartRate)      : null, "heartRate");
+  const safeSys   = clampVital(systolicBp     ? Math.round(systolicBp)     : null, "systolicBp");
+  const safeDia   = clampVital(diastolicBp    ? Math.round(diastolicBp)    : null, "diastolicBp");
+  const safeSpo2  = clampVital(spo2           ? Math.round(spo2)           : null, "spo2");
+  const safeTemp  = clampVital(temperature    ? Number(temperature.toFixed(1)) : null, "temperature");
+  const safeCal   = clampVital(effectiveCalories ? Math.round(effectiveCalories) : null, "caloriesBurned");
 
-  const rawTs = body.recordedAt || body.StartDate || body.startDate || body.timestamp || new Date().toISOString();
+  // Reject the whole reading if every field is either absent or out-of-range.
+  if (!safeHr && !safeSys && !safeSpo2 && !safeTemp && !safeCal) return null;
+
+  const rawTs = body.recordedAt || body.StartDate || body.startDate || body.timestamp;
   const source = (typeof body.source === "string" && (ALLOWED_SOURCES as readonly string[]).includes(body.source))
     ? body.source : "wearable";
 
   return {
-    patientId,
-    heartRate:      heartRate      ? Math.round(heartRate)            : null,
-    systolicBp:     systolicBp     ? Math.round(systolicBp)           : null,
-    diastolicBp:    diastolicBp    ? Math.round(diastolicBp)          : null,
-    spo2:           spo2           ? Math.round(spo2)                 : null,
-    temperature:    temperature    ? Number(temperature.toFixed(1))   : null,
-    caloriesBurned: effectiveCalories ? Math.round(effectiveCalories) : null,
+    patientId,          // always from DB lookup — never from the request body
+    heartRate:      safeHr,
+    systolicBp:     safeSys,
+    diastolicBp:    safeDia,
+    spo2:           safeSpo2,
+    temperature:    safeTemp,
+    caloriesBurned: safeCal,
     source,
-    recordedAt: new Date(rawTs),
+    recordedAt: safeRecordedAt(rawTs),
   };
 }
 

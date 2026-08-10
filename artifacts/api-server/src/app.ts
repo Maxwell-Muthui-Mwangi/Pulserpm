@@ -51,7 +51,15 @@ app.use(express.json({ limit: "1mb" }));
 app.use(express.urlencoded({ extended: true, limit: "1mb" }));
 
 app.use("/api", apiLimiter);
-app.use("/api/device/ingest", deviceLimiter);
+// Apply the strict device rate-limit to ALL ingest paths — both the primary
+// route and every alias accepted for companion-app compatibility.
+app.use("/api/device/ingest",       deviceLimiter);
+app.use("/api/device/sync",         deviceLimiter);
+app.use("/api/ingest",              deviceLimiter);
+app.use("/api/device/ingest/batch", deviceLimiter);
+app.use("/api/device/batch",        deviceLimiter);
+app.use("/api/ingest/batch",        deviceLimiter);
+app.use("/api/batch",               deviceLimiter);
 app.use("/api", auditMiddleware);
 
 // Prevent browser and proxy caching of all API responses so the dashboard
