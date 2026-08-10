@@ -6,12 +6,26 @@ import router from "./routes/index.js";
 import { auditMiddleware } from "./middlewares/auditLog.js";
 import { apiLimiter, deviceLimiter } from "./middlewares/rateLimit.js";
 
-const ALLOWED_ORIGINS = [
+// Hard-coded trusted origins (regex patterns or exact strings).
+const ALLOWED_ORIGINS: (RegExp | string)[] = [
   /\.replit\.dev$/,
   /\.replit\.app$/,
   /\.kirk\.replit\.dev$/,
   /^http:\/\/localhost(:\d+)?$/,
+  // Custom production domain
+  /\.ballershopke\.ltd$/,
 ];
+
+// Runtime-configurable extra origins (comma-separated hostnames or origins in
+// the EXTRA_ALLOWED_ORIGINS env var, e.g. "myapp.com,staging.myapp.com").
+// This lets new domains be added via an environment secret without a code
+// change or redeploy.
+if (process.env.EXTRA_ALLOWED_ORIGINS) {
+  for (const raw of process.env.EXTRA_ALLOWED_ORIGINS.split(",")) {
+    const entry = raw.trim();
+    if (entry) ALLOWED_ORIGINS.push(entry);
+  }
+}
 
 function isOriginAllowed(origin: string | undefined): boolean {
   if (!origin) return true;
