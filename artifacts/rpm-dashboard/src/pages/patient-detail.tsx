@@ -399,7 +399,12 @@ export default function PatientDetail() {
       doc.setFontSize(8.5);
       doc.setFont("helvetica", "normal");
       doc.setTextColor(71, 85, 105);
-      const demo = [`ID: ${patient.id}`, `Age: ${patient.age}`, `Gender: ${patient.gender}`, `DOB: ${patient.dateOfBirth}`].join("   •   ");
+      const demo = [
+        `ID: ${patient.id}`,
+        `Age: ${patient.age != null ? patient.age : "—"}`,
+        `Gender: ${patient.gender ?? "—"}`,
+        `DOB: ${patient.dateOfBirth ?? "—"}`,
+      ].join("   •   ");
       doc.text(demo, MARGIN, y); y += 5;
       if (patient.email) { doc.text(`Email: ${patient.email}`, MARGIN, y); y += 5; }
       if (patient.conditions?.length) {
@@ -599,7 +604,17 @@ export default function PatientDetail() {
               {patient.riskLevel === 'normal' && <Badge variant="normal" className="ml-3">{isPatient ? "Good" : "Normal"}</Badge>}
             </h1>
             <p className="text-muted-foreground text-sm flex items-center mt-1">
-              {isPatient ? patient.email : `ID: ${patient.id} • ${patient.gender} • ${patient.age} yrs • DOB: ${patient.dateOfBirth}`}
+              {isPatient ? patient.email : (
+                <>
+                  ID: {patient.id}
+                  {" • "}
+                  {patient.gender ?? "—"}
+                  {" • "}
+                  {patient.age != null ? `${patient.age} yrs` : "— yrs"}
+                  {" • "}
+                  DOB: {patient.dateOfBirth ?? "—"}
+                </>
+              )}
             </p>
           </div>
           {!isPatient && (
@@ -794,15 +809,18 @@ export default function PatientDetail() {
                     {isPatient && (
                       <div>
                         <p className="text-sm text-muted-foreground">Age</p>
-                        <p className="font-medium">{patient.age} years old</p>
+                        <p className="font-medium">{patient.age != null ? `${patient.age} years old` : "—"}</p>
                       </div>
                     )}
                     <div className="col-span-2">
                       <p className="text-sm text-muted-foreground mb-1">Conditions</p>
                       <div className="flex gap-2 flex-wrap">
-                        {patient.conditions?.map((c, i) => (
-                          <Badge key={i} variant="secondary">{c}</Badge>
-                        ))}
+                        {patient.conditions && patient.conditions.length > 0
+                          ? patient.conditions.map((c, i) => (
+                              <Badge key={i} variant="secondary">{c}</Badge>
+                            ))
+                          : <span className="text-sm text-muted-foreground">None recorded</span>
+                        }
                       </div>
                     </div>
                   </div>
