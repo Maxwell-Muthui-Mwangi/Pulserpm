@@ -23,7 +23,7 @@ import {
 } from "lucide-react";
 import { removeAuthToken, withAuth, getAuthToken } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
-import { Crown, Stethoscope } from "lucide-react";
+import { Crown, Stethoscope, BrainCircuit } from "lucide-react";
 import { useListAlerts } from "@workspace/api-client-react";
 import { queryClient } from "@/lib/query-client";
 import { Button } from "@/components/ui/button";
@@ -91,6 +91,7 @@ export default function Layout({ children }: LayoutProps) {
     ...(isAdmin ? [
       { href: "/security", label: "Audit Log", icon: Shield },
       { href: "/threat-detection", label: "MLNN Model Anomaly Detection", icon: ShieldAlert },
+      ...(isSuperAdmin ? [{ href: "/super-admin?section=mlnn-research", label: "MLNN Research", icon: BrainCircuit }] : []),
       { href: "/blockchain", label: "Blockchain Monitor", icon: Link2 },
       { href: "/security-framework", label: "Security Framework", icon: ShieldCheck },
     ] : []),
