@@ -38,7 +38,8 @@ interface LayoutProps {
 
 export default function Layout({ children }: LayoutProps) {
   const [location, setLocation] = useLocation();
-  const { user, isLoading, isPatient, isAdmin, isSuperAdmin } = useAuth();
+  const { user, isLoading, isPatient, isAdmin, isSuperAdmin,
+          adminPatientMode, adminPatientId, setAdminPatientMode } = useAuth();
   const { timezone, setTimezone, fmt } = useTimezone();
   const [notifOpen, setNotifOpen] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
@@ -82,6 +83,13 @@ export default function Layout({ children }: LayoutProps) {
     setLocation("/login");
   };
 
+  // Nav items when super admin is in patient-view mode
+  const adminAsPatientNavItems = [
+    { href: adminPatientId ? `/patients/${adminPatientId}` : "/", label: "My Patient Profile", icon: UserCircle },
+    { href: "/alerts", label: "My Alerts", icon: AlertCircle },
+    { href: adminPatientId ? `/patients/${adminPatientId}?tab=device` : "/", label: "Connect Device", icon: HeartPulse },
+  ];
+
   const providerNavItems = [
     { href: "/", label: "Overview", icon: LayoutDashboard },
     { href: "/patients", label: "Patients", icon: Users },
@@ -105,13 +113,24 @@ export default function Layout({ children }: LayoutProps) {
     { href: user ? `/patients/${user.id}?tab=device` : "/", label: "Connect Smartwatch", icon: HeartPulse },
   ];
 
-  const navItems = isPatient ? patientNavItems : providerNavItems;
+  const navItems = isPatient
+    ? patientNavItems
+    : (isSuperAdmin && adminPatientMode)
+      ? adminAsPatientNavItems
+      : providerNavItems;
 
   useEffect(() => {
     if (!isLoading && !user) {
       setLocation("/login");
     }
   }, [isLoading, user, setLocation]);
+
+  // When super admin is in patient mode and lands on "/", redirect to their patient profile
+  useEffect(() => {
+    if (isSuperAdmin && adminPatientMode && adminPatientId && location === "/") {
+      setLocation(`/patients/${adminPatientId}`);
+    }
+  }, [isSuperAdmin, adminPatientMode, adminPatientId, location, setLocation]);
 
   if (isLoading) {
     return <div className="min-h-screen flex items-center justify-center bg-background">
@@ -161,6 +180,22 @@ export default function Layout({ children }: LayoutProps) {
             Pulse<span className="text-primary">RPM</span>
           </span>
         </div>
+
+        {/* Patient-mode banner — visible only when super admin is in patient view */}
+        {isSuperAdmin && adminPatientMode && (
+          <div className="px-3 py-2.5 bg-violet-500/10 border-b border-violet-500/20">
+            <div className="flex items-center gap-1.5 mb-2">
+              <span className="h-1.5 w-1.5 rounded-full bg-violet-400 animate-pulse" />
+              <span className="text-[10px] font-bold text-violet-300 uppercase tracking-wider">Patient View Active</span>
+            </div>
+            <button
+              onClick={() => { setAdminPatientMode(false); setLocation("/"); }}
+              className="w-full flex items-center justify-center gap-1.5 h-7 px-3 bg-violet-500/20 hover:bg-violet-500/30 border border-violet-500/35 rounded-lg text-[11px] text-violet-200 font-semibold transition-colors"
+            >
+              <Crown className="h-3 w-3" /> ⚡ Return to Admin Mode
+            </button>
+          </div>
+        )}
         
         <div className="flex-1 py-6 px-4 space-y-1 overflow-y-auto">
           <div className="px-2 mb-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
@@ -229,6 +264,20 @@ export default function Layout({ children }: LayoutProps) {
               ))}
             </select>
           </div>
+
+          {/* Super admin patient-mode toggle */}
+          {isSuperAdmin && !adminPatientMode && (
+            <button
+              onClick={() => {
+                setAdminPatientMode(true);
+                setLocation(adminPatientId ? `/patients/${adminPatientId}` : "/");
+              }}
+              className="w-full flex items-center gap-2 px-3 py-2 mb-1 rounded-xl text-[12px] text-violet-400 hover:bg-violet-500/10 border border-violet-500/15 hover:border-violet-500/30 transition-colors"
+            >
+              <UserCircle className="h-4 w-4 shrink-0" />
+              <span>Switch to Patient View</span>
+            </button>
+          )}
 
           <Button variant="ghost" className="w-full justify-start text-muted-foreground hover:text-destructive hover:bg-destructive/10" onClick={handleLogout}>
             <LogOut className="h-4 w-4 mr-2" />

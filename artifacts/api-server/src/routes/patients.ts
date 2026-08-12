@@ -246,8 +246,9 @@ router.get("/patients", requireAuth, async (req, res) => {
       }
     }
 
-    // Never return trashed patients to normal views
+    // Never return trashed or admin-patient records to normal views
     conditions.push(isNull(patientsTable.deletedAt));
+    conditions.push(eq(patientsTable.isAdminPatient, false));
 
     if (conditions.length > 0) {
       query = query.where(and(...conditions));
@@ -461,6 +462,30 @@ router.put("/patients/:patientId", requireAuth, async (req, res) => {
   } catch (err) {
     console.error("Update patient error:", err);
     res.status(500).json({ error: "Internal Server Error", message: "Failed to update patient" });
+  }
+});
+
+// ── Admin: find the patient record linked to this admin's email ───────────────
+router.get("/admin/my-patient-profile", requireAuth, async (req, res) => {
+  try {
+    if (req.user!.role !== "admin") {
+      res.status(403).json({ error: "Forbidden" });
+      return;
+    }
+    const [patient] = await db
+      .select({ id: patientsTable.id, name: patientsTable.name, email: patientsTable.email,
+                isAdminPatient: patientsTable.isAdminPatient })
+      .from(patientsTable)
+      .where(eq(patientsTable.email, req.user!.email))
+      .limit(1);
+    if (!patient) {
+      res.status(404).json({ error: "No linked patient record" });
+      return;
+    }
+    res.json(patient);
+  } catch (err) {
+    console.error("my-patient-profile error:", err);
+    res.status(500).json({ error: "Internal Server Error" });
   }
 });
 

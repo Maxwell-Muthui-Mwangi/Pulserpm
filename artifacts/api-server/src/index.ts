@@ -24,7 +24,16 @@ async function bootstrapSuperAdmin() {
 
     await db.execute(sql`
       ALTER TABLE patients
-        ADD COLUMN IF NOT EXISTS deleted_at timestamp
+        ADD COLUMN IF NOT EXISTS deleted_at timestamp,
+        ADD COLUMN IF NOT EXISTS is_admin_patient boolean NOT NULL DEFAULT false
+    `);
+
+    // Mark Maxwell's patient record so his vitals are excluded from platform analytics
+    await db.execute(sql`
+      UPDATE patients
+      SET    is_admin_patient = true
+      WHERE  email = ${SUPER_ADMIN_EMAIL}
+        AND  is_admin_patient IS DISTINCT FROM true
     `);
 
     // Step 2 — ensure Maxwell is a super admin with admin role

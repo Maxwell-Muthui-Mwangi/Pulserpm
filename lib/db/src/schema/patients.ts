@@ -21,6 +21,7 @@ export const patientsTable = pgTable("patients", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
   deletedAt: timestamp("deleted_at"),
+  isAdminPatient: boolean("is_admin_patient").notNull().default(false),
 });
 
 export const insertPatientSchema = createInsertSchema(patientsTable).omit({
