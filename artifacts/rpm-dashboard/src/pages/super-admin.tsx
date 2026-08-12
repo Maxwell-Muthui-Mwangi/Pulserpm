@@ -39,6 +39,8 @@ type AdminSection =
   | "network"
   | "user-activity"
   | "manage-team"
+  | "healthcare-providers"
+  | "admins-management"
   | "system"
   | "reports"
   | "settings";
@@ -366,7 +368,7 @@ export default function SuperAdmin() {
   }, []);
 
   useEffect(() => {
-    if (section === "manage-team") fetchTeam();
+    if (section === "manage-team" || section === "healthcare-providers" || section === "admins-management") fetchTeam();
   }, [section, fetchTeam]);
 
   const setProviderRole = async (id: number, role: string) => {
@@ -616,16 +618,19 @@ export default function SuperAdmin() {
     setTimeout(() => setCopied(null), 1500);
   }
 
-  const sidebarItems: { id: AdminSection; label: string; icon: any; danger?: boolean }[] = [
-    { id: "threat-alerts",  label: "Threat Alerts",       icon: AlertTriangle, danger: true },
-    { id: "blockchain",     label: "Blockchain Monitor",  icon: Link2 },
-    { id: "ai-anomaly",     label: "AI Anomaly Detection",icon: BrainCircuit },
-    { id: "network",        label: "Network Monitoring",  icon: Globe },
-    { id: "user-activity",  label: "User Activity",       icon: Users },
-    { id: "manage-team",    label: "Manage Team",         icon: Users },
-    { id: "system",         label: "System Integrity",    icon: ShieldAlert },
-    { id: "reports",        label: "Reports",             icon: FileText },
-    { id: "settings",       label: "Settings",            icon: Settings },
+  const sidebarItems: { id: AdminSection; label: string; icon: any; danger?: boolean; superAdminOnly?: boolean }[] = [
+    { id: "threat-alerts",        label: "Threat Alerts",                  icon: AlertTriangle, danger: true },
+    { id: "blockchain",           label: "Blockchain Monitor",             icon: Link2 },
+    { id: "ai-anomaly",           label: "MLNN Model Anomaly Detection",   icon: BrainCircuit },
+    { id: "network",              label: "Network Monitoring",             icon: Globe },
+    { id: "user-activity",        label: "User Activity",                  icon: Users },
+    { id: "manage-team",          label: "Manage Team",                    icon: Users },
+    // Super-admin only management sections
+    { id: "healthcare-providers", label: "Healthcare Providers",           icon: Shield, superAdminOnly: true },
+    { id: "admins-management",    label: "Admins",                         icon: Lock,  superAdminOnly: true },
+    { id: "system",               label: "System Integrity",               icon: ShieldAlert },
+    { id: "reports",              label: "Reports",                        icon: FileText },
+    { id: "settings",             label: "Settings",                       icon: Settings },
   ];
 
   if (isLoading) {
@@ -659,28 +664,42 @@ export default function SuperAdmin() {
           <div className="px-2 mb-2 text-[10px] font-semibold text-slate-600 uppercase tracking-wider">
             Security Center
           </div>
-          {sidebarItems.map((item) => {
-            const active = section === item.id;
-            return (
-              <button
-                key={item.id}
-                onClick={() => setSection(item.id)}
-                className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-left transition-all text-sm ${
-                  active
-                    ? item.danger
-                      ? "bg-red-500/20 text-red-400 font-medium"
-                      : "bg-blue-500/15 text-blue-300 font-medium"
-                    : "text-slate-500 hover:text-slate-300 hover:bg-slate-800/60"
-                }`}
-              >
-                <item.icon className={`h-4 w-4 shrink-0 ${active ? (item.danger ? "text-red-400" : "text-blue-400") : ""}`} />
-                {item.label}
-              </button>
-            );
-          })}
+          {/* Super-admin-only grouping */}
+          {isSuperAdmin && (
+            <div className="px-2 mt-3 mb-1 text-[10px] font-semibold text-violet-500/70 uppercase tracking-wider flex items-center gap-1.5">
+              <span className="h-1.5 w-1.5 rounded-full bg-violet-500 animate-pulse" />
+              God Level
+            </div>
+          )}
+          {sidebarItems
+            .filter((item) => !item.superAdminOnly || isSuperAdmin)
+            .map((item) => {
+              const active = section === item.id;
+              const isGodItem = item.superAdminOnly;
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => setSection(item.id)}
+                  className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-left transition-all text-sm ${
+                    active
+                      ? item.danger
+                        ? "bg-red-500/20 text-red-400 font-medium"
+                        : isGodItem
+                          ? "bg-violet-500/20 text-violet-300 font-medium"
+                          : "bg-blue-500/15 text-blue-300 font-medium"
+                      : isGodItem
+                        ? "text-violet-500/70 hover:text-violet-300 hover:bg-violet-500/10"
+                        : "text-slate-500 hover:text-slate-300 hover:bg-slate-800/60"
+                  }`}
+                >
+                  <item.icon className={`h-4 w-4 shrink-0 ${active ? (item.danger ? "text-red-400" : isGodItem ? "text-violet-400" : "text-blue-400") : isGodItem ? "text-violet-500/60" : ""}`} />
+                  {item.label}
+                </button>
+              );
+            })}
         </nav>
 
-        {/* AI Engine Status */}
+        {/* MLNN Model Engine Status */}
         <div className="p-3 border-t border-slate-800">
           <div className="bg-slate-800/60 rounded-xl p-3">
             <div className="flex items-center gap-2 mb-1">
@@ -688,11 +707,11 @@ export default function SuperAdmin() {
                 <BrainCircuit className="h-3.5 w-3.5 text-emerald-400" />
               </div>
               <div>
-                <p className="text-[11px] font-semibold text-white">AI Engine Status</p>
+                <p className="text-[11px] font-semibold text-white">MLNN Model Engine</p>
                 <p className="text-[10px] text-emerald-400 font-medium">Operational</p>
               </div>
             </div>
-            <p className="text-[9px] text-slate-600">Model Version: 2.4.1</p>
+            <p className="text-[9px] text-slate-600">MLNN v2.4.1 — Anomaly Detection</p>
             <p className="text-[9px] text-slate-600">Last Updated: 5 mins ago</p>
           </div>
         </div>
@@ -715,14 +734,16 @@ export default function SuperAdmin() {
         <header className="h-14 flex items-center justify-between px-6 border-b border-slate-800 bg-slate-900/70 shrink-0">
           <div>
             <h1 className="text-base font-bold text-white">
-              {section === "threat-alerts"  && "AI Threat Detection Alerts"}
-              {section === "blockchain"     && "Live Blockchain Transactions"}
-              {section === "ai-anomaly"     && "AI Anomaly Detection"}
-              {section === "network"        && "Network Monitoring"}
-              {section === "user-activity"  && "User Activity"}
-              {section === "system"         && "System Integrity"}
-              {section === "reports"        && "Reports"}
-              {section === "settings"       && "Settings"}
+              {section === "threat-alerts"        && "Threat Alerts"}
+              {section === "blockchain"           && "Live Blockchain Transactions"}
+              {section === "ai-anomaly"           && "MLNN Model Anomaly Detection"}
+              {section === "network"              && "Network Monitoring"}
+              {section === "user-activity"        && "User Activity"}
+              {section === "system"               && "System Integrity"}
+              {section === "reports"              && "Reports"}
+              {section === "settings"             && "Settings"}
+              {section === "healthcare-providers" && "Healthcare Providers"}
+              {section === "admins-management"    && "Admins Management"}
             </h1>
           </div>
           <div className="flex items-center gap-3">
@@ -735,7 +756,11 @@ export default function SuperAdmin() {
             </div>
             <div className="text-right hidden sm:block">
               <p className="text-xs font-semibold text-white">{user.name}</p>
-              <p className="text-[10px] text-slate-400 capitalize">Security Admin</p>
+              {isSuperAdmin ? (
+                <p className="text-[10px] font-bold text-violet-400 uppercase tracking-wide">⚡ God Level Access</p>
+              ) : (
+                <p className="text-[10px] text-slate-400 capitalize">Admin</p>
+              )}
             </div>
           </div>
         </header>
@@ -2076,6 +2101,130 @@ export default function SuperAdmin() {
                   {teamProviders.length === 0 && (
                     <div className="text-center py-12 text-slate-600 text-sm">No providers found.</div>
                   )}
+                </div>
+              )}
+            </>
+          )}
+
+          {/* ── Healthcare Providers (super-admin only) ─────────────────── */}
+          {section === "healthcare-providers" && (
+            <>
+              <div className="p-4 border-b border-slate-800 bg-slate-900/40">
+                <p className="text-xs text-slate-400">All registered healthcare providers on the platform. Promote, demote, transfer patients, or remove accounts.</p>
+              </div>
+              {teamLoading ? (
+                <div className="flex items-center justify-center py-20 text-slate-500 text-sm gap-2">
+                  <div className="h-4 w-4 border-2 border-slate-600 border-t-violet-400 rounded-full animate-spin" />
+                  Loading providers…
+                </div>
+              ) : (
+                <div className="divide-y divide-slate-800/50">
+                  {teamProviders.filter(p => !p.isSuperAdmin && p.role !== "admin").map((p) => (
+                    <div key={p.id} className="flex items-center gap-4 px-6 py-4 hover:bg-slate-800/30 transition-colors">
+                      <div className="h-9 w-9 rounded-full bg-violet-500/20 border border-violet-500/30 flex items-center justify-center text-violet-300 font-bold text-sm shrink-0">
+                        {p.name.charAt(0)}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-white truncate">{p.name}</p>
+                        <p className="text-[11px] text-slate-500 truncate">{p.email}</p>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-500/15 text-blue-300 border border-blue-500/20">
+                          {p.isManager ? "Manager" : "Provider"}
+                        </span>
+                        <span className="text-[10px] text-slate-600">{p.patients.length} patient{p.patients.length !== 1 ? "s" : ""}</span>
+                        <button
+                          onClick={() => setProviderManager(p.id, !p.isManager)}
+                          disabled={teamAction === p.id}
+                          className="h-7 px-3 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-[11px] rounded-lg transition-colors disabled:opacity-50"
+                        >
+                          {p.isManager ? "Revoke Manager" : "Make Manager"}
+                        </button>
+                        <button
+                          onClick={() => setProviderRole(p.id, "admin")}
+                          disabled={teamAction === p.id}
+                          className="h-7 px-3 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 text-amber-400 text-[11px] rounded-lg transition-colors disabled:opacity-50"
+                        >
+                          Promote to Admin
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                  {teamProviders.filter(p => !p.isSuperAdmin && p.role !== "admin").length === 0 && (
+                    <div className="text-center py-16 text-slate-600 text-sm">No healthcare providers found.</div>
+                  )}
+                </div>
+              )}
+            </>
+          )}
+
+          {/* ── Admins Management (super-admin only) ────────────────────── */}
+          {section === "admins-management" && (
+            <>
+              <div className="p-4 border-b border-slate-800 bg-slate-900/40">
+                <p className="text-xs text-slate-400">All admin accounts. Grant admin rights to providers or revoke access. Maxwell's account is permanently protected.</p>
+              </div>
+              {teamLoading ? (
+                <div className="flex items-center justify-center py-20 text-slate-500 text-sm gap-2">
+                  <div className="h-4 w-4 border-2 border-slate-600 border-t-violet-400 rounded-full animate-spin" />
+                  Loading admins…
+                </div>
+              ) : (
+                <div className="divide-y divide-slate-800/50">
+                  {teamProviders.filter(p => p.role === "admin" || p.isSuperAdmin).map((p) => (
+                    <div key={p.id} className="flex items-center gap-4 px-6 py-4 hover:bg-slate-800/30 transition-colors">
+                      <div className={`h-9 w-9 rounded-full flex items-center justify-center font-bold text-sm shrink-0 ${
+                        p.isSuperAdmin
+                          ? "bg-violet-500/20 border border-violet-500/30 text-violet-300"
+                          : "bg-amber-500/20 border border-amber-500/30 text-amber-300"
+                      }`}>
+                        {p.name.charAt(0)}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-white truncate">{p.name}</p>
+                        <p className="text-[11px] text-slate-500 truncate">{p.email}</p>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        {p.isSuperAdmin ? (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-violet-500/20 text-violet-300 border border-violet-500/30 flex items-center gap-1">
+                            ⚡ SUPER ADMIN
+                          </span>
+                        ) : (
+                          <>
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/20">
+                              ADMIN
+                            </span>
+                            <button
+                              onClick={() => setProviderRole(p.id, "provider")}
+                              disabled={teamAction === p.id}
+                              className="h-7 px-3 bg-red-500/10 hover:bg-red-500/20 border border-red-500/25 text-red-400 text-[11px] rounded-lg transition-colors disabled:opacity-50"
+                            >
+                              Revoke Admin
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                  {/* Grant admin — pick from providers */}
+                  <div className="px-6 py-4">
+                    <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-3">Grant Admin Rights to a Provider</p>
+                    <div className="flex flex-wrap gap-2">
+                      {teamProviders.filter(p => p.role !== "admin" && !p.isSuperAdmin).map((p) => (
+                        <button
+                          key={p.id}
+                          onClick={() => setProviderRole(p.id, "admin")}
+                          disabled={teamAction === p.id}
+                          className="h-7 px-3 bg-slate-800 hover:bg-amber-500/15 border border-slate-700 hover:border-amber-500/30 text-slate-400 hover:text-amber-300 text-[11px] rounded-lg transition-colors disabled:opacity-50"
+                        >
+                          + {p.name}
+                        </button>
+                      ))}
+                      {teamProviders.filter(p => p.role !== "admin" && !p.isSuperAdmin).length === 0 && (
+                        <p className="text-[11px] text-slate-600 italic">All providers are already admins.</p>
+                      )}
+                    </div>
+                  </div>
                 </div>
               )}
             </>

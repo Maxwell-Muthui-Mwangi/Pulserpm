@@ -89,7 +89,7 @@ export default function Layout({ children }: LayoutProps) {
     // Security / admin-only items — hidden from regular providers
     ...(isAdmin ? [
       { href: "/security", label: "Audit Log", icon: Shield },
-      { href: "/threat-detection", label: "Threat Detection", icon: ShieldAlert },
+      { href: "/threat-detection", label: "MLNN Model Anomaly Detection", icon: ShieldAlert },
       { href: "/blockchain", label: "Blockchain Monitor", icon: Link2 },
       { href: "/security-framework", label: "Security Framework", icon: ShieldCheck },
     ] : []),
@@ -185,9 +185,15 @@ export default function Layout({ children }: LayoutProps) {
                 <item.icon className={`h-5 w-5 mr-3 ${isAdminItem ? "text-amber-500" : isActive ? "text-primary" : "group-hover:text-foreground"}`} />
                 {item.label}
                 {isAdminItem && (
-                  <span className="ml-auto text-[9px] font-bold bg-amber-500/20 text-amber-400 px-1.5 py-0.5 rounded-full">
-                    ADMIN
-                  </span>
+                  isSuperAdmin ? (
+                    <span className="ml-auto text-[9px] font-bold bg-violet-500/20 text-violet-300 px-1.5 py-0.5 rounded-full border border-violet-500/30">
+                      SUPER ADMIN
+                    </span>
+                  ) : (
+                    <span className="ml-auto text-[9px] font-bold bg-amber-500/20 text-amber-400 px-1.5 py-0.5 rounded-full">
+                      ADMIN
+                    </span>
+                  )
                 )}
               </Link>
             );

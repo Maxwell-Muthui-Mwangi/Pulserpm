@@ -133,9 +133,9 @@ export default function ThreatDetection() {
               <BrainCircuit className="h-5 w-5 text-red-400" />
             </div>
             <div>
-              <h1 className="text-xl font-bold text-white">AI Threat Detection Alerts</h1>
+              <h1 className="text-xl font-bold text-white">MLNN Model Anomaly Detection</h1>
               <p className="text-xs text-slate-400 mt-0.5">
-                Real-time ML-powered security monitoring · Refreshed{" "}
+                Real-time MLNN-powered anomaly monitoring · Refreshed{" "}
                 {formatDistanceToNow(lastRefresh, { addSuffix: true })}
               </p>
             </div>
@@ -338,9 +338,9 @@ export default function ThreatDetection() {
             <BrainCircuit className="h-4 w-4 text-emerald-400" />
           </div>
           <div>
-            <p className="text-xs font-semibold text-emerald-400">AI Engine Status — Operational</p>
+            <p className="text-xs font-semibold text-emerald-400">MLNN Model Engine — Operational</p>
             <p className="text-[10px] text-slate-500 mt-0.5">
-              MLNN Anomaly Detection active · Model v2.4.1 · Threshold 0.72 · Last updated 5 mins ago
+              MLNN Model Anomaly Detection active · Model v2.4.1 · Threshold 0.72 · Last updated 5 mins ago
             </p>
           </div>
         </div>
