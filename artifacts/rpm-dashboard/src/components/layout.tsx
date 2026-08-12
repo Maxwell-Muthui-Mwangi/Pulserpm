@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { removeAuthToken, withAuth, getAuthToken } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
+import { Crown } from "lucide-react";
 import { useListAlerts } from "@workspace/api-client-react";
 import { queryClient } from "@/lib/query-client";
 import { Button } from "@/components/ui/button";
@@ -37,7 +38,7 @@ interface LayoutProps {
 
 export default function Layout({ children }: LayoutProps) {
   const [location, setLocation] = useLocation();
-  const { user, isLoading, isPatient } = useAuth();
+  const { user, isLoading, isPatient, isAdmin } = useAuth();
   const { timezone, setTimezone, fmt } = useTimezone();
   const [notifOpen, setNotifOpen] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
@@ -89,6 +90,7 @@ export default function Layout({ children }: LayoutProps) {
     { href: "/threat-detection", label: "Threat Detection", icon: ShieldAlert },
     { href: "/blockchain", label: "Blockchain Monitor", icon: Link2 },
     { href: "/security-framework", label: "Security Framework", icon: ShieldCheck },
+    ...(isAdmin ? [{ href: "/super-admin", label: "Super Admin", icon: Crown, admin: true }] : []),
   ];
 
   const patientNavItems = [
@@ -161,19 +163,29 @@ export default function Layout({ children }: LayoutProps) {
           </div>
           {navItems.map((item) => {
             const isActive = location === item.href || (item.href !== "/" && location.startsWith(item.href));
+            const isAdminItem = (item as any).admin === true;
             return (
               <Link 
                 key={item.href} 
                 href={item.href}
                 className={`
                   flex items-center px-3 py-2.5 rounded-xl transition-all duration-200 group
-                  ${isActive 
-                    ? "bg-primary/10 text-primary font-medium" 
-                    : "text-muted-foreground hover:bg-muted hover:text-foreground"}
+                  ${isAdminItem
+                    ? isActive
+                      ? "bg-amber-500/15 text-amber-400 font-medium border border-amber-500/20"
+                      : "text-amber-600 hover:bg-amber-500/10 hover:text-amber-400 border border-amber-500/10"
+                    : isActive 
+                      ? "bg-primary/10 text-primary font-medium" 
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground"}
                 `}
               >
-                <item.icon className={`h-5 w-5 mr-3 ${isActive ? "text-primary" : "group-hover:text-foreground"}`} />
+                <item.icon className={`h-5 w-5 mr-3 ${isAdminItem ? "text-amber-500" : isActive ? "text-primary" : "group-hover:text-foreground"}`} />
                 {item.label}
+                {isAdminItem && (
+                  <span className="ml-auto text-[9px] font-bold bg-amber-500/20 text-amber-400 px-1.5 py-0.5 rounded-full">
+                    ADMIN
+                  </span>
+                )}
               </Link>
             );
           })}

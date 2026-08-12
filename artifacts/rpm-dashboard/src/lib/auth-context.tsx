@@ -15,6 +15,7 @@ interface AuthContextValue {
   isLoading: boolean;
   isPatient: boolean;
   isProvider: boolean;
+  isAdmin: boolean;
 }
 
 const AuthContext = createContext<AuthContextValue>({
@@ -22,6 +23,7 @@ const AuthContext = createContext<AuthContextValue>({
   isLoading: true,
   isPatient: false,
   isProvider: false,
+  isAdmin: false,
 });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -36,6 +38,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     isLoading,
     isPatient: user?.role === "patient",
     isProvider: user?.role === "provider",
+    isAdmin: user?.role === "admin",
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
