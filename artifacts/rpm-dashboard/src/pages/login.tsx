@@ -91,7 +91,8 @@ export default function Login() {
           if (errData?.status === "pending_approval") {
             setPendingName(errData.name ?? email);
             setPendingEmail(email);
-            setScreen("pending");
+            // Providers wait for admin approval (verified screen); patients wait for provider (pending screen)
+            setScreen(errData?.role === "provider" ? "verified" : "pending");
             return;
           }
           if (errData?.status === "email_unverified") {
@@ -183,6 +184,8 @@ export default function Login() {
         toast({ title: "Verification failed", description: data.message ?? "Incorrect or expired code.", variant: "destructive" });
         return;
       }
+      // Providers: email verified but now awaiting admin approval (verified screen)
+      // Patients: email verified, awaiting provider approval (pending screen)
       setScreen(verifyingRole === "provider" ? "verified" : "pending");
     } catch {
       toast({ title: "Verification failed", description: "Network error. Please try again.", variant: "destructive" });
@@ -375,7 +378,7 @@ export default function Login() {
   const screenSubtitle = (() => {
     if (screen === "verify")        return `Check your inbox at ${pendingEmail}`;
     if (screen === "pending")       return "Your account is awaiting provider approval";
-    if (screen === "verified")      return "Your account is ready — sign in to get started";
+    if (screen === "verified")      return verifyingRole === "provider" ? "Your account is awaiting admin approval" : "Your account is ready — sign in to get started";
     if (screen === "forgot")        return "Enter your email and we'll send a reset code";
     if (screen === "forgot-verify") return `We sent a reset code to ${forgotEmail}`;
     if (screen === "reset")         return "Choose a new password for your account";
@@ -472,29 +475,42 @@ export default function Login() {
               </motion.div>
             )}
 
-            {/* ── PROVIDER VERIFIED SCREEN ── */}
+            {/* ── PROVIDER VERIFIED / PENDING ADMIN APPROVAL SCREEN ── */}
             {screen === "verified" && (
               <motion.div key="verified" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.3 }}
                 className="text-center space-y-5"
               >
                 <div className="flex items-center justify-center">
-                  <div className="h-16 w-16 rounded-full bg-green-50 border-2 border-green-200 flex items-center justify-center">
-                    <CheckCircle2 className="h-8 w-8 text-green-500" />
+                  <div className={`h-16 w-16 rounded-full flex items-center justify-center ${verifyingRole === "provider" ? "bg-amber-50 border-2 border-amber-200" : "bg-green-50 border-2 border-green-200"}`}>
+                    {verifyingRole === "provider"
+                      ? <Clock className="h-8 w-8 text-amber-500" />
+                      : <CheckCircle2 className="h-8 w-8 text-green-500" />}
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <h3 className="font-bold text-lg text-foreground">Email verified!</h3>
+                  <h3 className="font-bold text-lg text-foreground">
+                    {verifyingRole === "provider" ? "Email verified!" : "You're all set!"}
+                  </h3>
                   <p className="text-sm text-muted-foreground leading-relaxed">
-                    Your email <strong>{pendingEmail}</strong> has been confirmed. Your provider account is now active.
+                    {verifyingRole === "provider"
+                      ? <>Your email <strong>{pendingEmail}</strong> has been confirmed. Your provider account is now awaiting approval from the system administrator.</>
+                      : <>Your email <strong>{pendingEmail}</strong> has been confirmed. Your account is now active.</>}
                   </p>
                 </div>
-                <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 text-left space-y-1">
-                  <p className="text-xs text-blue-700 font-medium">You're all set</p>
-                  <p className="text-xs text-blue-600">Sign in with your email and password to access your dashboard and start monitoring patients.</p>
-                </div>
-                <Button className="w-full h-11 text-base" onClick={() => reset("login", "provider")}>
-                  Sign in to PulseRPM
-                </Button>
+                {verifyingRole === "provider" ? (
+                  <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-left space-y-1">
+                    <p className="text-xs text-amber-700 font-medium">What happens next?</p>
+                    <p className="text-xs text-amber-600">An administrator will review your registration and approve your account. You'll receive an email notification when you're approved — this usually takes less than 24 hours.</p>
+                  </div>
+                ) : (
+                  <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 text-left space-y-1">
+                    <p className="text-xs text-blue-700 font-medium">You're all set</p>
+                    <p className="text-xs text-blue-600">Sign in with your email and password to access your dashboard.</p>
+                  </div>
+                )}
+                <button type="button" onClick={() => reset("login", "provider")} className="text-sm text-primary hover:underline font-medium">
+                  Back to sign in
+                </button>
               </motion.div>
             )}
 

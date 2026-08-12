@@ -418,3 +418,111 @@ export async function sendNewPatientPendingEmail(to: string, providerName: strin
     `new patient pending notification to ${to}`
   );
 }
+
+// ── Admin: new provider awaiting approval ─────────────────────────────────────
+function buildAdminNewProviderPendingHtml(adminName: string, providerName: string, providerEmail: string, dashboardUrl: string): string {
+  const lastName = adminName.split(" ").at(-1) ?? adminName;
+  return `<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f9fafb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+  <div style="max-width:480px;margin:40px auto;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
+    <div style="background:linear-gradient(135deg,#7c3aed 0%,#4f46e5 100%);padding:32px;text-align:center;">
+      <span style="font-size:28px;font-weight:800;color:#ffffff;letter-spacing:-0.5px;">Pulse<span style="color:rgba(255,255,255,0.7);">RPM</span></span>
+      <p style="margin:8px 0 0;color:rgba(255,255,255,0.8);font-size:12px;text-transform:uppercase;letter-spacing:1px;">Admin · Provider Approval Required</p>
+    </div>
+    <div style="padding:32px;">
+      <h2 style="margin:0 0 8px;font-size:20px;font-weight:700;color:#0f172a;">New provider awaiting approval</h2>
+      <p style="color:#64748b;font-size:14px;line-height:1.7;margin:0 0 24px;">
+        Dear ${lastName}, a new healthcare provider has verified their email and is waiting for admin approval to access PulseRPM.
+      </p>
+      <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:16px 20px;margin-bottom:24px;">
+        <table style="width:100%;border-collapse:collapse;">
+          <tr>
+            <td style="padding:6px 0;color:#94a3b8;font-size:13px;width:80px;">Name</td>
+            <td style="padding:6px 0;color:#0f172a;font-size:14px;font-weight:600;">${providerName}</td>
+          </tr>
+          <tr>
+            <td style="padding:6px 0;color:#94a3b8;font-size:13px;">Email</td>
+            <td style="padding:6px 0;color:#0f172a;font-size:14px;">${providerEmail}</td>
+          </tr>
+          <tr>
+            <td style="padding:6px 0;color:#94a3b8;font-size:13px;">Status</td>
+            <td style="padding:6px 0;">
+              <span style="display:inline-block;padding:2px 10px;border-radius:20px;background:#fef9c3;color:#854d0e;font-size:12px;font-weight:600;">Pending Admin Approval</span>
+            </td>
+          </tr>
+        </table>
+      </div>
+      <div style="text-align:center;">
+        <a href="${dashboardUrl}" style="display:inline-block;background:#7c3aed;color:#ffffff;text-decoration:none;padding:14px 32px;border-radius:8px;font-size:15px;font-weight:600;">Review in Super Admin</a>
+      </div>
+    </div>
+    <div style="padding:16px 32px;background:#f8fafc;border-top:1px solid #e2e8f0;">
+      <p style="margin:0;color:#cbd5e1;font-size:11px;text-align:center;">PulseRPM · Admin Notification · Secure &amp; HIPAA-Compliant</p>
+    </div>
+  </div>
+</body>
+</html>`;
+}
+
+export async function sendAdminNewProviderPendingEmail(to: string, adminName: string, providerName: string, providerEmail: string, dashboardUrl: string): Promise<void> {
+  await send(
+    to,
+    `New provider awaiting approval — ${providerName}`,
+    buildAdminNewProviderPendingHtml(adminName, providerName, providerEmail, dashboardUrl),
+    `new provider pending notification to ${to}`
+  );
+}
+
+// ── Provider approved email ───────────────────────────────────────────────────
+function buildProviderApprovedHtml(providerName: string, loginUrl: string): string {
+  const firstName = providerName.split(" ")[0];
+  return `<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f9fafb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+  <div style="max-width:480px;margin:40px auto;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
+    <div style="background:linear-gradient(135deg,#0ea5e9 0%,#0284c7 100%);padding:32px;text-align:center;">
+      <span style="font-size:28px;font-weight:800;color:#ffffff;letter-spacing:-0.5px;">Pulse<span style="color:rgba(255,255,255,0.7);">RPM</span></span>
+    </div>
+    <div style="padding:32px;">
+      <div style="text-align:center;margin-bottom:24px;">
+        <div style="display:inline-flex;align-items:center;justify-content:center;width:56px;height:56px;border-radius:50%;background:#dcfce7;">
+          <span style="font-size:26px;">✓</span>
+        </div>
+      </div>
+      <h2 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#0f172a;text-align:center;">You're approved, ${firstName}!</h2>
+      <p style="color:#64748b;font-size:14px;line-height:1.7;margin:0 0 28px;text-align:center;">
+        Your PulseRPM provider account has been approved by the system administrator.<br>
+        You can now log in and start monitoring patients.
+      </p>
+      <div style="text-align:center;margin-bottom:28px;">
+        <a href="${loginUrl}" style="display:inline-block;background:#0ea5e9;color:#ffffff;text-decoration:none;padding:14px 32px;border-radius:8px;font-size:15px;font-weight:600;">Log In to PulseRPM</a>
+      </div>
+      <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:16px 20px;">
+        <p style="margin:0 0 8px;font-size:13px;font-weight:600;color:#475569;">You can now:</p>
+        <ul style="margin:0;padding-left:18px;color:#64748b;font-size:13px;line-height:1.8;">
+          <li>Monitor patient vitals in real time</li>
+          <li>Receive and acknowledge patient alerts</li>
+          <li>Approve and manage patient accounts</li>
+          <li>View audit logs and security reports</li>
+        </ul>
+      </div>
+    </div>
+    <div style="padding:16px 32px;background:#f8fafc;border-top:1px solid #e2e8f0;">
+      <p style="margin:0;color:#cbd5e1;font-size:11px;text-align:center;">PulseRPM · Remote Patient Monitoring · Secure &amp; HIPAA-Compliant</p>
+    </div>
+  </div>
+</body>
+</html>`;
+}
+
+export async function sendProviderApprovedEmail(to: string, providerName: string, loginUrl: string): Promise<void> {
+  await send(
+    to,
+    "Your PulseRPM provider account has been approved!",
+    buildProviderApprovedHtml(providerName, loginUrl),
+    `provider approval email to ${to}`
+  );
+}

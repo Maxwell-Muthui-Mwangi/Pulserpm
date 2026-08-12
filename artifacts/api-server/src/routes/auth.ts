@@ -3,7 +3,7 @@ import { db, providersTable, patientsTable, pendingPatientsTable } from "@worksp
 import { eq } from "drizzle-orm";
 import { hashPassword, verifyPassword, createToken } from "../lib/auth.js";
 import { requireAuth } from "../middlewares/auth.js";
-import { sendVerificationEmail, sendNewPatientPendingEmail, sendPasswordResetEmail } from "../lib/email.js";
+import { sendVerificationEmail, sendNewPatientPendingEmail, sendPasswordResetEmail, sendAdminNewProviderPendingEmail } from "../lib/email.js";
 import { logAuditEvent, getClientIp } from "../middlewares/auditLog.js";
 import { authLimiter } from "../middlewares/rateLimit.js";
 
@@ -31,6 +31,12 @@ router.post("/auth/login", authLimiter, async (req, res) => {
       if (!provider.emailVerified) {
         logAuditEvent({ actorId: provider.id, actorEmail: provider.email, actorRole: provider.role, action: "auth.login", resourceType: "auth", ipAddress: ip, userAgent: ua, outcome: "denied", details: JSON.stringify({ reason: "email_unverified" }) });
         res.status(403).json({ error: "Email not verified", status: "email_unverified", message: "Please verify your email address before logging in.", email: provider.email });
+        return;
+      }
+      // Block login until admin approves (admins are always pre-approved)
+      if (!provider.approved && provider.role !== "admin") {
+        logAuditEvent({ actorId: provider.id, actorEmail: provider.email, actorRole: provider.role, action: "auth.login", resourceType: "auth", ipAddress: ip, userAgent: ua, outcome: "denied", details: JSON.stringify({ reason: "pending_admin_approval" }) });
+        res.status(403).json({ error: "Awaiting approval", status: "pending_approval", role: "provider", name: provider.name, message: "Your account is awaiting admin approval. You will receive an email when you are approved." });
         return;
       }
       const token = createToken({ id: provider.id, email: provider.email, role: provider.role });
@@ -155,8 +161,27 @@ router.post("/auth/provider/verify-email", authLimiter, async (req, res) => {
 
     logAuditEvent({ actorId: provider.id, actorEmail: provider.email, actorRole: provider.role, action: "auth.email_verified", resourceType: "auth", outcome: "success" });
 
-    // Verification complete — user must now log in with their password to get a token.
-    res.json({ message: "Email verified successfully. You can now log in to PulseRPM." });
+    // Notify all admins that a new provider is awaiting approval (non-blocking)
+    setImmediate(async () => {
+      try {
+        const admins = await db.select().from(providersTable).where(eq(providersTable.role, "admin"));
+        const dashboardOrigin = process.env.DASHBOARD_URL || "https://pulserpm.replit.app";
+        for (const admin of admins) {
+          await sendAdminNewProviderPendingEmail(
+            admin.email,
+            admin.name,
+            provider.name,
+            provider.email,
+            `${dashboardOrigin}/super-admin`
+          );
+        }
+      } catch (e) {
+        console.error("[auth] Admin provider pending notification failed:", e);
+      }
+    });
+
+    // Verification complete — provider must await admin approval before logging in.
+    res.json({ message: "Email verified successfully. Your account is now awaiting admin approval. You will receive an email when you are approved." });
   } catch (err) {
     console.error("Provider verify email error:", err);
     res.status(500).json({ error: "Internal Server Error", message: "Verification failed" });

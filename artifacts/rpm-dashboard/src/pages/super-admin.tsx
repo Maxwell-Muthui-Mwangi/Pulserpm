@@ -158,6 +158,60 @@ export default function SuperAdmin() {
   const [lastRefresh, setLastRefresh] = useState(new Date());
   const [timeRange] = useState("Last 24 Hours");
 
+  // ── Pending providers state ─────────────────────────────────────────────────
+  const [pendingProviders, setPendingProviders] = useState<{id:number;name:string;email:string;specialty:string|null;createdAt:string}[]>([]);
+  const [pendingLoading, setPendingLoading] = useState(false);
+  const [actionLoading, setActionLoading] = useState<number | null>(null);
+
+  const fetchPendingProviders = useCallback(async () => {
+    setPendingLoading(true);
+    const token = getAuthToken();
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/providers/pending`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setPendingProviders(data);
+      }
+    } catch { /* ignore */ }
+    setPendingLoading(false);
+  }, []);
+
+  useEffect(() => {
+    if (section === "user-activity") fetchPendingProviders();
+  }, [section, fetchPendingProviders]);
+
+  const approveProvider = async (id: number) => {
+    setActionLoading(id);
+    const token = getAuthToken();
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/providers/${id}/approve`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        setPendingProviders((prev) => prev.filter((p) => p.id !== id));
+      }
+    } catch { /* ignore */ }
+    setActionLoading(null);
+  };
+
+  const rejectProvider = async (id: number) => {
+    setActionLoading(id);
+    const token = getAuthToken();
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/providers/${id}/reject`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        setPendingProviders((prev) => prev.filter((p) => p.id !== id));
+      }
+    } catch { /* ignore */ }
+    setActionLoading(null);
+  };
+
   // ── Blockchain state ────────────────────────────────────────────────────────
   const [txList, setTxList] = useState<BlockchainTx[]>(() => seedTxList());
   const [txTab, setTxTab] = useState<"all" | "erc20" | "smart" | "nft">("all");
@@ -774,8 +828,126 @@ export default function SuperAdmin() {
             </>
           )}
 
+          {/* ══ PENDING PROVIDERS SECTION ════════════════════════════════ */}
+          {section === "user-activity" && (
+            <>
+              <div className="flex items-center justify-between gap-4 flex-wrap">
+                <div>
+                  <h2 className="text-sm font-bold text-white">Provider Approval Queue</h2>
+                  <p className="text-[11px] text-slate-500">Healthcare providers who have verified their email and are awaiting admin approval</p>
+                </div>
+                <button
+                  onClick={fetchPendingProviders}
+                  disabled={pendingLoading}
+                  className="flex items-center gap-1.5 bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-700 transition-colors"
+                >
+                  <RefreshCw className={`h-3.5 w-3.5 ${pendingLoading ? "animate-spin" : ""}`} />
+                  Refresh
+                </button>
+              </div>
+
+              {/* Stats */}
+              <div className="grid grid-cols-3 gap-3">
+                <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
+                  <p className="text-[10px] text-slate-500 uppercase tracking-wide font-semibold mb-1">Pending Review</p>
+                  <p className="text-2xl font-black text-amber-400">{pendingProviders.length}</p>
+                </div>
+                <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
+                  <p className="text-[10px] text-slate-500 uppercase tracking-wide font-semibold mb-1">Approved Today</p>
+                  <p className="text-2xl font-black text-emerald-400">0</p>
+                </div>
+                <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
+                  <p className="text-[10px] text-slate-500 uppercase tracking-wide font-semibold mb-1">Rejected Today</p>
+                  <p className="text-2xl font-black text-red-400">0</p>
+                </div>
+              </div>
+
+              {/* Pending providers table */}
+              <div className="bg-slate-900 rounded-xl border border-slate-800">
+                <div className="px-5 py-3 border-b border-slate-800">
+                  <p className="text-xs font-semibold text-slate-300 uppercase tracking-wide">Pending Approvals</p>
+                </div>
+                {pendingLoading ? (
+                  <div className="flex items-center justify-center py-16">
+                    <RefreshCw className="h-5 w-5 text-slate-500 animate-spin" />
+                  </div>
+                ) : pendingProviders.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-16 gap-3">
+                    <CheckCircle2 className="h-10 w-10 text-emerald-500/40" />
+                    <div className="text-center">
+                      <p className="text-sm font-semibold text-slate-400">All clear</p>
+                      <p className="text-xs text-slate-600 mt-1">No providers are currently awaiting approval.</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="border-b border-slate-800">
+                          {["Name","Email","Specialty","Registered","Actions"].map((h) => (
+                            <th key={h} className="px-5 py-2.5 text-left font-semibold text-slate-500 uppercase tracking-wide text-[10px]">{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800/60">
+                        {pendingProviders.map((p) => (
+                          <tr key={p.id} className="hover:bg-slate-800/30 transition-colors">
+                            <td className="px-5 py-3">
+                              <div className="flex items-center gap-2.5">
+                                <div className="h-8 w-8 rounded-full bg-purple-500/20 border border-purple-500/30 flex items-center justify-center text-purple-400 font-bold text-xs shrink-0">
+                                  {p.name.charAt(0)}
+                                </div>
+                                <span className="text-slate-200 font-medium">{p.name}</span>
+                              </div>
+                            </td>
+                            <td className="px-5 py-3 text-slate-400">{p.email}</td>
+                            <td className="px-5 py-3 text-slate-400">{p.specialty ?? <span className="text-slate-600">—</span>}</td>
+                            <td className="px-5 py-3 text-slate-400 whitespace-nowrap">
+                              {p.createdAt ? format(new Date(p.createdAt), "MMM d, yyyy") : "—"}
+                            </td>
+                            <td className="px-5 py-3">
+                              <div className="flex items-center gap-2">
+                                <button
+                                  onClick={() => approveProvider(p.id)}
+                                  disabled={actionLoading === p.id}
+                                  className="flex items-center gap-1 bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/25 text-[10px] font-bold px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
+                                >
+                                  {actionLoading === p.id ? <RefreshCw className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />}
+                                  Approve
+                                </button>
+                                <button
+                                  onClick={() => rejectProvider(p.id)}
+                                  disabled={actionLoading === p.id}
+                                  className="flex items-center gap-1 bg-red-500/10 border border-red-500/25 text-red-400 hover:bg-red-500/20 text-[10px] font-bold px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
+                                >
+                                  {actionLoading === p.id ? <RefreshCw className="h-3 w-3 animate-spin" /> : <AlertTriangle className="h-3 w-3" />}
+                                  Reject
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+
+              {/* Info callout */}
+              <div className="bg-blue-950/40 border border-blue-500/20 rounded-xl p-4 flex items-start gap-3">
+                <BrainCircuit className="h-4 w-4 text-blue-400 mt-0.5 shrink-0" />
+                <div>
+                  <p className="text-xs font-semibold text-blue-300">How provider approval works</p>
+                  <p className="text-[11px] text-slate-400 mt-1 leading-relaxed">
+                    When a healthcare provider signs up and verifies their email, they appear here. Approving sends them a welcome email and grants dashboard access. Rejecting permanently removes their registration — they can re-register if needed.
+                  </p>
+                </div>
+              </div>
+            </>
+          )}
+
           {/* ══ PLACEHOLDER SECTIONS ══════════════════════════════════════ */}
-          {!["threat-alerts","blockchain"].includes(section) && (
+          {!["threat-alerts","blockchain","user-activity"].includes(section) && (
             <div className="flex flex-col items-center justify-center py-32 gap-4">
               <div className="h-16 w-16 rounded-2xl bg-slate-800 border border-slate-700 flex items-center justify-center">
                 {sidebarItems.find((s) => s.id === section) && (() => {
