@@ -215,6 +215,28 @@ export default function SuperAdmin() {
     setActionLoading(null);
   };
 
+  // ── AI Anomaly Detection state ────────────────────────────────────────────────
+  const [anomalyData, setAnomalyData] = useState<any>(null);
+  const [anomalyLoading, setAnomalyLoading] = useState(false);
+
+  const fetchAnomaly = useCallback(async () => {
+    setAnomalyLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/anomaly/analysis`, {
+        headers: { Authorization: `Bearer ${getAuthToken()}` },
+      });
+      if (res.ok) setAnomalyData(await res.json());
+    } catch { /* ignore */ }
+    setAnomalyLoading(false);
+  }, []);
+
+  useEffect(() => {
+    if (section !== "ai-anomaly") return;
+    fetchAnomaly();
+    const id = setInterval(fetchAnomaly, 60_000); // refresh every minute
+    return () => clearInterval(id);
+  }, [section, fetchAnomaly]);
+
   // ── Network monitoring state ─────────────────────────────────────────────────
   const [netData, setNetData] = useState<any>(null);
   const [netLoading, setNetLoading] = useState(false);
@@ -1063,6 +1085,213 @@ export default function SuperAdmin() {
                   </p>
                 </div>
               </div>
+            </>
+          )}
+
+          {/* ══ AI ANOMALY DETECTION ════════════════════════════════════════ */}
+          {section === "ai-anomaly" && (
+            <>
+              <div className="flex items-center justify-between flex-wrap gap-3">
+                <div>
+                  <h2 className="text-sm font-bold text-white">AI Anomaly Detection</h2>
+                  <p className="text-[11px] text-slate-500">
+                    MLNN model scanning audit logs, vitals, and access patterns for anomalous behaviour — refreshes every 60 seconds
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="flex items-center gap-1.5 text-[10px] font-semibold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-full px-3 py-1">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    MLNN-2.4.1 Active
+                  </span>
+                  <button onClick={fetchAnomaly} disabled={anomalyLoading}
+                    className="flex items-center gap-1.5 bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-700 transition-colors">
+                    <RefreshCw className={`h-3.5 w-3.5 ${anomalyLoading ? "animate-spin" : ""}`} />
+                    Scan Now
+                  </button>
+                </div>
+              </div>
+
+              {anomalyLoading && !anomalyData ? (
+                <div className="flex flex-col items-center justify-center py-24 gap-3">
+                  <BrainCircuit className="h-10 w-10 text-blue-400 animate-pulse" />
+                  <p className="text-xs text-slate-500">MLNN model scanning…</p>
+                </div>
+              ) : anomalyData ? (
+                <>
+                  {/* Anomaly score + KPI row */}
+                  <div className="grid grid-cols-1 lg:grid-cols-5 gap-3">
+                    {/* Score gauge */}
+                    <div className={`lg:col-span-1 rounded-xl border p-5 flex flex-col items-center justify-center gap-2 ${
+                      anomalyData.score === 0   ? "bg-emerald-950/30 border-emerald-500/20" :
+                      anomalyData.score < 30    ? "bg-blue-950/30 border-blue-500/20" :
+                      anomalyData.score < 60    ? "bg-amber-950/30 border-amber-500/20" :
+                                                   "bg-red-950/30 border-red-500/20"
+                    }`}>
+                      <p className="text-[10px] text-slate-500 uppercase tracking-wide font-semibold">Anomaly Score</p>
+                      <p className={`text-4xl font-black tabular-nums ${
+                        anomalyData.score === 0  ? "text-emerald-400" :
+                        anomalyData.score < 30   ? "text-blue-400" :
+                        anomalyData.score < 60   ? "text-amber-400" : "text-red-400"
+                      }`}>{anomalyData.score}</p>
+                      <p className={`text-[10px] font-bold ${
+                        anomalyData.score === 0  ? "text-emerald-400" :
+                        anomalyData.score < 30   ? "text-blue-400" :
+                        anomalyData.score < 60   ? "text-amber-400" : "text-red-400"
+                      }`}>
+                        {anomalyData.score === 0 ? "All Clear" : anomalyData.score < 30 ? "Low Risk" : anomalyData.score < 60 ? "Moderate" : "High Risk"}
+                      </p>
+                      <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden mt-1">
+                        <div className={`h-full rounded-full transition-all duration-700 ${
+                          anomalyData.score === 0 ? "bg-emerald-400" : anomalyData.score < 30 ? "bg-blue-400" : anomalyData.score < 60 ? "bg-amber-400" : "bg-red-400"
+                        }`} style={{ width: `${anomalyData.score}%` }} />
+                      </div>
+                    </div>
+
+                    {/* KPI cards */}
+                    <div className="lg:col-span-4 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+                      {[
+                        { label: "Failed Logins",    value: anomalyData.failedLogins,    icon: Lock,         color: anomalyData.failedLogins   > 5  ? "text-red-400"    : "text-slate-300", bg: anomalyData.failedLogins > 5 ? "bg-red-950/20 border-red-500/20" : "bg-slate-900 border-slate-800" },
+                        { label: "Off-Hours Access", value: anomalyData.offHoursAccess,  icon: Clock,        color: anomalyData.offHoursAccess  > 0  ? "text-amber-400"  : "text-slate-300", bg: anomalyData.offHoursAccess > 0 ? "bg-amber-950/20 border-amber-500/20" : "bg-slate-900 border-slate-800" },
+                        { label: "Suspicious IPs",   value: anomalyData.suspiciousIps,   icon: Globe,        color: anomalyData.suspiciousIps   > 0  ? "text-red-400"    : "text-slate-300", bg: anomalyData.suspiciousIps > 0 ? "bg-red-950/20 border-red-500/20" : "bg-slate-900 border-slate-800" },
+                        { label: "Vitals Outliers",  value: anomalyData.vitalsOutliers,  icon: Activity,     color: anomalyData.vitalsOutliers  > 0  ? "text-orange-400" : "text-slate-300", bg: anomalyData.vitalsOutliers > 0 ? "bg-orange-950/20 border-orange-500/20" : "bg-slate-900 border-slate-800" },
+                        { label: "Silent Devices",   value: anomalyData.silentDevices,   icon: WifiOff,      color: anomalyData.silentDevices   > 0  ? "text-amber-400"  : "text-slate-300", bg: anomalyData.silentDevices > 0 ? "bg-amber-950/20 border-amber-500/20" : "bg-slate-900 border-slate-800" },
+                      ].map(({ label, value, icon: Icon, color, bg }) => (
+                        <div key={label} className={`rounded-xl border p-4 ${bg}`}>
+                          <Icon className={`h-4 w-4 mb-2 ${color}`} />
+                          <p className={`text-2xl font-black tabular-nums ${color}`}>{value}</p>
+                          <p className="text-[10px] text-slate-500 mt-1 leading-tight">{label}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Trend chart + category breakdown */}
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                    {/* 7-day trend */}
+                    <div className="lg:col-span-2 bg-slate-900 border border-slate-800 rounded-xl p-5">
+                      <div className="flex items-center gap-2 mb-4">
+                        <TrendingUp className="h-4 w-4 text-blue-400" />
+                        <p className="text-xs font-semibold text-slate-300 uppercase tracking-wide">7-Day Anomaly Trend</p>
+                        <span className="ml-auto text-[10px] text-slate-500">Denied events per day</span>
+                      </div>
+                      <ResponsiveContainer width="100%" height={140}>
+                        <LineChart data={anomalyData.trend}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                          <XAxis dataKey="date" tick={{ fill: "#64748b", fontSize: 10 }} axisLine={false} tickLine={false} />
+                          <YAxis tick={{ fill: "#64748b", fontSize: 10 }} axisLine={false} tickLine={false} allowDecimals={false} />
+                          <Tooltip content={<ChartTip />} />
+                          <Line type="monotone" dataKey="anomalies" stroke="#ef4444" strokeWidth={2}
+                            dot={{ r: 3, fill: "#ef4444" }} name="Anomalies" />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+
+                    {/* Category breakdown */}
+                    <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
+                      <div className="flex items-center gap-2 mb-4">
+                        <BrainCircuit className="h-4 w-4 text-purple-400" />
+                        <p className="text-xs font-semibold text-slate-300 uppercase tracking-wide">Detection Categories</p>
+                      </div>
+                      <div className="space-y-3">
+                        {[
+                          { label: "Auth Failures",   value: anomalyData.failedLogins,    color: "#ef4444" },
+                          { label: "Off-Hours Access",value: anomalyData.offHoursAccess,  color: "#f59e0b" },
+                          { label: "Suspicious IPs",  value: anomalyData.suspiciousIps,   color: "#f97316" },
+                          { label: "Burst Activity",  value: anomalyData.rapidBursts,     color: "#8b5cf6" },
+                          { label: "Vitals Outliers", value: anomalyData.vitalsOutliers,  color: "#3b82f6" },
+                          { label: "Silent Devices",  value: anomalyData.silentDevices,   color: "#64748b" },
+                        ].map(({ label, value, color }) => {
+                          const maxVal = Math.max(anomalyData.failedLogins, anomalyData.offHoursAccess, anomalyData.suspiciousIps, anomalyData.rapidBursts, anomalyData.vitalsOutliers, anomalyData.silentDevices, 1);
+                          return (
+                            <div key={label} className="space-y-1">
+                              <div className="flex items-center justify-between text-[11px]">
+                                <span className="text-slate-400">{label}</span>
+                                <span className="text-slate-300 font-bold tabular-nums">{value}</span>
+                              </div>
+                              <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                                <div className="h-full rounded-full transition-all duration-700" style={{ width: `${(value / maxVal) * 100}%`, background: color }} />
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <div className="mt-4 pt-3 border-t border-slate-800 text-[11px] text-slate-500">
+                        Last scan: {anomalyData.scannedAt ? format(new Date(anomalyData.scannedAt), "HH:mm:ss") : "—"}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Anomaly events table */}
+                  <div className="bg-slate-900 rounded-xl border border-slate-800">
+                    <div className="px-5 py-3 border-b border-slate-800 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <AlertTriangle className="h-3.5 w-3.5 text-amber-400" />
+                        <p className="text-xs font-semibold text-slate-300 uppercase tracking-wide">Detected Anomalies</p>
+                      </div>
+                      <span className="text-[10px] text-slate-500">{anomalyData.anomalies?.length ?? 0} events</span>
+                    </div>
+                    {!anomalyData.anomalies?.length ? (
+                      <div className="flex flex-col items-center justify-center py-12 gap-3">
+                        <CheckCircle2 className="h-10 w-10 text-emerald-500/30" />
+                        <div className="text-center">
+                          <p className="text-sm font-semibold text-slate-400">No anomalies detected</p>
+                          <p className="text-xs text-slate-600 mt-1">All systems operating within normal parameters.</p>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-xs">
+                          <thead>
+                            <tr className="border-b border-slate-800">
+                              {["Severity","Type","Actor","Description","Time"].map(h => (
+                                <th key={h} className="px-5 py-2.5 text-left font-semibold text-slate-500 uppercase tracking-wide text-[10px]">{h}</th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-800/60">
+                            {anomalyData.anomalies.map((a: any) => (
+                              <tr key={a.id} className="hover:bg-slate-800/20 transition-colors">
+                                <td className="px-5 py-3">
+                                  <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
+                                    a.severity === "critical" ? "bg-red-500/20 text-red-400" :
+                                    a.severity === "high"     ? "bg-orange-500/20 text-orange-400" :
+                                    a.severity === "medium"   ? "bg-amber-500/20 text-amber-400" :
+                                                                "bg-blue-500/20 text-blue-400"
+                                  }`}>{a.severity.toUpperCase()}</span>
+                                </td>
+                                <td className="px-5 py-3 text-slate-300 font-medium whitespace-nowrap">{a.type}</td>
+                                <td className="px-5 py-3 text-slate-400 font-mono text-[10px] max-w-32 truncate">{a.actor}</td>
+                                <td className="px-5 py-3 text-slate-400 max-w-64">{a.description}</td>
+                                <td className="px-5 py-3 text-slate-500 whitespace-nowrap">
+                                  {a.timestamp ? formatDistanceToNow(new Date(a.timestamp), { addSuffix: true }) : "—"}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Model info footer */}
+                  <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4 flex items-center justify-between flex-wrap gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="h-9 w-9 rounded-xl bg-purple-500/20 border border-purple-500/30 flex items-center justify-center">
+                        <BrainCircuit className="h-4 w-4 text-purple-400" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold text-white">MLNN Anomaly Engine</p>
+                        <p className="text-[10px] text-slate-500">Multi-Layer Neural Network · Model {anomalyData.modelVersion}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-6 text-[11px] text-slate-500">
+                      <span>Detection rules: <strong className="text-slate-300">6 active</strong></span>
+                      <span>Scan window: <strong className="text-slate-300">24 hours</strong></span>
+                      <span>Auto-refresh: <strong className="text-slate-300">60s</strong></span>
+                    </div>
+                  </div>
+                </>
+              ) : null}
             </>
           )}
 

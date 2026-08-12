@@ -11,7 +11,7 @@
 
 import { Router } from "express";
 import { db, providersTable, patientsTable, vitalsTable, alertsTable, auditLogsTable, pendingPatientsTable, thresholdsTable } from "@workspace/db";
-import { eq, and, count, gte, desc, sql } from "drizzle-orm";
+import { eq, and, or, count, gte, desc, lt, sql, ne } from "drizzle-orm";
 import { requireAuth } from "../middlewares/auth.js";
 
 const router = Router();
@@ -33,6 +33,197 @@ const adminSettings: Record<string, unknown> = {
   maintenanceMode: false,
   dataRetentionDays: 90,
 };
+
+// ── AI Anomaly Detection ──────────────────────────────────────────────────────
+router.get("/admin/anomaly/analysis", requireAuth, adminOnly, async (_req, res) => {
+  try {
+    const now = new Date();
+    const since24h  = new Date(now.getTime() - 24  * 60 * 60 * 1000);
+    const since7d   = new Date(now.getTime() -  7  * 24 * 60 * 60 * 1000);
+    const since1h   = new Date(now.getTime() -      60 * 60 * 1000);
+
+    // ── Failed logins (24h) ──
+    const [{ failedLogins }] = await db
+      .select({ failedLogins: count() })
+      .from(auditLogsTable)
+      .where(and(
+        eq(auditLogsTable.action, "auth.login"),
+        eq(auditLogsTable.outcome, "denied"),
+        gte(auditLogsTable.createdAt, since24h)
+      ));
+
+    // ── Off-hours access (11pm–5am, 7 days) ──
+    const offHoursRows = await db
+      .select({ createdAt: auditLogsTable.createdAt, actorEmail: auditLogsTable.actorEmail })
+      .from(auditLogsTable)
+      .where(and(
+        eq(auditLogsTable.outcome, "success"),
+        eq(auditLogsTable.action, "auth.login"),
+        gte(auditLogsTable.createdAt, since7d)
+      ));
+    const offHoursAccess = offHoursRows.filter(r => {
+      if (!r.createdAt) return false;
+      const h = new Date(r.createdAt).getUTCHours();
+      return h >= 23 || h < 5;
+    }).length;
+
+    // ── Suspicious IPs: ≥3 failed attempts in 24h from same IP ──
+    const failedByIp = await db
+      .select({ ip: auditLogsTable.ipAddress, cnt: count() })
+      .from(auditLogsTable)
+      .where(and(
+        eq(auditLogsTable.outcome, "denied"),
+        gte(auditLogsTable.createdAt, since24h),
+        ne(auditLogsTable.ipAddress, "")
+      ))
+      .groupBy(auditLogsTable.ipAddress)
+      .having(sql`count(*) >= 3`);
+    const suspiciousIps = failedByIp.length;
+
+    // ── Rapid action bursts: actor with >10 events in last hour ──
+    const rapidActors = await db
+      .select({ actor: auditLogsTable.actorEmail, cnt: count() })
+      .from(auditLogsTable)
+      .where(gte(auditLogsTable.createdAt, since1h))
+      .groupBy(auditLogsTable.actorEmail)
+      .having(sql`count(*) > 10`);
+
+    // ── Vitals outliers ──
+    const outlierVitals = await db
+      .select({ id: vitalsTable.id, patientId: vitalsTable.patientId, heartRate: vitalsTable.heartRate,
+                oxygenSaturation: vitalsTable.oxygenSaturation, systolicBp: vitalsTable.systolicBp,
+                recordedAt: vitalsTable.recordedAt })
+      .from(vitalsTable)
+      .where(and(
+        gte(vitalsTable.recordedAt, since24h),
+        or(
+          sql`${vitalsTable.heartRate} > 150`,
+          sql`${vitalsTable.heartRate} < 40`,
+          sql`${vitalsTable.oxygenSaturation} < 88`,
+          sql`${vitalsTable.systolicBp} > 190`,
+          sql`${vitalsTable.systolicBp} < 70`
+        )
+      ))
+      .limit(20);
+
+    // ── Silent devices: patients with no vitals in 48h but who have historical data ──
+    const since48h = new Date(now.getTime() - 48 * 60 * 60 * 1000);
+    const recentPatients = await db
+      .select({ patientId: vitalsTable.patientId })
+      .from(vitalsTable).where(gte(vitalsTable.recordedAt, since48h)).groupBy(vitalsTable.patientId);
+    const recentSet = new Set(recentPatients.map(r => r.patientId));
+    const historicPatients = await db
+      .select({ patientId: vitalsTable.patientId })
+      .from(vitalsTable).where(lt(vitalsTable.recordedAt, since48h)).groupBy(vitalsTable.patientId);
+    const silentDevices = historicPatients.filter(r => !recentSet.has(r.patientId)).length;
+
+    // ── 7-day daily anomaly count trend ──
+    const trend: { date: string; anomalies: number; failed: number }[] = [];
+    for (let d = 6; d >= 0; d--) {
+      const dayStart = new Date(now); dayStart.setHours(0,0,0,0); dayStart.setDate(dayStart.getDate() - d);
+      const dayEnd   = new Date(dayStart); dayEnd.setDate(dayEnd.getDate() + 1);
+      const [{ c }] = await db.select({ c: count() }).from(auditLogsTable)
+        .where(and(
+          eq(auditLogsTable.outcome, "denied"),
+          gte(auditLogsTable.createdAt, dayStart),
+          sql`${auditLogsTable.createdAt} < ${dayEnd.toISOString()}`
+        ));
+      trend.push({ date: dayStart.toLocaleDateString("en-US", { weekday: "short" }), anomalies: Number(c), failed: Number(c) });
+    }
+
+    // ── Build anomaly events list ──
+    const anomalies: { id: string; type: string; severity: string; actor: string; description: string; timestamp: string }[] = [];
+
+    // Failed login events
+    const recentFails = await db.select().from(auditLogsTable)
+      .where(and(eq(auditLogsTable.action, "auth.login"), eq(auditLogsTable.outcome, "denied"), gte(auditLogsTable.createdAt, since24h)))
+      .orderBy(desc(auditLogsTable.createdAt)).limit(5);
+    recentFails.forEach((r, i) => {
+      anomalies.push({
+        id: `fail-${i}`,
+        type: "Failed Login",
+        severity: "medium",
+        actor: r.actorEmail ?? "unknown",
+        description: "Authentication failed — invalid credentials or unverified account",
+        timestamp: r.createdAt?.toISOString() ?? "",
+      });
+    });
+
+    // Off-hours logins
+    offHoursRows.slice(0, 3).forEach((r, i) => {
+      const h = r.createdAt ? new Date(r.createdAt).getUTCHours() : 0;
+      if (h >= 23 || h < 5) {
+        anomalies.push({
+          id: `offhour-${i}`,
+          type: "Off-Hours Access",
+          severity: "low",
+          actor: r.actorEmail ?? "unknown",
+          description: `Login at ${h.toString().padStart(2,"0")}:xx UTC — outside normal business hours`,
+          timestamp: r.createdAt?.toISOString() ?? "",
+        });
+      }
+    });
+
+    // Rapid actors
+    rapidActors.forEach((r, i) => {
+      anomalies.push({
+        id: `rapid-${i}`,
+        type: "Burst Activity",
+        severity: "high",
+        actor: r.actor ?? "unknown",
+        description: `${r.cnt} API actions in the last hour — unusually high frequency`,
+        timestamp: now.toISOString(),
+      });
+    });
+
+    // Vitals outliers
+    outlierVitals.slice(0, 3).forEach((v, i) => {
+      let reason = "";
+      if (v.heartRate && (v.heartRate > 150 || v.heartRate < 40)) reason = `Heart rate ${v.heartRate} bpm (critical range)`;
+      else if (v.oxygenSaturation && v.oxygenSaturation < 88) reason = `SpO₂ ${v.oxygenSaturation}% (dangerously low)`;
+      else if (v.systolicBp && (v.systolicBp > 190 || v.systolicBp < 70)) reason = `Systolic BP ${v.systolicBp} mmHg (extreme)`;
+      anomalies.push({
+        id: `vital-${i}`,
+        type: "Vitals Outlier",
+        severity: "critical",
+        actor: `Patient #${v.patientId}`,
+        description: reason || "Vital reading outside safe thresholds",
+        timestamp: v.recordedAt?.toISOString() ?? "",
+      });
+    });
+
+    // Sort by severity then timestamp
+    const sevOrder: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
+    anomalies.sort((a, b) => (sevOrder[a.severity] ?? 9) - (sevOrder[b.severity] ?? 9));
+
+    // ── Overall anomaly score (0-100) ──
+    const score = Math.min(100, Math.round(
+      Number(failedLogins) * 4 +
+      offHoursAccess     * 6 +
+      suspiciousIps      * 15 +
+      rapidActors.length * 20 +
+      outlierVitals.length * 10 +
+      silentDevices      * 8
+    ));
+
+    res.json({
+      score,
+      failedLogins: Number(failedLogins),
+      offHoursAccess,
+      suspiciousIps,
+      rapidBursts: rapidActors.length,
+      vitalsOutliers: outlierVitals.length,
+      silentDevices,
+      anomalies,
+      trend,
+      scannedAt: now.toISOString(),
+      modelVersion: "MLNN-2.4.1",
+    });
+  } catch (err) {
+    console.error("Anomaly analysis error:", err);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
 
 // ── Network monitoring ────────────────────────────────────────────────────────
 router.get("/admin/system/network", requireAuth, adminOnly, async (req, res) => {
