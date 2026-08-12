@@ -49,17 +49,17 @@ router.get("/admin/anomaly/analysis", requireAuth, adminOnly, async (_req, res) 
       .where(and(
         eq(auditLogsTable.action, "auth.login"),
         eq(auditLogsTable.outcome, "denied"),
-        gte(auditLogsTable.createdAt, since24h)
+        gte(auditLogsTable.timestamp, since24h)
       ));
 
     // ── Off-hours access (11pm–5am, 7 days) ──
     const offHoursRows = await db
-      .select({ createdAt: auditLogsTable.createdAt, actorEmail: auditLogsTable.actorEmail })
+      .select({ createdAt: auditLogsTable.timestamp, actorEmail: auditLogsTable.actorEmail })
       .from(auditLogsTable)
       .where(and(
         eq(auditLogsTable.outcome, "success"),
         eq(auditLogsTable.action, "auth.login"),
-        gte(auditLogsTable.createdAt, since7d)
+        gte(auditLogsTable.timestamp, since7d)
       ));
     const offHoursAccess = offHoursRows.filter(r => {
       if (!r.createdAt) return false;
@@ -73,7 +73,7 @@ router.get("/admin/anomaly/analysis", requireAuth, adminOnly, async (_req, res) 
       .from(auditLogsTable)
       .where(and(
         eq(auditLogsTable.outcome, "denied"),
-        gte(auditLogsTable.createdAt, since24h),
+        gte(auditLogsTable.timestamp, since24h),
         ne(auditLogsTable.ipAddress, "")
       ))
       .groupBy(auditLogsTable.ipAddress)
@@ -84,7 +84,7 @@ router.get("/admin/anomaly/analysis", requireAuth, adminOnly, async (_req, res) 
     const rapidActors = await db
       .select({ actor: auditLogsTable.actorEmail, cnt: count() })
       .from(auditLogsTable)
-      .where(gte(auditLogsTable.createdAt, since1h))
+      .where(gte(auditLogsTable.timestamp, since1h))
       .groupBy(auditLogsTable.actorEmail)
       .having(sql`count(*) > 10`);
 
@@ -125,8 +125,8 @@ router.get("/admin/anomaly/analysis", requireAuth, adminOnly, async (_req, res) 
       const [{ c }] = await db.select({ c: count() }).from(auditLogsTable)
         .where(and(
           eq(auditLogsTable.outcome, "denied"),
-          gte(auditLogsTable.createdAt, dayStart),
-          sql`${auditLogsTable.createdAt} < ${dayEnd.toISOString()}`
+          gte(auditLogsTable.timestamp, dayStart),
+          sql`${auditLogsTable.timestamp} < ${dayEnd.toISOString()}`
         ));
       trend.push({ date: dayStart.toLocaleDateString("en-US", { weekday: "short" }), anomalies: Number(c), failed: Number(c) });
     }
@@ -136,8 +136,8 @@ router.get("/admin/anomaly/analysis", requireAuth, adminOnly, async (_req, res) 
 
     // Failed login events
     const recentFails = await db.select().from(auditLogsTable)
-      .where(and(eq(auditLogsTable.action, "auth.login"), eq(auditLogsTable.outcome, "denied"), gte(auditLogsTable.createdAt, since24h)))
-      .orderBy(desc(auditLogsTable.createdAt)).limit(5);
+      .where(and(eq(auditLogsTable.action, "auth.login"), eq(auditLogsTable.outcome, "denied"), gte(auditLogsTable.timestamp, since24h)))
+      .orderBy(desc(auditLogsTable.timestamp)).limit(5);
     recentFails.forEach((r, i) => {
       anomalies.push({
         id: `fail-${i}`,
@@ -257,7 +257,7 @@ router.get("/admin/system/network", requireAuth, adminOnly, async (req, res) => 
     const [{ value: recentActions }] = await db
       .select({ value: count() })
       .from(auditLogsTable)
-      .where(gte(auditLogsTable.createdAt, since));
+      .where(gte(auditLogsTable.timestamp, since));
 
     // Provider count
     const [{ value: providerCount }] = await db.select({ value: count() }).from(providersTable);
@@ -400,7 +400,7 @@ router.get("/admin/reports/summary", requireAuth, adminOnly, async (req, res) =>
       db.select({ c: count() }).from(vitalsTable).where(gte(vitalsTable.recordedAt, weekAgo)),
       db.select({ c: count() }).from(alertsTable).where(eq(alertsTable.status, "active")),
       db.select({ c: count() }).from(alertsTable).where(gte(alertsTable.createdAt, today)),
-      db.select({ c: count() }).from(auditLogsTable).where(gte(auditLogsTable.createdAt, today)),
+      db.select({ c: count() }).from(auditLogsTable).where(gte(auditLogsTable.timestamp, today)),
     ]);
 
     // Alerts by severity
@@ -439,7 +439,7 @@ router.get("/admin/reports/summary", requireAuth, adminOnly, async (req, res) =>
 router.get("/admin/reports/audit-export", requireAuth, adminOnly, async (req, res) => {
   try {
     const limit = Math.min(Number(req.query.limit ?? 1000), 5000);
-    const rows = await db.select().from(auditLogsTable).orderBy(desc(auditLogsTable.createdAt)).limit(limit);
+    const rows = await db.select().from(auditLogsTable).orderBy(desc(auditLogsTable.timestamp)).limit(limit);
 
     const headers = ["id","timestamp","actor_email","actor_role","action","resource_type","resource_id","outcome","ip_address","details"];
     const lines = [

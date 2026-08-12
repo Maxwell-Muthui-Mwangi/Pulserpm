@@ -11,6 +11,7 @@ export const providersTable = pgTable("providers", {
   role: text("role").notNull().default("provider"),
   emailVerified: boolean("email_verified").notNull().default(false),
   isSuperAdmin: boolean("is_super_admin").notNull().default(false),
+  isManager: boolean("is_manager").notNull().default(false),
   approved: boolean("approved").notNull().default(false),
   approvedAt: timestamp("approved_at"),
   approvedBy: integer("approved_by"),

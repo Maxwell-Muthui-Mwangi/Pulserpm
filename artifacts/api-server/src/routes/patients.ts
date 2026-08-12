@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db, patientsTable, vitalsTable, alertsTable, thresholdsTable, pendingPatientsTable } from "@workspace/db";
+import { db, patientsTable, vitalsTable, alertsTable, thresholdsTable, pendingPatientsTable, providersTable } from "@workspace/db";
 import { eq, and, or, isNull, ilike, inArray, sql, count, desc } from "drizzle-orm";
 import { hashPassword } from "../lib/auth.js";
 import { requireAuth } from "../middlewares/auth.js";
@@ -177,6 +177,17 @@ router.post("/patients/pending/:id/approve", requireAuth, async (req, res) => {
       dob = `${year}-01-01`;
     }
 
+    // Resolve the target providerId — never allow assigning to the super admin
+    const assignedProviderId = providerId ? parseInt(providerId, 10) : (req.user!.id ?? null);
+    if (assignedProviderId) {
+      const [assignTarget] = await db.select({ isSuperAdmin: providersTable.isSuperAdmin, email: providersTable.email })
+        .from(providersTable).where(eq(providersTable.id, assignedProviderId)).limit(1);
+      if (assignTarget?.isSuperAdmin || assignTarget?.email === "maxwellmuthuimwangi@gmail.com") {
+        res.status(403).json({ error: "Forbidden", message: "Patients cannot be assigned to the super admin account." });
+        return;
+      }
+    }
+
     const [patient] = await db.insert(patientsTable).values({
       name: pending.name,
       email: pending.email,
@@ -186,7 +197,7 @@ router.post("/patients/pending/:id/approve", requireAuth, async (req, res) => {
       deviceType: "manual",
       gender: gender || null,
       dateOfBirth: dob || null,
-      providerId: providerId ? parseInt(providerId, 10) : (req.user!.id ?? null),
+      providerId: assignedProviderId,
       approvalWelcomePending: true,
     }).returning();
 

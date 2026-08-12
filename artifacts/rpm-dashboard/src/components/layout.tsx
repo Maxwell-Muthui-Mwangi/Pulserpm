@@ -38,7 +38,7 @@ interface LayoutProps {
 
 export default function Layout({ children }: LayoutProps) {
   const [location, setLocation] = useLocation();
-  const { user, isLoading, isPatient, isAdmin } = useAuth();
+  const { user, isLoading, isPatient, isAdmin, isSuperAdmin } = useAuth();
   const { timezone, setTimezone, fmt } = useTimezone();
   const [notifOpen, setNotifOpen] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
@@ -86,11 +86,14 @@ export default function Layout({ children }: LayoutProps) {
     { href: "/", label: "Overview", icon: LayoutDashboard },
     { href: "/patients", label: "Patients", icon: Users },
     { href: "/alerts", label: "Alerts", icon: AlertCircle },
-    { href: "/security", label: "Audit Log", icon: Shield },
-    { href: "/threat-detection", label: "Threat Detection", icon: ShieldAlert },
-    { href: "/blockchain", label: "Blockchain Monitor", icon: Link2 },
-    { href: "/security-framework", label: "Security Framework", icon: ShieldCheck },
-    ...(isAdmin ? [{ href: "/super-admin", label: "Super Admin", icon: Crown, admin: true }] : []),
+    // Security / admin-only items — hidden from regular providers
+    ...(isAdmin ? [
+      { href: "/security", label: "Audit Log", icon: Shield },
+      { href: "/threat-detection", label: "Threat Detection", icon: ShieldAlert },
+      { href: "/blockchain", label: "Blockchain Monitor", icon: Link2 },
+      { href: "/security-framework", label: "Security Framework", icon: ShieldCheck },
+    ] : []),
+    ...(isAdmin ? [{ href: "/super-admin", label: isSuperAdmin ? "Super Admin" : "Admin Panel", icon: Crown, admin: true }] : []),
   ];
 
   const patientNavItems = [

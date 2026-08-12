@@ -9,6 +9,7 @@ declare global {
         email: string;
         role: string;
         isSuperAdmin: boolean;
+        isManager: boolean;
       };
     }
   }
@@ -34,6 +35,7 @@ export function requireAuth(req: Request, res: Response, next: NextFunction) {
     email: payload.email as string,
     role: payload.role as string,
     isSuperAdmin: Boolean(payload.isSuperAdmin),
+    isManager: Boolean(payload.isManager),
   };
 
   next();

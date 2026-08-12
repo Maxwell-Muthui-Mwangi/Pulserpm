@@ -38,6 +38,7 @@ type AdminSection =
   | "ai-anomaly"
   | "network"
   | "user-activity"
+  | "manage-team"
   | "system"
   | "reports"
   | "settings";
@@ -150,7 +151,7 @@ function ChartTip({ active, payload, label }: any) {
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function SuperAdmin() {
   const [, setLocation] = useLocation();
-  const { user, isAdmin, isLoading } = useAuth();
+  const { user, isAdmin, isSuperAdmin, isLoading } = useAuth();
   const { fmt } = useTimezone();
 
   const [section, setSection] = useState<AdminSection>("threat-alerts");
@@ -160,6 +161,20 @@ export default function SuperAdmin() {
   const [threatLoading, setThreatLoading] = useState(true);
   const [lastRefresh, setLastRefresh] = useState(new Date());
   const [timeRange] = useState("Last 24 Hours");
+
+  // ── Pending providers state ─────────────────────────────────────────────────
+  // ── Team management state ────────────────────────────────────────────────────
+  type TeamProvider = {
+    id: number; name: string; email: string; specialty: string | null;
+    role: string; isSuperAdmin: boolean; isManager: boolean;
+    approved: boolean; createdAt: string;
+    patients: { id: number; name: string; email: string }[];
+  };
+  const [teamProviders, setTeamProviders] = useState<TeamProvider[]>([]);
+  const [teamLoading, setTeamLoading] = useState(false);
+  const [teamAction, setTeamAction] = useState<number | null>(null);
+  const [teamSearch, setTeamSearch] = useState("");
+  const [expandedProvider, setExpandedProvider] = useState<number | null>(null);
 
   // ── Pending providers state ─────────────────────────────────────────────────
   const [pendingProviders, setPendingProviders] = useState<{id:number;name:string;email:string;specialty:string|null;createdAt:string}[]>([]);
@@ -337,6 +352,48 @@ export default function SuperAdmin() {
   useEffect(() => {
     if (section === "settings") fetchSettings();
   }, [section, fetchSettings]);
+
+  // ── Team management fetch ────────────────────────────────────────────────────
+  const fetchTeam = useCallback(async () => {
+    setTeamLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/providers/all`, {
+        headers: { Authorization: `Bearer ${getAuthToken()}` },
+      });
+      if (res.ok) setTeamProviders(await res.json());
+    } catch { /* ignore */ }
+    setTeamLoading(false);
+  }, []);
+
+  useEffect(() => {
+    if (section === "manage-team") fetchTeam();
+  }, [section, fetchTeam]);
+
+  const setProviderRole = async (id: number, role: string) => {
+    setTeamAction(id);
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/providers/${id}/set-role`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${getAuthToken()}` },
+        body: JSON.stringify({ role }),
+      });
+      if (res.ok) await fetchTeam();
+    } catch { /* ignore */ }
+    setTeamAction(null);
+  };
+
+  const setProviderManager = async (id: number, isManager: boolean) => {
+    setTeamAction(id);
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/providers/${id}/set-manager`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${getAuthToken()}` },
+        body: JSON.stringify({ isManager }),
+      });
+      if (res.ok) await fetchTeam();
+    } catch { /* ignore */ }
+    setTeamAction(null);
+  };
 
   const saveSettings = async () => {
     setSettingsSaving(true);
@@ -522,6 +579,7 @@ export default function SuperAdmin() {
     { id: "ai-anomaly",     label: "AI Anomaly Detection",icon: BrainCircuit },
     { id: "network",        label: "Network Monitoring",  icon: Globe },
     { id: "user-activity",  label: "User Activity",       icon: Users },
+    { id: "manage-team",    label: "Manage Team",         icon: Users },
     { id: "system",         label: "System Integrity",    icon: ShieldAlert },
     { id: "reports",        label: "Reports",             icon: FileText },
     { id: "settings",       label: "Settings",            icon: Settings },
@@ -1752,6 +1810,173 @@ export default function SuperAdmin() {
                       </div>
                     ))}
                   </div>
+                </div>
+              )}
+            </>
+          )}
+
+          {/* ══ MANAGE TEAM ═════════════════════════════════════════════════ */}
+          {section === "manage-team" && (
+            <>
+              <div className="flex items-center justify-between flex-wrap gap-3">
+                <div>
+                  <h2 className="text-sm font-bold text-white">Manage Team</h2>
+                  <p className="text-[11px] text-slate-500">
+                    Full provider roster with patient mapping — promote to admin, grant manager rights, or expand any provider to see their assigned patients.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="relative">
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-500" />
+                    <input
+                      value={teamSearch}
+                      onChange={(e) => setTeamSearch(e.target.value)}
+                      placeholder="Search providers…"
+                      className="pl-8 pr-3 h-8 bg-slate-800 border border-slate-700 rounded-lg text-[11px] text-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500 w-48"
+                    />
+                  </div>
+                  <button
+                    onClick={fetchTeam}
+                    className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-[11px] px-3 h-8 rounded-lg transition-colors"
+                  >
+                    <RefreshCw className={`h-3.5 w-3.5 ${teamLoading ? "animate-spin" : ""}`} />
+                    Refresh
+                  </button>
+                </div>
+              </div>
+
+              {/* Legend */}
+              <div className="flex flex-wrap items-center gap-3 text-[10px] text-slate-500 mt-1">
+                <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-amber-400 inline-block" /> Super Admin</span>
+                <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-blue-400 inline-block" /> Admin</span>
+                <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-emerald-400 inline-block" /> Manager</span>
+                <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-slate-500 inline-block" /> Provider</span>
+              </div>
+
+              {teamLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <RefreshCw className="h-6 w-6 animate-spin text-blue-400" />
+                </div>
+              ) : (
+                <div className="space-y-2 mt-1">
+                  {teamProviders
+                    .filter((p) =>
+                      !teamSearch ||
+                      p.name.toLowerCase().includes(teamSearch.toLowerCase()) ||
+                      p.email.toLowerCase().includes(teamSearch.toLowerCase())
+                    )
+                    .map((p) => {
+                      const isExpanded = expandedProvider === p.id;
+                      const dotColor = p.isSuperAdmin
+                        ? "bg-amber-400"
+                        : p.role === "admin"
+                        ? "bg-blue-400"
+                        : p.isManager
+                        ? "bg-emerald-400"
+                        : "bg-slate-500";
+                      const badge = p.isSuperAdmin
+                        ? { label: "Super Admin", cls: "bg-amber-500/15 text-amber-400 border border-amber-500/25" }
+                        : p.role === "admin"
+                        ? { label: "Admin", cls: "bg-blue-500/15 text-blue-400 border border-blue-500/25" }
+                        : p.isManager
+                        ? { label: "Manager", cls: "bg-emerald-500/15 text-emerald-400 border border-emerald-500/25" }
+                        : { label: "Provider", cls: "bg-slate-700/60 text-slate-400 border border-slate-600/40" };
+
+                      return (
+                        <div key={p.id} className="bg-slate-900/60 border border-slate-800 rounded-xl overflow-hidden">
+                          {/* Row */}
+                          <div className="flex items-center gap-3 px-4 py-3">
+                            {/* Dot + name */}
+                            <span className={`h-2.5 w-2.5 rounded-full shrink-0 ${dotColor}`} />
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="text-xs font-semibold text-slate-200 truncate">{p.name}</span>
+                                <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${badge.cls}`}>{badge.label}</span>
+                                {!p.approved && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-yellow-500/15 text-yellow-400 border border-yellow-500/25">Pending</span>}
+                              </div>
+                              <p className="text-[10px] text-slate-500 truncate">{p.email}</p>
+                            </div>
+                            {/* Patient count */}
+                            <div className="text-center shrink-0 hidden sm:block">
+                              <p className="text-sm font-bold text-white">{p.patients.length}</p>
+                              <p className="text-[9px] text-slate-500">patients</p>
+                            </div>
+                            {/* Actions */}
+                            {!p.isSuperAdmin && (
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                {/* Manager toggle — admins and super admin can toggle */}
+                                {p.role === "provider" && (
+                                  <button
+                                    disabled={teamAction === p.id}
+                                    onClick={() => setProviderManager(p.id, !p.isManager)}
+                                    title={p.isManager ? "Revoke manager rights" : "Grant manager rights"}
+                                    className={`text-[10px] font-semibold px-2 py-1 rounded-lg border transition-colors disabled:opacity-50 ${
+                                      p.isManager
+                                        ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/25 hover:bg-emerald-500/25"
+                                        : "bg-slate-800 text-slate-400 border-slate-700 hover:bg-slate-700"
+                                    }`}
+                                  >
+                                    {teamAction === p.id ? "…" : p.isManager ? "Manager ✓" : "+ Manager"}
+                                  </button>
+                                )}
+                                {/* Promote / demote — super admin only */}
+                                {isSuperAdmin && p.role !== "admin" && (
+                                  <button
+                                    disabled={teamAction === p.id}
+                                    onClick={() => setProviderRole(p.id, "admin")}
+                                    className="text-[10px] font-semibold px-2 py-1 rounded-lg border bg-blue-500/10 text-blue-400 border-blue-500/25 hover:bg-blue-500/20 transition-colors disabled:opacity-50"
+                                  >
+                                    {teamAction === p.id ? "…" : "→ Admin"}
+                                  </button>
+                                )}
+                                {isSuperAdmin && p.role === "admin" && (
+                                  <button
+                                    disabled={teamAction === p.id}
+                                    onClick={() => setProviderRole(p.id, "provider")}
+                                    className="text-[10px] font-semibold px-2 py-1 rounded-lg border bg-slate-800 text-slate-400 border-slate-700 hover:bg-slate-700 transition-colors disabled:opacity-50"
+                                  >
+                                    {teamAction === p.id ? "…" : "Demote"}
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                            {/* Expand patients */}
+                            <button
+                              onClick={() => setExpandedProvider(isExpanded ? null : p.id)}
+                              className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-500 hover:text-slate-300 transition-colors shrink-0"
+                              title={isExpanded ? "Collapse" : "View assigned patients"}
+                            >
+                              <ChevronRight className={`h-4 w-4 transition-transform ${isExpanded ? "rotate-90" : ""}`} />
+                            </button>
+                          </div>
+
+                          {/* Expanded patients */}
+                          {isExpanded && (
+                            <div className="border-t border-slate-800 bg-slate-950/40 px-4 py-3">
+                              {p.patients.length === 0 ? (
+                                <p className="text-[11px] text-slate-600 italic">No patients assigned to this provider.</p>
+                              ) : (
+                                <div className="space-y-1.5">
+                                  <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-2">Assigned Patients ({p.patients.length})</p>
+                                  {p.patients.map((pt) => (
+                                    <div key={pt.id} className="flex items-center gap-2">
+                                      <div className="h-5 w-5 rounded-full bg-slate-700 flex items-center justify-center text-[9px] font-bold text-slate-300">
+                                        {pt.name.charAt(0)}
+                                      </div>
+                                      <span className="text-[11px] text-slate-300">{pt.name}</span>
+                                      <span className="text-[10px] text-slate-600">{pt.email}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  {teamProviders.length === 0 && (
+                    <div className="text-center py-12 text-slate-600 text-sm">No providers found.</div>
+                  )}
                 </div>
               )}
             </>

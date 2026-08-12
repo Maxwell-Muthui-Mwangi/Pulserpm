@@ -7,6 +7,8 @@ interface User {
   name: string;
   email: string;
   role: string;
+  isSuperAdmin?: boolean;
+  isManager?: boolean;
   approvalWelcomePending?: boolean;
 }
 
@@ -16,6 +18,8 @@ interface AuthContextValue {
   isPatient: boolean;
   isProvider: boolean;
   isAdmin: boolean;
+  isSuperAdmin: boolean;
+  isManager: boolean;
 }
 
 const AuthContext = createContext<AuthContextValue>({
@@ -24,6 +28,8 @@ const AuthContext = createContext<AuthContextValue>({
   isPatient: false,
   isProvider: false,
   isAdmin: false,
+  isSuperAdmin: false,
+  isManager: false,
 });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -39,6 +45,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     isPatient: user?.role === "patient",
     isProvider: user?.role === "provider",
     isAdmin: user?.role === "admin",
+    isSuperAdmin: Boolean(user?.isSuperAdmin),
+    isManager: Boolean(user?.isManager),
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
