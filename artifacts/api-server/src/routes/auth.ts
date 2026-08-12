@@ -191,11 +191,13 @@ router.post("/auth/provider/verify-email", authLimiter, async (req, res) => {
 // ── Patient signup ───────────────────────────────────────────────────────────
 router.post("/auth/patient-signup", authLimiter, async (req, res) => {
   try {
-    const { name, email, password } = req.body;
+    const { name, email, password, preferredProviderId } = req.body;
     if (!name || !email || !password) {
       res.status(400).json({ error: "Bad Request", message: "Name, email, and password are required" });
       return;
     }
+
+    const preferredId = preferredProviderId ? parseInt(String(preferredProviderId), 10) : null;
 
     const [existingProvider] = await db.select().from(providersTable).where(eq(providersTable.email, email)).limit(1);
     const [existingPatient] = await db.select().from(patientsTable).where(eq(patientsTable.email, email)).limit(1);
@@ -216,6 +218,7 @@ router.post("/auth/patient-signup", authLimiter, async (req, res) => {
         verificationCode: code,
         verificationExpiry: expiry,
         emailVerified: false,
+        preferredProviderId: preferredId,
       }).where(eq(pendingPatientsTable.email, email));
     } else {
       await db.insert(pendingPatientsTable).values({
@@ -225,6 +228,7 @@ router.post("/auth/patient-signup", authLimiter, async (req, res) => {
         verificationCode: code,
         verificationExpiry: expiry,
         emailVerified: false,
+        preferredProviderId: preferredId,
       });
     }
 
@@ -269,11 +273,20 @@ router.post("/auth/verify-email", async (req, res) => {
 
     await db.update(pendingPatientsTable).set({ emailVerified: true }).where(eq(pendingPatientsTable.email, email));
 
-    // Notify all verified providers that a new patient is awaiting approval (non-blocking)
+    // Notify the chosen provider (or all verified providers if none chosen) (non-blocking)
     setImmediate(async () => {
       try {
-        const providers = await db.select().from(providersTable).where(eq(providersTable.emailVerified, true));
         const dashboardOrigin = process.env.DASHBOARD_URL || "https://pulserpm.replit.app";
+        let providers;
+        if (pending.preferredProviderId) {
+          // Only notify the selected provider
+          providers = await db.select().from(providersTable)
+            .where(eq(providersTable.id, pending.preferredProviderId));
+        } else {
+          // No preference — notify all verified + approved providers
+          providers = await db.select().from(providersTable)
+            .where(eq(providersTable.emailVerified, true));
+        }
         for (const provider of providers) {
           await sendNewPatientPendingEmail(
             provider.email,

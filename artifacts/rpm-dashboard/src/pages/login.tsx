@@ -47,6 +47,8 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [specialty, setSpecialty] = useState("");
+  const [preferredProviderId, setPreferredProviderId] = useState<string>("");
+  const [providers, setProviders] = useState<{ id: number; name: string; specialty: string | null }[]>([]);
   const [pendingEmail, setPendingEmail] = useState("");
   const [pendingName, setPendingName] = useState("");
 
@@ -135,6 +137,14 @@ export default function Login() {
     }
   };
 
+  // Fetch available providers when patient signup form is shown
+  const fetchProviders = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/providers/public`);
+      if (res.ok) setProviders(await res.json());
+    } catch { /* ignore */ }
+  };
+
   const handlePatientSignup = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -142,7 +152,10 @@ export default function Login() {
       const res = await fetch(`${API_BASE}/api/auth/patient-signup`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email, password }),
+        body: JSON.stringify({
+          name, email, password,
+          ...(preferredProviderId ? { preferredProviderId: parseInt(preferredProviderId) } : {}),
+        }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -356,6 +369,7 @@ export default function Login() {
     setMode(nextMode);
     if (nextRole) setRole(nextRole);
     setEmail(""); setPassword(""); setName(""); setSpecialty("");
+    setPreferredProviderId("");
     setCode(["", "", "", "", "", ""]);
     setFallbackCode(null);
     setShowPassword(false);
@@ -760,13 +774,15 @@ export default function Login() {
                   </div>
                 </div>
 
-                {/* Patient signup note */}
+                {/* Patient signup note + provider fetch trigger */}
                 {mode === "signup" && role === "patient" && (
-                  <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}
                     className="mb-4 bg-teal-50 border border-teal-200 rounded-xl px-4 py-3 text-xs text-teal-700"
+                    onAnimationComplete={() => { if (providers.length === 0) fetchProviders(); }}
                   >
                     <p className="font-medium mb-0.5">Patient self-registration</p>
-                    <p>After signing up, you'll verify your email with a code, then a provider will approve your account.</p>
+                    <p>After signing up, you'll verify your email with a code, then your selected provider will approve your account.</p>
                   </motion.div>
                 )}
 
@@ -792,6 +808,37 @@ export default function Login() {
                               <Input id="specialty" type="text" value={specialty} onChange={(e) => setSpecialty(e.target.value)}
                                 placeholder="e.g. Cardiology, Internal Medicine" className="w-full" />
                             </div>
+                          </div>
+                        )}
+                        {role === "patient" && (
+                          <div>
+                            <Label htmlFor="provider-select">
+                              Select your provider{" "}
+                              <span className="text-muted-foreground font-normal">(optional)</span>
+                            </Label>
+                            <div className="mt-1.5">
+                              <select
+                                id="provider-select"
+                                value={preferredProviderId}
+                                onChange={(e) => setPreferredProviderId(e.target.value)}
+                                className="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 text-foreground"
+                              >
+                                <option value="">— I'll let any available provider approve me —</option>
+                                {providers.map((p) => (
+                                  <option key={p.id} value={String(p.id)}>
+                                    {p.name}{p.specialty ? ` · ${p.specialty}` : ""}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                            {providers.length === 0 && (
+                              <p className="text-[11px] text-muted-foreground mt-1">
+                                Loading providers…
+                              </p>
+                            )}
+                            <p className="text-[11px] text-muted-foreground mt-1">
+                              Selecting a provider sends your approval request directly to them.
+                            </p>
                           </div>
                         )}
                       </motion.div>

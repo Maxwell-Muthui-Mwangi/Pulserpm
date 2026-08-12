@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db, patientsTable, vitalsTable, alertsTable, thresholdsTable, pendingPatientsTable } from "@workspace/db";
-import { eq, and, or, ilike, inArray, sql, count, desc } from "drizzle-orm";
+import { eq, and, or, isNull, ilike, inArray, sql, count, desc } from "drizzle-orm";
 import { hashPassword } from "../lib/auth.js";
 import { requireAuth } from "../middlewares/auth.js";
 import { getOrCreateThresholds } from "../lib/alertEngine.js";
@@ -111,8 +111,19 @@ async function computeRiskLevel(patientId: number): Promise<"normal" | "warning"
 
 router.get("/patients/pending/count", requireAuth, async (req, res) => {
   try {
-    if (req.user!.role !== "provider") { res.status(403).json({ error: "Forbidden" }); return; }
-    const [row] = await db.select({ count: count() }).from(pendingPatientsTable).where(eq(pendingPatientsTable.emailVerified, true));
+    if (req.user!.role !== "provider" && req.user!.role !== "admin") {
+      res.status(403).json({ error: "Forbidden" }); return;
+    }
+    // Count patients who explicitly chose this provider OR who chose no provider
+    const [row] = await db.select({ count: count() })
+      .from(pendingPatientsTable)
+      .where(and(
+        eq(pendingPatientsTable.emailVerified, true),
+        or(
+          eq(pendingPatientsTable.preferredProviderId, req.user!.id),
+          isNull(pendingPatientsTable.preferredProviderId)
+        )
+      ));
     res.json({ count: Number(row?.count ?? 0) });
   } catch (err) {
     console.error("Pending count error:", err);
@@ -122,10 +133,26 @@ router.get("/patients/pending/count", requireAuth, async (req, res) => {
 
 router.get("/patients/pending", requireAuth, async (req, res) => {
   try {
-    if (req.user!.role !== "provider") { res.status(403).json({ error: "Forbidden" }); return; }
-    const rows = await db.select({ id: pendingPatientsTable.id, name: pendingPatientsTable.name, email: pendingPatientsTable.email, createdAt: pendingPatientsTable.createdAt })
+    if (req.user!.role !== "provider" && req.user!.role !== "admin") {
+      res.status(403).json({ error: "Forbidden" }); return;
+    }
+    // Show patients who chose this provider + those with no preference (open queue)
+    const rows = await db
+      .select({
+        id: pendingPatientsTable.id,
+        name: pendingPatientsTable.name,
+        email: pendingPatientsTable.email,
+        preferredProviderId: pendingPatientsTable.preferredProviderId,
+        createdAt: pendingPatientsTable.createdAt,
+      })
       .from(pendingPatientsTable)
-      .where(eq(pendingPatientsTable.emailVerified, true))
+      .where(and(
+        eq(pendingPatientsTable.emailVerified, true),
+        or(
+          eq(pendingPatientsTable.preferredProviderId, req.user!.id),
+          isNull(pendingPatientsTable.preferredProviderId)
+        )
+      ))
       .orderBy(desc(pendingPatientsTable.createdAt));
     res.json(rows);
   } catch (err) {

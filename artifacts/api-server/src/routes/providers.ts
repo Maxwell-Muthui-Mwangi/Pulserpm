@@ -8,6 +8,22 @@ import { sendProviderApprovedEmail } from "../lib/email.js";
 
 const router = Router();
 
+// ── Public provider list — used by patient signup form (no auth required) ─────
+router.get("/providers/public", async (_req, res) => {
+  try {
+    const providers = await db
+      .select({ id: providersTable.id, name: providersTable.name, specialty: providersTable.specialty })
+      .from(providersTable)
+      .where(and(eq(providersTable.emailVerified, true), eq(providersTable.approved, true)));
+    // Exclude test/system accounts
+    const clean = providers.filter((p) => !p.name.startsWith("__"));
+    res.json(clean);
+  } catch (err) {
+    console.error("Public providers list error:", err);
+    res.status(500).json({ error: "Internal Server Error", message: "Failed to list providers" });
+  }
+});
+
 router.get("/providers", requireAuth, async (_req, res) => {
   try {
     const providers = await db.select().from(providersTable);

@@ -1,4 +1,4 @@
-import { pgTable, serial, text, timestamp, boolean } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, timestamp, boolean, integer } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -10,6 +10,7 @@ export const pendingPatientsTable = pgTable("pending_patients", {
   verificationCode: text("verification_code").notNull(),
   verificationExpiry: timestamp("verification_expiry").notNull(),
   emailVerified: boolean("email_verified").notNull().default(false),
+  preferredProviderId: integer("preferred_provider_id"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
