@@ -8,6 +8,7 @@ import Layout from "@/components/layout";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { classifyThreat, THREAT_COLORS, THREAT_DOT } from "@/lib/threat-classify";
 
 const API_BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -131,6 +132,7 @@ export default function AuditLogPage() {
   const successCount = logs.filter(l => l.outcome === "success").length;
   const failureCount = logs.filter(l => l.outcome === "failure").length;
   const deniedCount = logs.filter(l => l.outcome === "denied").length;
+  const threatCount = logs.filter(l => classifyThreat(l).level !== null).length;
 
   return (
     <Layout>
@@ -179,6 +181,15 @@ export default function AuditLogPage() {
             <CardContent className="p-4">
               <div className="text-2xl font-bold text-amber-600">{deniedCount}</div>
               <div className="text-xs text-muted-foreground mt-0.5">Denied (this page)</div>
+            </CardContent>
+          </Card>
+          <Card className="border-0 shadow-sm border-l-2 border-l-orange-400">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-1.5">
+                <AlertTriangle className="h-4 w-4 text-orange-500" />
+                <div className="text-2xl font-bold text-orange-600">{threatCount}</div>
+              </div>
+              <div className="text-xs text-muted-foreground mt-0.5">Threats Suspected</div>
             </CardContent>
           </Card>
         </div>
@@ -232,12 +243,18 @@ export default function AuditLogPage() {
                   <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Resource</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">IP Address</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Outcome</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">
+                    <span className="flex items-center gap-1.5">
+                      <AlertTriangle className="h-3.5 w-3.5 text-orange-500" />
+                      Security Threat
+                    </span>
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/40">
                 {loading && (
                   <tr>
-                    <td colSpan={6} className="py-16 text-center text-muted-foreground">
+                    <td colSpan={7} className="py-16 text-center text-muted-foreground">
                       <RefreshCw className="h-5 w-5 animate-spin mx-auto mb-2" />
                       Loading events…
                     </td>
@@ -245,15 +262,22 @@ export default function AuditLogPage() {
                 )}
                 {!loading && logs.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="py-16 text-center">
+                    <td colSpan={7} className="py-16 text-center">
                       <Shield className="h-8 w-8 text-muted-foreground/40 mx-auto mb-3" />
                       <p className="text-sm font-medium text-foreground">No audit events yet</p>
                       <p className="text-xs text-muted-foreground mt-1">Events will appear here as users interact with the system.</p>
                     </td>
                   </tr>
                 )}
-                {!loading && logs.map(log => (
-                  <tr key={log.id} className={`hover:bg-muted/30 transition-colors ${log.outcome === "failure" ? "bg-red-50/30" : log.outcome === "denied" ? "bg-amber-50/30" : ""}`}>
+                {!loading && logs.map(log => {
+                  const threat = classifyThreat(log);
+                  return (
+                  <tr key={log.id} className={`hover:bg-muted/30 transition-colors ${
+                    threat.level === "critical" || threat.level === "high" ? "bg-red-50/20" :
+                    threat.level === "medium" ? "bg-amber-50/20" :
+                    log.outcome === "failure" ? "bg-red-50/10" :
+                    log.outcome === "denied" ? "bg-amber-50/10" : ""
+                  }`}>
                     <td className="px-4 py-3 whitespace-nowrap">
                       <div className="flex items-center gap-1.5">
                         <Clock className="h-3.5 w-3.5 text-muted-foreground/60 shrink-0" />
@@ -293,8 +317,24 @@ export default function AuditLogPage() {
                     <td className="px-4 py-3">
                       <OutcomeBadge outcome={log.outcome} />
                     </td>
+                    <td className="px-4 py-3">
+                      {threat.level ? (
+                        <div className="space-y-0.5">
+                          <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-semibold border uppercase tracking-wide ${THREAT_COLORS[threat.level]}`}>
+                            <span className={`h-1.5 w-1.5 rounded-full ${THREAT_DOT[threat.level]}`} />
+                            {threat.level}
+                          </span>
+                          <p className="text-[10px] text-muted-foreground leading-tight max-w-[160px]">
+                            {threat.reason}
+                          </p>
+                        </div>
+                      ) : (
+                        <span className="text-[10px] text-muted-foreground/50">—</span>
+                      )}
+                    </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -303,7 +343,7 @@ export default function AuditLogPage() {
           {total > LIMIT && (
             <div className="flex items-center justify-between px-4 py-3 border-t border-border/40 bg-muted/20">
               <span className="text-xs text-muted-foreground">
-                Showing {offset + 1}–{Math.min(offset + LIMIT, total)} of {total} events
+                Showing {offset + 1}–{Math.min(offset + LIMIT, total)} of {total} events · {threatCount} threats on this page
               </span>
               <div className="flex gap-2">
                 <Button size="sm" variant="outline" disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - LIMIT))}>

@@ -1,0 +1,155 @@
+PulseRPM
+Menu
+Overview
+Patients
+Alerts
+Audit Log
+Security Framework
+T
+Tobias Billa
+provider
+
+Nairobi (EAT)
+Sign Out
+Search patients...
+
+9+
+Security Framework
+Cryptographic primitives and machine-learning defences active in this system. Each layer operates independently — a failure in one does not compromise the others.
+
+All systems active
+
+AES-256 Encryption
+
+Active
+
+Blockchain Auth
+
+Active
+
+MLNN Anomaly Detection
+
+Active
+
+Homomorphic Encryption
+
+Active
+Blockchain Auth
+Every login, logout, token refresh, and MFA challenge is recorded as an immutable block in an append-only hash chain. Each block references the SHA-256 hash of its predecessor, so retroactive modification of any event invalidates the entire chain — providing a tamper-evident authentication audit trail.
+
+ACTIVE
+Configuration
+
+Hash
+
+SHA-256
+
+Consensus
+
+Proof-of-Work (d=3)
+
+Events
+
+Login, Logout, MFA
+
+Verification
+
+Full chain replay
+
+Storage
+
+In-memory + DB sync
+
+Implementation
+
+typescript
+Copy
+import { createHash } from "crypto";
+interface AuthEvent {
+  userId    : string;
+  role      : "provider" | "patient";
+  action    : "login" | "logout" | "token_refresh" | "mfa_challenge";
+  ipAddress : string;
+  sessionId : string;
+}
+interface Block {
+  index        : number;
+  timestamp    : number;
+  data         : AuthEvent;
+  previousHash : string;
+  hash         : string;
+  nonce        : number;
+}
+function computeHash(block: Omit<Block, "hash">): string {
+  return createHash("sha256")
+    .update(JSON.stringify(block))
+    .digest("hex");
+}
+/** Proof-of-work: find a nonce that produces a hash with the required prefix. */
+function mineBlock(
+  data         : AuthEvent,
+  previousHash : string,
+  index        : number,
+  difficulty   : number = 3,
+): Block {
+  let nonce  = 0;
+  const prefix = "0".repeat(difficulty);
+  while (true) {
+    const candidate = { index, timestamp: Date.now(), data, previousHash, nonce };
+    const hash      = computeHash(candidate);
+    if (hash.startsWith(prefix)) {
+      return { ...candidate, hash };
+    }
+    nonce++;
+  }
+}
+/** Append-only blockchain recording every authentication event. */
+export class AuthBlockchain {
+  private chain: Block[];
+  constructor() {
+    // Genesis block
+    const genesis: Block = {
+      index        : 0,
+      timestamp    : Date.UTC(2025, 0, 1),
+      data         : { userId: "SYSTEM", role: "provider", action: "login",
+                       ipAddress: "0.0.0.0", sessionId: "genesis" },
+      previousHash : "0000000000000000",
+      nonce        : 0,
+      hash         : "",
+    };
+    genesis.hash = computeHash(genesis);
+    this.chain = [genesis];
+  }
+  /** Record an auth event — returns the newly mined block. */
+  recordEvent(event: AuthEvent): Block {
+    const prev  = this.chain[this.chain.length - 1];
+    const block = mineBlock(event, prev.hash, prev.index + 1);
+    this.chain.push(block);
+    return block;
+  }
+  /** Verify the entire chain has not been tampered with. */
+  verify(): boolean {
+    for (let i = 1; i < this.chain.length; i++) {
+      const curr = this.chain[i];
+      const prev = this.chain[i - 1];
+      if (curr.previousHash !== prev.hash) return false;
+      const { hash, ...rest } = curr;
+      if (computeHash(rest) !== hash)      return false;
+    }
+    return true;
+  }
+  get length() { return this.chain.length; }
+}
+// ── Usage: record a provider login and verify chain integrity ─────────────────
+const ledger = new AuthBlockchain();
+const block = ledger.recordEvent({
+  userId    : "provider-7",
+  role      : "provider",
+  action    : "login",
+  ipAddress : "203.0.113.47",
+  sessionId : "sess_a1b2c3d4e5f6",
+});
+console.log("Block mined   :", block.hash.slice(0, 16) + "…");
+console.log("Chain valid   :", ledger.verify());   // → true
+console.log("Chain length  :", ledger.length);     // → 2 blocks
+25

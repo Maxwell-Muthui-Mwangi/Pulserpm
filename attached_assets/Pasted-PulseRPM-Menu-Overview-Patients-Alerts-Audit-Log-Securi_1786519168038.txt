@@ -1,0 +1,146 @@
+PulseRPM
+Menu
+Overview
+Patients
+Alerts
+Audit Log
+Security Framework
+T
+Tobias Billa
+provider
+
+Nairobi (EAT)
+Sign Out
+Search patients...
+
+9+
+Security Framework
+Cryptographic primitives and machine-learning defences active in this system. Each layer operates independently — a failure in one does not compromise the others.
+
+All systems active
+
+AES-256 Encryption
+
+Active
+
+Blockchain Auth
+
+Active
+
+MLNN Anomaly Detection
+
+Active
+
+Homomorphic Encryption
+
+Active
+Homomorphic Encryption
+Paillier partial homomorphic encryption lets the analytics layer compute population-level aggregates (averages, sums) over a patient cohort while the server operates entirely on ciphertext — individual readings are never decrypted. Only the authorised key holder can reveal the final aggregate.
+
+ACTIVE
+Configuration
+
+Scheme
+
+Paillier PHE
+
+Property
+
+Additive homomorphism
+
+Key size
+
+≥ 1024 bit (prod)
+
+Operations
+
+Σ over ciphertexts
+
+Disclosure
+
+Aggregate only
+
+Implementation
+
+typescript
+Copy
+/** Paillier Partial Homomorphic Encryption
+ *
+ *  Property: Enc(a) · Enc(b) mod n² = Enc(a + b)
+ *
+ *  Use-case: aggregate patient vitals across a cohort for population-level
+ *  analytics without ever decrypting individual readings — the server
+ *  performs arithmetic entirely on ciphertext.
+ */
+// ── Modular arithmetic helpers ────────────────────────────────────────────────
+function modPow(base: bigint, exp: bigint, mod: bigint): bigint {
+  if (mod === 1n) return 0n;
+  let result = 1n;
+  base = ((base % mod) + mod) % mod;
+  while (exp > 0n) {
+    if (exp & 1n) result = (result * base) % mod;
+    exp >>= 1n;
+    base = (base * base) % mod;
+  }
+  return result;
+}
+function modInverse(a: bigint, m: bigint): bigint {
+  // Extended Euclidean
+  let [old_r, r] = [a, m];
+  let [old_s, s] = [1n, 0n];
+  while (r !== 0n) {
+    const q = old_r / r;
+    [old_r, r] = [r, old_r - q * r];
+    [old_s, s] = [s, old_s - q * s];
+  }
+  return ((old_s % m) + m) % m;
+}
+function lFunc(u: bigint, n: bigint): bigint {
+  return (u - 1n) / n;
+}
+// ── Key types ─────────────────────────────────────────────────────────────────
+interface PublicKey  { n: bigint; g: bigint; nSq: bigint }
+interface PrivateKey { lambda: bigint; mu: bigint; n: bigint; nSq: bigint }
+/** Generate a Paillier key pair from two large primes p and q. */
+export function generateKeyPair(p: bigint, q: bigint): {
+  publicKey  : PublicKey;
+  privateKey : PrivateKey;
+} {
+  const n      = p * q;
+  const nSq    = n * n;
+  const lambda = (p - 1n) * (q - 1n);       // lcm(p-1, q-1) — simplified for equal-length primes
+  const g      = n + 1n;                     // generator shortcut valid when p, q same bit-length
+  const mu     = modInverse(lambda, n);
+  return {
+    publicKey  : { n, g, nSq },
+    privateKey : { lambda, mu, n, nSq },
+  };
+}
+/** Encrypt a plaintext message m ∈ [0, n). */
+export function encrypt(m: bigint, pub: PublicKey, r: bigint): bigint {
+  const gm = modPow(pub.g, m, pub.nSq);
+  const rn = modPow(r,     pub.n, pub.nSq);
+  return (gm * rn) % pub.nSq;
+}
+/** Homomorphic addition of two ciphertexts — no decryption required. */
+export function addCiphertexts(c1: bigint, c2: bigint, pub: PublicKey): bigint {
+  return (c1 * c2) % pub.nSq;
+}
+/** Decrypt a ciphertext. */
+export function decrypt(c: bigint, priv: PrivateKey): bigint {
+  const u = modPow(c, priv.lambda, priv.nSq);
+  return (lFunc(u, priv.n) * priv.mu) % priv.n;
+}
+// ── Example: sum heart-rate readings without decrypting individuals ───────────
+const p = 61n, q = 53n; // toy primes — production uses 1024-bit+ primes
+const { publicKey, privateKey } = generateKeyPair(p, q);
+const heartRates = [72n, 68n, 85n, 74n, 79n];
+const r          = 32n;  // random blinding factor (must be coprime with n)
+const encrypted = heartRates.map(hr => encrypt(hr, publicKey, r));
+const sumCipher = encrypted.reduce((acc, c) => addCiphertexts(acc, c, publicKey));
+const totalHR   = decrypt(sumCipher, privateKey);
+const avgHR     = totalHR / BigInt(heartRates.length);
+console.log("Encrypted ciphertexts computed on server — individuals never revealed");
+console.log("Decrypted total HR  :", totalHR);   // → 378
+console.log("Cohort average HR   :", avgHR);     // → 75
+25

@@ -1,0 +1,121 @@
+PulseRPM
+Menu
+Overview
+Patients
+Alerts
+Audit Log
+Security Framework
+T
+Tobias Billa
+provider
+
+Nairobi (EAT)
+Sign Out
+Search patients...
+
+9+
+Security Framework
+Cryptographic primitives and machine-learning defences active in this system. Each layer operates independently — a failure in one does not compromise the others.
+
+All systems active
+
+AES-256 Encryption
+
+Active
+
+Blockchain Auth
+
+Active
+
+MLNN Anomaly Detection
+
+Active
+
+Homomorphic Encryption
+
+Active
+AES-256 Encryption
+All patient records and vital-sign payloads are encrypted with AES-256-GCM before persisting to the database. Keys are derived per-patient from a master secret using SHA-256, and GCM authentication tags guarantee ciphertext integrity — any tampering is detected on decryption.
+
+ACTIVE
+Configuration
+
+Algorithm
+
+AES-256-GCM
+
+Key size
+
+256 bit
+
+IV length
+
+128 bit (randomised)
+
+Auth tag
+
+128 bit
+
+Key derive
+
+SHA-256 / patient ID
+
+Implementation
+
+typescript
+Copy
+import { createCipheriv, createDecipheriv, randomBytes, createHash } from "crypto";
+const ALGORITHM  = "aes-256-gcm";
+const KEY_LENGTH = 32; // 256 bits
+/** Derive a deterministic 256-bit key from a master secret + patient ID. */
+export function deriveKey(masterSecret: string, patientId: number): Buffer {
+  return createHash("sha256")
+    .update(`${masterSecret}:${patientId}`)
+    .digest();
+}
+/** Encrypt a plain-text vital payload for storage or transit. */
+export function encryptPayload(plaintext: string, key: Buffer): {
+  ciphertext: string;
+  iv: string;
+  authTag: string;
+} {
+  const iv     = randomBytes(16);
+  const cipher = createCipheriv(ALGORITHM, key, iv);
+  const encrypted = Buffer.concat([
+    cipher.update(plaintext, "utf8"),
+    cipher.final(),
+  ]);
+  return {
+    ciphertext : encrypted.toString("base64"),
+    iv         : iv.toString("base64"),
+    authTag    : cipher.getAuthTag().toString("base64"),
+  };
+}
+/** Decrypt and authenticate a previously encrypted payload. */
+export function decryptPayload(
+  ciphertext : string,
+  iv         : string,
+  authTag    : string,
+  key        : Buffer,
+): string {
+  const decipher = createDecipheriv(
+    ALGORITHM,
+    key,
+    Buffer.from(iv, "base64"),
+  );
+  decipher.setAuthTag(Buffer.from(authTag, "base64"));
+  return Buffer.concat([
+    decipher.update(Buffer.from(ciphertext, "base64")),
+    decipher.final(),
+  ]).toString("utf8");
+}
+// ── Example: encrypt a vitals snapshot before database write ─────────────────
+const masterSecret = process.env.ENCRYPTION_MASTER_KEY!;
+const patientId    = 42;
+const key          = deriveKey(masterSecret, patientId);
+const vitals  = JSON.stringify({ heartRate: 72, spo2: 98.4, systolicBp: 118 });
+const sealed  = encryptPayload(vitals, key);
+console.log("Stored ciphertext:", sealed.ciphertext.slice(0, 32) + "…");
+const restored = decryptPayload(sealed.ciphertext, sealed.iv, sealed.authTag, key);
+console.log("Decrypted vitals :", JSON.parse(restored));
+25

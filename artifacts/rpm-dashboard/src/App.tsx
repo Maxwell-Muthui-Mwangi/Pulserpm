@@ -16,6 +16,8 @@ import Sync from "@/pages/sync";
 import SyncHealthwear from "@/pages/sync-healthwear";
 import AuditLog from "@/pages/audit-log";
 import SecurityFramework from "@/pages/security-framework";
+import ThreatDetection from "@/pages/threat-detection";
+import BlockchainMonitor from "@/pages/blockchain-monitor";
 
 
 function Router() {
@@ -30,6 +32,8 @@ function Router() {
       <Route path="/alerts" component={Alerts} />
       <Route path="/security" component={AuditLog} />
       <Route path="/security-framework" component={SecurityFramework} />
+      <Route path="/threat-detection" component={ThreatDetection} />
+      <Route path="/blockchain" component={BlockchainMonitor} />
       <Route component={NotFound} />
     </Switch>
   );

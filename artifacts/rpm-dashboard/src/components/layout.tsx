@@ -17,6 +17,8 @@ import {
   HeartPulse,
   Shield,
   ShieldCheck,
+  ShieldAlert,
+  Link2,
   Globe,
 } from "lucide-react";
 import { removeAuthToken, withAuth, getAuthToken } from "@/lib/utils";
@@ -84,6 +86,8 @@ export default function Layout({ children }: LayoutProps) {
     { href: "/patients", label: "Patients", icon: Users },
     { href: "/alerts", label: "Alerts", icon: AlertCircle },
     { href: "/security", label: "Audit Log", icon: Shield },
+    { href: "/threat-detection", label: "Threat Detection", icon: ShieldAlert },
+    { href: "/blockchain", label: "Blockchain Monitor", icon: Link2 },
     { href: "/security-framework", label: "Security Framework", icon: ShieldCheck },
   ];
 
