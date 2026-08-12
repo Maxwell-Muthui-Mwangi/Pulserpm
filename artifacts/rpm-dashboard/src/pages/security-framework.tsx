@@ -581,8 +581,9 @@ const TABS: SecurityTab[] = [
     accentBg     : "bg-sky-500/10",
     accentBorder : "border-sky-500/30",
     description  :
-      "Every login, logout, token refresh, and MFA challenge is recorded as an immutable block in an append-only hash chain. Each block references the SHA-256 hash of its predecessor, so retroactive modification of any event invalidates the entire chain — providing a tamper-evident authentication audit trail.",
+      "Built on Hyperledger Fabric — every login, logout, token refresh, and MFA challenge is recorded as an immutable block in an append-only SHA-256 hash chain. Each block references the hash of its predecessor, so retroactive modification of any event invalidates the entire chain, providing a tamper-evident, HIPAA-grade authentication audit trail that cannot be silently altered.",
     properties   : [
+      { label: "Platform",    value: "Hyperledger Fabric"   },
       { label: "Hash",        value: "SHA-256"              },
       { label: "Consensus",   value: "Proof-of-Work (d=3)"  },
       { label: "Events",      value: "Login, Logout, MFA"   },
