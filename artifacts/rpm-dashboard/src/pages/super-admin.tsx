@@ -457,7 +457,7 @@ export default function SuperAdmin() {
         {/* Back link */}
         <div className="px-3 pb-3">
           <button
-            onClick={() => { removeAuthToken(); window.location.href = API_BASE + "/"; }}
+            onClick={() => setLocation("/")}
             className="w-full text-[11px] text-slate-600 hover:text-slate-400 text-left px-2 py-1.5 rounded-lg hover:bg-slate-800/50 transition-colors"
           >
             ← Back to main app
