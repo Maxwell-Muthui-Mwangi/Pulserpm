@@ -41,6 +41,7 @@ type AdminSection =
   | "manage-team"
   | "healthcare-providers"
   | "admins-management"
+  | "mlnn-research"
   | "system"
   | "reports"
   | "settings";
@@ -633,6 +634,7 @@ export default function SuperAdmin() {
     // Super-admin only management sections
     { id: "healthcare-providers", label: "Healthcare Providers",           icon: Shield, superAdminOnly: true },
     { id: "admins-management",    label: "Admins",                         icon: Lock,  superAdminOnly: true },
+    { id: "mlnn-research",        label: "MLNN Research",                  icon: BrainCircuit, superAdminOnly: true },
     { id: "system",               label: "System Integrity",               icon: ShieldAlert },
     { id: "reports",              label: "Reports",                        icon: FileText },
     { id: "settings",             label: "Settings",                       icon: Settings },
@@ -749,6 +751,7 @@ export default function SuperAdmin() {
               {section === "settings"             && "Settings"}
               {section === "healthcare-providers" && "Healthcare Providers"}
               {section === "admins-management"    && "Admins Management"}
+              {section === "mlnn-research"        && "MLNN Model — Research & Implementation"}
             </h1>
           </div>
           <div className="flex items-center gap-3">
@@ -2408,6 +2411,366 @@ export default function SuperAdmin() {
               )}
             </>
           )}
+
+          {/* ── MLNN Research & Implementation (super-admin only) ─────── */}
+          {section === "mlnn-research" && (() => {
+            // ── Actual training history from notebook (loss × 10000 for chart readability) ──
+            const trainingCurve = [
+              { epoch: 1,   trainLoss: 1569, valLoss: 129  },
+              { epoch: 2,   trainLoss: 111,  valLoss: 32   },
+              { epoch: 5,   trainLoss: 17,   valLoss: 5.6  },
+              { epoch: 10,  trainLoss: 7.97, valLoss: 1.38 },
+              { epoch: 15,  trainLoss: 2.08, valLoss: 0.625},
+              { epoch: 20,  trainLoss: 1.76, valLoss: 0.293},
+              { epoch: 25,  trainLoss: 1.09, valLoss: 0.166},
+              { epoch: 35,  trainLoss: 1.25, valLoss: 0.111},
+              { epoch: 45,  trainLoss: 0.372,valLoss: 0.084},
+              { epoch: 55,  trainLoss: 0.544,valLoss: 0.074},
+              { epoch: 65,  trainLoss: 0.234,valLoss: 0.063},
+              { epoch: 75,  trainLoss: 0.718,valLoss: 0.057},
+              { epoch: 85,  trainLoss: 0.413,valLoss: 0.055},
+              { epoch: 100, trainLoss: 0.431,valLoss: 0.054},
+            ];
+            // Confusion matrix from notebook: [[484,16],[13,487]]
+            const cm = { tn: 484, fp: 16, fn: 13, tp: 487, total: 1000 };
+            const metrics = [
+              { label: "Accuracy",  value: 97.1, color: "text-violet-400",  bar: "bg-violet-500" },
+              { label: "Precision", value: 97.4, color: "text-blue-400",    bar: "bg-blue-500"   },
+              { label: "Recall",    value: 97.4, color: "text-emerald-400", bar: "bg-emerald-500" },
+              { label: "F1-Score",  value: 97.1, color: "text-amber-400",   bar: "bg-amber-500"  },
+              { label: "ROC-AUC",   value: 99.2, color: "text-pink-400",    bar: "bg-pink-500"   },
+            ];
+            const features = [
+              { name: "Network Traffic",     desc: "Packets/sec — elevated during attacks",      weight: 20 },
+              { name: "Failed Login Attempts", desc: "Poisson-distributed, +5 under attack",     weight: 50 },
+              { name: "Packet Rate",         desc: "Baseline 100/s, +50 anomalous",              weight: 30 },
+              { name: "Device Activity",     desc: "Wearable I/O events per second",             weight: 33 },
+              { name: "Session Duration",    desc: "Connection length in seconds",               weight: 15 },
+            ];
+            const lrSchedule = [
+              { epoch: 1,  lr: "0.001000" },
+              { epoch: 25, lr: "0.000500" },
+              { epoch: 35, lr: "0.000250" },
+              { epoch: 45, lr: "0.000125" },
+              { epoch: 55, lr: "0.0000625"},
+              { epoch: 65, lr: "0.0000313"},
+              { epoch: 75, lr: "0.0000156"},
+              { epoch: 85, lr: "0.000010 (min)" },
+            ];
+
+            return (
+              <div className="overflow-y-auto p-6 space-y-6">
+
+                {/* Header banner */}
+                <div className="rounded-2xl bg-gradient-to-br from-violet-500/15 via-blue-500/10 to-slate-900 border border-violet-500/25 p-6">
+                  <div className="flex items-start gap-4">
+                    <div className="h-12 w-12 rounded-xl bg-violet-500/20 border border-violet-500/30 flex items-center justify-center shrink-0">
+                      <BrainCircuit className="h-6 w-6 text-violet-400" />
+                    </div>
+                    <div className="flex-1">
+                      <h2 className="text-lg font-bold text-white">Adaptive MLNN Anomaly Detection</h2>
+                      <p className="text-sm text-slate-400 mt-1">
+                        TensorFlow/Keras multi-layer neural network trained on synthetic wearable healthcare
+                        security data to detect anomalous device behaviour in real-time. Integrated with PulseRPM.
+                      </p>
+                      <div className="flex flex-wrap gap-2 mt-3">
+                        {[
+                          { label: "TensorFlow/Keras", col: "bg-orange-500/15 text-orange-400 border-orange-500/25" },
+                          { label: "Python 3",         col: "bg-blue-500/15 text-blue-400 border-blue-500/25"   },
+                          { label: "scikit-learn",     col: "bg-emerald-500/15 text-emerald-400 border-emerald-500/25" },
+                          { label: "5,000 samples",    col: "bg-violet-500/15 text-violet-400 border-violet-500/25" },
+                          { label: "Binary classification", col: "bg-slate-700/80 text-slate-300 border-slate-600" },
+                        ].map(t => (
+                          <span key={t.label} className={`px-2.5 py-1 rounded-full text-[10px] font-semibold border ${t.col}`}>{t.label}</span>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* KPI strip */}
+                <div className="grid grid-cols-5 gap-3">
+                  {metrics.map(m => (
+                    <div key={m.label} className="bg-slate-900 border border-slate-800 rounded-xl p-4 text-center">
+                      <p className={`text-2xl font-black ${m.color}`}>{m.value}%</p>
+                      <p className="text-[10px] text-slate-500 mt-1 font-semibold uppercase tracking-wider">{m.label}</p>
+                      <div className="mt-2 h-1 bg-slate-800 rounded-full overflow-hidden">
+                        <div className={`h-full ${m.bar} rounded-full`} style={{ width: `${m.value}%` }} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+                  {/* ── Model Architecture ── */}
+                  <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+                    <h3 className="text-sm font-bold text-white mb-4 flex items-center gap-2">
+                      <Cpu className="h-4 w-4 text-violet-400" />
+                      Network Architecture
+                    </h3>
+                    <div className="space-y-2">
+                      {[
+                        { label: "Input Layer",     detail: "5 features · Wearable security metrics",   neurons: 5,  color: "border-slate-600 bg-slate-800/60 text-slate-300" },
+                        { label: "Hidden Layer 1",  detail: "64 neurons · ReLU · Dropout 0.2",          neurons: 64, color: "border-violet-500/40 bg-violet-500/10 text-violet-300" },
+                        { label: "Hidden Layer 2",  detail: "32 neurons · ReLU · Dropout 0.2",          neurons: 32, color: "border-blue-500/40 bg-blue-500/10 text-blue-300" },
+                        { label: "Output Layer",    detail: "1 neuron · Sigmoid · Binary classification", neurons: 1, color: "border-emerald-500/40 bg-emerald-500/10 text-emerald-300" },
+                      ].map((layer, i, arr) => (
+                        <div key={layer.label}>
+                          <div className={`flex items-center gap-3 border rounded-xl px-4 py-3 ${layer.color}`}>
+                            <div className="flex gap-0.5 shrink-0">
+                              {Array.from({ length: Math.min(layer.neurons, 8) }).map((_, j) => (
+                                <div key={j} className="h-5 w-1 rounded-full bg-current opacity-60" />
+                              ))}
+                              {layer.neurons > 8 && <span className="text-[9px] opacity-60 ml-0.5">+{layer.neurons - 8}</span>}
+                            </div>
+                            <div className="flex-1">
+                              <p className="text-[12px] font-bold">{layer.label}</p>
+                              <p className="text-[10px] opacity-60">{layer.detail}</p>
+                            </div>
+                          </div>
+                          {i < arr.length - 1 && (
+                            <div className="flex justify-center my-1">
+                              <div className="w-0.5 h-4 bg-slate-700 rounded-full" />
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                    <div className="mt-4 grid grid-cols-2 gap-2 text-[10px]">
+                      {[
+                        ["Optimizer", "Adam (adaptive)"],
+                        ["Loss", "Binary Crossentropy"],
+                        ["Batch Size", "32"],
+                        ["Max Epochs", "100"],
+                      ].map(([k, v]) => (
+                        <div key={k} className="bg-slate-800/60 rounded-lg px-3 py-2">
+                          <span className="text-slate-500">{k}: </span>
+                          <span className="text-slate-200 font-semibold">{v}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* ── Confusion Matrix ── */}
+                  <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+                    <h3 className="text-sm font-bold text-white mb-1 flex items-center gap-2">
+                      <BarChart3 className="h-4 w-4 text-blue-400" />
+                      Confusion Matrix — Test Set (n=1,000)
+                    </h3>
+                    <p className="text-[10px] text-slate-500 mb-4">80/20 train-test split · stratified sampling</p>
+                    <div className="flex flex-col items-center gap-2">
+                      <div className="flex gap-2 text-[9px] text-slate-500 w-full px-12">
+                        <span className="flex-1 text-center">Predicted Normal</span>
+                        <span className="flex-1 text-center">Predicted Anomaly</span>
+                      </div>
+                      <div className="flex items-stretch gap-0.5 w-full">
+                        <div className="flex flex-col justify-around text-[9px] text-slate-500 pr-2 py-1 shrink-0">
+                          <span className="text-center" style={{writingMode:'vertical-rl',transform:'rotate(180deg)'}}>Actual Normal</span>
+                          <span className="text-center" style={{writingMode:'vertical-rl',transform:'rotate(180deg)'}}>Actual Anomaly</span>
+                        </div>
+                        <div className="flex-1 grid grid-cols-2 gap-1">
+                          <div className="bg-emerald-500/20 border-2 border-emerald-500/40 rounded-xl p-4 text-center">
+                            <p className="text-3xl font-black text-emerald-400">{cm.tn}</p>
+                            <p className="text-[9px] text-emerald-600 font-bold mt-1">TRUE NEGATIVE</p>
+                            <p className="text-[9px] text-slate-500">{((cm.tn/500)*100).toFixed(1)}% of normal</p>
+                          </div>
+                          <div className="bg-red-500/15 border-2 border-red-500/30 rounded-xl p-4 text-center">
+                            <p className="text-3xl font-black text-red-400">{cm.fp}</p>
+                            <p className="text-[9px] text-red-600 font-bold mt-1">FALSE POSITIVE</p>
+                            <p className="text-[9px] text-slate-500">{((cm.fp/500)*100).toFixed(1)}% of normal</p>
+                          </div>
+                          <div className="bg-orange-500/15 border-2 border-orange-500/30 rounded-xl p-4 text-center">
+                            <p className="text-3xl font-black text-orange-400">{cm.fn}</p>
+                            <p className="text-[9px] text-orange-600 font-bold mt-1">FALSE NEGATIVE</p>
+                            <p className="text-[9px] text-slate-500">{((cm.fn/500)*100).toFixed(1)}% of anomalies</p>
+                          </div>
+                          <div className="bg-emerald-500/20 border-2 border-emerald-500/40 rounded-xl p-4 text-center">
+                            <p className="text-3xl font-black text-emerald-400">{cm.tp}</p>
+                            <p className="text-[9px] text-emerald-600 font-bold mt-1">TRUE POSITIVE</p>
+                            <p className="text-[9px] text-slate-500">{((cm.tp/500)*100).toFixed(1)}% of anomalies</p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="mt-4 grid grid-cols-3 gap-2 text-center text-[10px]">
+                      {[
+                        ["Sensitivity (TPR)", `${((cm.tp/(cm.tp+cm.fn))*100).toFixed(1)}%`, "text-emerald-400"],
+                        ["Specificity (TNR)", `${((cm.tn/(cm.tn+cm.fp))*100).toFixed(1)}%`, "text-blue-400"],
+                        ["Miss Rate (FNR)",   `${((cm.fn/(cm.fn+cm.tp))*100).toFixed(1)}%`,  "text-orange-400"],
+                      ].map(([k, v, c]) => (
+                        <div key={k as string} className="bg-slate-800/60 rounded-lg py-2 px-1">
+                          <p className={`text-base font-black ${c}`}>{v}</p>
+                          <p className="text-slate-500 mt-0.5">{k}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                </div>
+
+                {/* ── Training Loss Curve ── */}
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+                  <h3 className="text-sm font-bold text-white mb-1 flex items-center gap-2">
+                    <TrendingDown className="h-4 w-4 text-emerald-400" />
+                    Training Loss Curve (loss × 10⁴ for readability)
+                  </h3>
+                  <p className="text-[10px] text-slate-500 mb-4">
+                    EarlyStopping (patience=20) · ReduceLROnPlateau (factor=0.5, patience=10) — 6 LR reductions over 100 epochs
+                  </p>
+                  <div className="h-48">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={trainingCurve} margin={{ top: 4, right: 16, left: 0, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                        <XAxis dataKey="epoch" tick={{ fontSize: 10, fill: "#64748b" }} label={{ value: "Epoch", position: "insideBottom", offset: -2, style: { fill: "#64748b", fontSize: 10 } }} />
+                        <YAxis tick={{ fontSize: 10, fill: "#64748b" }} />
+                        <Tooltip
+                          contentStyle={{ background: "#0f172a", border: "1px solid #334155", borderRadius: 8, fontSize: 11 }}
+                          formatter={(v: number, name: string) => [`${v.toFixed(3)} ×10⁻⁴`, name === "trainLoss" ? "Train Loss" : "Val Loss"]}
+                          labelFormatter={(e) => `Epoch ${e}`}
+                        />
+                        <Line type="monotone" dataKey="trainLoss" stroke="#8b5cf6" strokeWidth={2} dot={{ r: 3, fill: "#8b5cf6" }} name="trainLoss" />
+                        <Line type="monotone" dataKey="valLoss"   stroke="#10b981" strokeWidth={2} dot={{ r: 3, fill: "#10b981" }} name="valLoss"   strokeDasharray="5 3"/>
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <div className="flex items-center gap-6 mt-3 px-2 text-[11px]">
+                    <div className="flex items-center gap-2"><div className="h-0.5 w-6 bg-violet-500 rounded" /><span className="text-slate-400">Training Loss</span></div>
+                    <div className="flex items-center gap-2"><div className="h-0.5 w-6 bg-emerald-500 rounded border-dashed" /><span className="text-slate-400">Validation Loss</span></div>
+                    <div className="flex-1 text-right text-slate-500">Final val_loss: 5.40×10⁻⁶ · Best epoch: 100</div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+                  {/* ── Feature Engineering ── */}
+                  <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+                    <h3 className="text-sm font-bold text-white mb-4 flex items-center gap-2">
+                      <Database className="h-4 w-4 text-amber-400" />
+                      Input Features — Wearable Security Signals
+                    </h3>
+                    <div className="space-y-3">
+                      {features.map((f, i) => (
+                        <div key={f.name} className="flex items-center gap-3">
+                          <div className="h-6 w-6 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center text-[9px] font-bold text-slate-400 shrink-0">x{i+1}</div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between mb-0.5">
+                              <p className="text-[11px] font-semibold text-slate-200 truncate">{f.name}</p>
+                              <span className="text-[9px] text-slate-500 ml-2 shrink-0">weight: {f.weight}%</span>
+                            </div>
+                            <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                              <div className="h-full bg-gradient-to-r from-violet-500 to-blue-500 rounded-full" style={{ width: `${f.weight}%` }} />
+                            </div>
+                            <p className="text-[9px] text-slate-600 mt-0.5">{f.desc}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="mt-4 bg-slate-800/60 rounded-xl p-3 text-[10px] text-slate-400">
+                      <p className="font-semibold text-slate-300 mb-1">Data generation (n=5,000)</p>
+                      <p>Normal samples (n=2,500): μ±σ distributions. Anomalous samples (n=2,500): elevated means (+30 traffic, +5 logins, +50 packet rate). StandardScaler normalisation applied post-split.</p>
+                    </div>
+                  </div>
+
+                  {/* ── LR Schedule + Integration ── */}
+                  <div className="space-y-4">
+                    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+                      <h3 className="text-sm font-bold text-white mb-3 flex items-center gap-2">
+                        <Zap className="h-4 w-4 text-yellow-400" />
+                        Adaptive Learning Rate Schedule
+                      </h3>
+                      <div className="space-y-1.5">
+                        {lrSchedule.map(({ epoch, lr }) => (
+                          <div key={epoch} className="flex items-center gap-2 text-[10px]">
+                            <span className="text-slate-500 w-16 shrink-0">Epoch {epoch}</span>
+                            <div className="flex-1 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                              <div
+                                className="h-full bg-gradient-to-r from-yellow-500 to-amber-400 rounded-full"
+                                style={{ width: `${Math.max(3, parseFloat(lr) * 100000)}%` }}
+                              />
+                            </div>
+                            <span className="text-amber-400 font-mono w-24 shrink-0 text-right">{lr}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+                      <h3 className="text-sm font-bold text-white mb-3 flex items-center gap-2">
+                        <Wifi className="h-4 w-4 text-emerald-400" />
+                        PulseRPM Integration
+                      </h3>
+                      <div className="space-y-2 text-[11px]">
+                        {[
+                          { icon: "✓", label: "Live audit log scanning", col: "text-emerald-400" },
+                          { icon: "✓", label: "Real-time vitals anomaly scoring", col: "text-emerald-400" },
+                          { icon: "✓", label: "Access pattern analysis", col: "text-emerald-400" },
+                          { icon: "✓", label: "Blockchain transaction integration", col: "text-emerald-400" },
+                          { icon: "✓", label: "MLNN threshold: 0.72 anomaly score", col: "text-emerald-400" },
+                        ].map(item => (
+                          <div key={item.label} className="flex items-center gap-2">
+                            <span className={`font-bold ${item.col}`}>{item.icon}</span>
+                            <span className="text-slate-300">{item.label}</span>
+                          </div>
+                        ))}
+                        <div className="mt-3 bg-emerald-500/8 border border-emerald-500/20 rounded-lg px-3 py-2">
+                          <p className="text-emerald-400 font-semibold text-[10px]">Model endpoint</p>
+                          <p className="text-slate-400 font-mono text-[9px] break-all mt-0.5">
+                            https://remote-patient-monitor--georgenwainaina.replit.app/
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Classification report */}
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+                  <h3 className="text-sm font-bold text-white mb-4 flex items-center gap-2">
+                    <FileText className="h-4 w-4 text-blue-400" />
+                    Classification Report — Full Results
+                  </h3>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-[11px]">
+                      <thead>
+                        <tr className="border-b border-slate-800">
+                          <th className="text-left text-slate-500 pb-2 pr-4">Class</th>
+                          <th className="text-right text-slate-500 pb-2 px-4">Precision</th>
+                          <th className="text-right text-slate-500 pb-2 px-4">Recall</th>
+                          <th className="text-right text-slate-500 pb-2 px-4">F1-Score</th>
+                          <th className="text-right text-slate-500 pb-2 pl-4">Support</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800/50">
+                        {[
+                          { cls: "Normal",       prec: "0.974", rec: "0.968", f1: "0.971", sup: "500",  col: "text-emerald-400" },
+                          { cls: "Anomaly",      prec: "0.968", rec: "0.974", f1: "0.971", sup: "500",  col: "text-red-400"     },
+                          { cls: "Accuracy",     prec: "",      rec: "",      f1: "0.971", sup: "1000", col: "text-violet-400"  },
+                          { cls: "Macro avg",    prec: "0.971", rec: "0.971", f1: "0.971", sup: "1000", col: "text-blue-400"    },
+                          { cls: "Weighted avg", prec: "0.971", rec: "0.971", f1: "0.971", sup: "1000", col: "text-blue-400"    },
+                        ].map(row => (
+                          <tr key={row.cls} className="hover:bg-slate-800/20 transition-colors">
+                            <td className={`py-2 pr-4 font-semibold ${row.col}`}>{row.cls}</td>
+                            <td className="text-right py-2 px-4 text-slate-300 font-mono">{row.prec}</td>
+                            <td className="text-right py-2 px-4 text-slate-300 font-mono">{row.rec}</td>
+                            <td className="text-right py-2 px-4 text-slate-300 font-mono">{row.f1}</td>
+                            <td className="text-right py-2 pl-4 text-slate-500 font-mono">{row.sup}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="mt-4 bg-violet-500/8 border border-violet-500/20 rounded-xl px-4 py-3 text-[11px] text-slate-300 leading-relaxed">
+                    <span className="font-bold text-violet-400">Author: George Wainaina · </span>
+                    Adaptive MLNN trained on 5,000 synthetic wearable healthcare security records (50/50 balanced).
+                    The model achieves <span className="font-bold text-white">97.1% accuracy</span> with only 29 combined errors out of 1,000 test samples —
+                    16 false positives and 13 false negatives — making it highly reliable for real-time anomaly detection in RPM wearable devices.
+                  </div>
+                </div>
+
+              </div>
+            );
+          })()}
 
         </div>
       </div>
