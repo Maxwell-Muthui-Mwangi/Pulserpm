@@ -1,7 +1,10 @@
 import { Router } from "express";
 import { db, auditLogsTable } from "@workspace/db";
-import { desc, eq, and, or, gte, sql } from "drizzle-orm";
+import { desc, eq, and, or, gte, ne, sql } from "drizzle-orm";
 import { requireAuth, requireRole } from "../middlewares/auth.js";
+
+// The founding super admin — permanently shielded from other admins
+export const SUPER_ADMIN_EMAIL = "maxwellmuthuimwangi@gmail.com";
 
 const router = Router();
 
@@ -14,6 +17,12 @@ router.get("/audit", requireAuth, requireRole("provider", "admin"), async (req, 
     const since = req.query.since as string | undefined;
 
     const conditions = [];
+
+    // Non-super-admin users cannot see Maxwell's activity
+    if (req.user!.role === "admin" && !req.user!.isSuperAdmin) {
+      conditions.push(ne(auditLogsTable.actorEmail, SUPER_ADMIN_EMAIL));
+    }
+
     if (outcome && ["success", "failure", "denied"].includes(outcome)) {
       conditions.push(eq(auditLogsTable.outcome, outcome));
     }

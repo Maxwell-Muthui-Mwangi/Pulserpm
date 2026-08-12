@@ -220,8 +220,14 @@ router.get("/patients", requireAuth, async (req, res) => {
     // Patients can only see themselves
     if (req.user!.role === "patient") {
       conditions.push(eq(patientsTable.id, req.user!.id));
+    } else if (req.user!.role === "admin") {
+      // Admins (including super admin) see ALL patients
+      if (search) {
+        const s = `%${search}%`;
+        conditions.push(or(ilike(patientsTable.name, s), ilike(patientsTable.email, s)));
+      }
     } else {
-      // Providers only see patients they personally approved (assigned to them)
+      // Providers only see patients assigned to them
       conditions.push(eq(patientsTable.providerId, req.user!.id));
       if (search) {
         const s = `%${search}%`;
