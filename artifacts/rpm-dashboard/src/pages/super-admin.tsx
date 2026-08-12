@@ -395,6 +395,49 @@ export default function SuperAdmin() {
     setTeamAction(null);
   };
 
+  const [transferState, setTransferState] = useState<{ fromId: number; toId: string; loading: boolean; error: string } | null>(null);
+
+  const startTransfer = (fromId: number) => setTransferState({ fromId, toId: "", loading: false, error: "" });
+
+  const confirmTransfer = async () => {
+    if (!transferState || !transferState.toId) return;
+    setTransferState((s) => s ? { ...s, loading: true, error: "" } : s);
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/providers/${transferState.fromId}/transfer-patients`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${getAuthToken()}` },
+        body: JSON.stringify({ toProviderId: parseInt(transferState.toId, 10) }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setTransferState(null);
+        await fetchTeam();
+      } else {
+        setTransferState((s) => s ? { ...s, loading: false, error: data.message ?? "Transfer failed." } : s);
+      }
+    } catch {
+      setTransferState((s) => s ? { ...s, loading: false, error: "Network error." } : s);
+    }
+  };
+
+  const deleteProvider = async (id: number, name: string) => {
+    if (!window.confirm(`Permanently delete ${name}? Make sure they have no patients first.`)) return;
+    setTeamAction(id);
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/providers/${id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${getAuthToken()}` },
+      });
+      const data = await res.json();
+      if (res.ok) {
+        await fetchTeam();
+      } else {
+        alert(data.message ?? "Delete failed.");
+      }
+    } catch { /* ignore */ }
+    setTeamAction(null);
+  };
+
   const saveSettings = async () => {
     setSettingsSaving(true);
     try {
@@ -1950,9 +1993,10 @@ export default function SuperAdmin() {
                             </button>
                           </div>
 
-                          {/* Expanded patients */}
+                          {/* Expanded patients + admin actions */}
                           {isExpanded && (
-                            <div className="border-t border-slate-800 bg-slate-950/40 px-4 py-3">
+                            <div className="border-t border-slate-800 bg-slate-950/40 px-4 py-3 space-y-3">
+                              {/* Patient list */}
                               {p.patients.length === 0 ? (
                                 <p className="text-[11px] text-slate-600 italic">No patients assigned to this provider.</p>
                               ) : (
@@ -1967,6 +2011,61 @@ export default function SuperAdmin() {
                                       <span className="text-[10px] text-slate-600">{pt.email}</span>
                                     </div>
                                   ))}
+                                </div>
+                              )}
+
+                              {/* Admin actions — not shown for Maxwell */}
+                              {!p.isSuperAdmin && (
+                                <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-800/60">
+                                  {/* Transfer patients */}
+                                  {transferState?.fromId === p.id ? (
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <select
+                                        value={transferState.toId}
+                                        onChange={(e) => setTransferState((s) => s ? { ...s, toId: e.target.value, error: "" } : s)}
+                                        className="h-7 bg-slate-800 border border-slate-700 rounded-lg px-2 text-[11px] text-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                      >
+                                        <option value="">Transfer patients to…</option>
+                                        {teamProviders
+                                          .filter((tp) => tp.id !== p.id && !tp.isSuperAdmin)
+                                          .map((tp) => (
+                                            <option key={tp.id} value={String(tp.id)}>{tp.name}</option>
+                                          ))}
+                                      </select>
+                                      <button
+                                        onClick={confirmTransfer}
+                                        disabled={!transferState.toId || transferState.loading}
+                                        className="h-7 px-3 bg-blue-600/80 hover:bg-blue-600 text-white text-[11px] font-semibold rounded-lg disabled:opacity-50 transition-colors"
+                                      >
+                                        {transferState.loading ? "Transferring…" : "Confirm"}
+                                      </button>
+                                      <button
+                                        onClick={() => setTransferState(null)}
+                                        className="h-7 px-3 bg-slate-800 hover:bg-slate-700 text-slate-400 text-[11px] rounded-lg transition-colors"
+                                      >
+                                        Cancel
+                                      </button>
+                                      {transferState.error && (
+                                        <span className="text-[10px] text-red-400">{transferState.error}</span>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <button
+                                      onClick={() => startTransfer(p.id)}
+                                      className="h-7 px-3 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-[11px] rounded-lg transition-colors"
+                                    >
+                                      Transfer patients →
+                                    </button>
+                                  )}
+
+                                  {/* Delete provider */}
+                                  <button
+                                    onClick={() => deleteProvider(p.id, p.name)}
+                                    disabled={teamAction === p.id}
+                                    className="h-7 px-3 bg-red-500/10 hover:bg-red-500/20 border border-red-500/25 text-red-400 text-[11px] rounded-lg transition-colors disabled:opacity-50"
+                                  >
+                                    {teamAction === p.id ? "Deleting…" : "Remove provider"}
+                                  </button>
                                 </div>
                               )}
                             </div>

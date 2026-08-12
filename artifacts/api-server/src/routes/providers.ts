@@ -293,6 +293,97 @@ router.post("/admin/providers/:id/set-role", requireAuth, async (req, res) => {
   }
 });
 
+// ── Admin: transfer all patients from one provider to another ─────────────────
+// Admins + super admin can use this. Useful before removing a provider.
+router.post("/admin/providers/:id/transfer-patients", requireAuth, async (req, res) => {
+  try {
+    if (req.user!.role !== "admin") {
+      res.status(403).json({ error: "Forbidden", message: "Admin access required." });
+      return;
+    }
+
+    const fromId = parseInt(req.params.id, 10);
+    const { toProviderId } = req.body;
+
+    if (!toProviderId || isNaN(parseInt(toProviderId, 10))) {
+      res.status(400).json({ error: "Bad Request", message: "toProviderId is required." });
+      return;
+    }
+
+    const toId = parseInt(toProviderId, 10);
+    if (fromId === toId) {
+      res.status(400).json({ error: "Bad Request", message: "Source and target provider must be different." });
+      return;
+    }
+
+    const [[fromProvider], [toProvider]] = await Promise.all([
+      db.select({ id: providersTable.id, name: providersTable.name, isSuperAdmin: providersTable.isSuperAdmin }).from(providersTable).where(eq(providersTable.id, fromId)).limit(1),
+      db.select({ id: providersTable.id, name: providersTable.name, isSuperAdmin: providersTable.isSuperAdmin }).from(providersTable).where(eq(providersTable.id, toId)).limit(1),
+    ]);
+
+    if (!fromProvider) { res.status(404).json({ error: "Not Found", message: "Source provider not found." }); return; }
+    if (!toProvider)   { res.status(404).json({ error: "Not Found", message: "Target provider not found." }); return; }
+    if (toProvider.isSuperAdmin) { res.status(403).json({ error: "Forbidden", message: "Cannot assign patients to the super admin." }); return; }
+
+    const updated = await db
+      .update(patientsTable)
+      .set({ providerId: toId })
+      .where(eq(patientsTable.providerId, fromId))
+      .returning({ id: patientsTable.id });
+
+    logAuditEvent({
+      actorId: req.user!.id, actorEmail: req.user!.email, actorRole: req.user!.role,
+      action: "admin.transfer_patients", resourceType: "provider", resourceId: String(fromId),
+      ipAddress: getClientIp(req), userAgent: req.headers["user-agent"], outcome: "success",
+      details: JSON.stringify({ fromId, toId, fromName: fromProvider.name, toName: toProvider.name, count: updated.length }),
+    });
+
+    res.json({ ok: true, transferred: updated.length, from: fromProvider.name, to: toProvider.name });
+  } catch (err) {
+    console.error("Transfer patients error:", err);
+    res.status(500).json({ error: "Internal Server Error", message: "Failed to transfer patients." });
+  }
+});
+
+// ── Admin: delete an approved provider (after transferring their patients) ────
+router.delete("/admin/providers/:id", requireAuth, async (req, res) => {
+  try {
+    if (req.user!.role !== "admin") {
+      res.status(403).json({ error: "Forbidden", message: "Admin access required." });
+      return;
+    }
+
+    const providerId = parseInt(req.params.id, 10);
+    const [provider] = await db.select().from(providersTable).where(eq(providersTable.id, providerId)).limit(1);
+    if (!provider) { res.status(404).json({ error: "Not Found", message: "Provider not found." }); return; }
+
+    if (provider.isSuperAdmin || provider.email === SUPER_ADMIN_EMAIL) {
+      res.status(403).json({ error: "Forbidden", message: "The founding super admin account cannot be deleted." });
+      return;
+    }
+
+    const [stillHasPatients] = await db.select({ c: count() }).from(patientsTable).where(eq(patientsTable.providerId, providerId));
+    if (Number(stillHasPatients?.c ?? 0) > 0) {
+      res.status(409).json({ error: "Conflict", message: `This provider still has ${stillHasPatients.c} patient(s). Transfer them first.` });
+      return;
+    }
+
+    await db.delete(providersTable).where(eq(providersTable.id, providerId));
+
+    logAuditEvent({
+      actorId: req.user!.id, actorEmail: req.user!.email, actorRole: req.user!.role,
+      action: "admin.delete_provider", resourceType: "provider", resourceId: String(providerId),
+      ipAddress: getClientIp(req), userAgent: req.headers["user-agent"], outcome: "success",
+      details: JSON.stringify({ name: provider.name, email: provider.email }),
+    });
+
+    res.json({ ok: true, id: providerId, name: provider.name });
+  } catch (err) {
+    console.error("Delete provider error:", err);
+    res.status(500).json({ error: "Internal Server Error", message: "Failed to delete provider." });
+  }
+});
+
 // ── Admin: grant or revoke manager rights for a provider ──────────────────────
 // Admins and super admin can grant manager rights to providers.
 router.post("/admin/providers/:id/set-manager", requireAuth, async (req, res) => {
