@@ -14,7 +14,7 @@ import {
   ChevronRight, Download, Filter,
   Server, Database, Zap, Clock, Bell, Lock,
   HardDrive, Cpu, XCircle, Info, Shield, Save,
-  ToggleLeft, ToggleRight, CheckSquare, Gauge,
+  ToggleLeft, ToggleRight, CheckSquare, Gauge, Trash2,
 } from "lucide-react";
 import {
   LineChart, Line, PieChart, Pie, Cell,
@@ -42,6 +42,7 @@ type AdminSection =
   | "healthcare-providers"
   | "admins-management"
   | "mlnn-research"
+  | "patient-management"
   | "system"
   | "reports"
   | "settings";
@@ -375,6 +376,67 @@ export default function SuperAdmin() {
     if (section === "manage-team" || section === "healthcare-providers" || section === "admins-management") fetchTeam();
   }, [section, fetchTeam]);
 
+  // ── Patient management state ─────────────────────────────────────────────────
+  type PmPatient = {
+    id: number; name: string; email: string; dateOfBirth: string | null;
+    gender: string | null; conditions: string[]; deviceType: string | null;
+    providerId: number | null; createdAt: string; deletedAt: string | null;
+  };
+  const [pmPatients, setPmPatients] = useState<PmPatient[]>([]);
+  const [pmLoading, setPmLoading] = useState(false);
+  const [pmTab, setPmTab] = useState<"active" | "trashed">("active");
+  const [pmAction, setPmAction] = useState<number | null>(null);
+  const [pmSearch, setPmSearch] = useState("");
+  const [pmConfirm, setPmConfirm] = useState<{ id: number; name: string; kind: "trash" | "delete" } | null>(null);
+
+  const fetchAllPatients = useCallback(async () => {
+    setPmLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/patients/all`, {
+        headers: { Authorization: `Bearer ${getAuthToken()}` },
+      });
+      if (res.ok) setPmPatients(await res.json());
+    } catch { /* ignore */ }
+    setPmLoading(false);
+  }, []);
+
+  useEffect(() => {
+    if (section === "patient-management") fetchAllPatients();
+  }, [section, fetchAllPatients]);
+
+  const trashPatient = async (id: number) => {
+    setPmAction(id);
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/patients/${id}/trash`, {
+        method: "POST", headers: { Authorization: `Bearer ${getAuthToken()}` },
+      });
+      if (res.ok) { setPmConfirm(null); await fetchAllPatients(); }
+    } catch { /* ignore */ }
+    setPmAction(null);
+  };
+
+  const restorePatient = async (id: number) => {
+    setPmAction(id);
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/patients/${id}/restore`, {
+        method: "POST", headers: { Authorization: `Bearer ${getAuthToken()}` },
+      });
+      if (res.ok) await fetchAllPatients();
+    } catch { /* ignore */ }
+    setPmAction(null);
+  };
+
+  const hardDeletePatient = async (id: number) => {
+    setPmAction(id);
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/patients/${id}`, {
+        method: "DELETE", headers: { Authorization: `Bearer ${getAuthToken()}` },
+      });
+      if (res.ok) { setPmConfirm(null); await fetchAllPatients(); }
+    } catch { /* ignore */ }
+    setPmAction(null);
+  };
+
   const setProviderRole = async (id: number, role: string) => {
     setTeamAction(id);
     try {
@@ -637,6 +699,7 @@ export default function SuperAdmin() {
     // Super-admin only management sections
     { id: "healthcare-providers", label: "Healthcare Providers",           icon: Shield, superAdminOnly: true },
     { id: "admins-management",    label: "Admins",                         icon: Lock,  superAdminOnly: true },
+    { id: "patient-management",   label: "Patient Management",             icon: Users, superAdminOnly: true, danger: true },
     { id: "mlnn-research",        label: "MLNN Research",                  icon: BrainCircuit, superAdminOnly: true },
     { id: "system",               label: "System Integrity",               icon: ShieldAlert },
     { id: "reports",              label: "Reports",                        icon: FileText },
@@ -754,6 +817,7 @@ export default function SuperAdmin() {
               {section === "settings"             && "Settings"}
               {section === "healthcare-providers" && "Healthcare Providers"}
               {section === "admins-management"    && "Admins Management"}
+              {section === "patient-management"   && "Patient Management"}
               {section === "mlnn-research"        && "MLNN Model — Research & Implementation"}
             </h1>
           </div>
@@ -2414,6 +2478,231 @@ export default function SuperAdmin() {
               )}
             </>
           )}
+
+          {/* ── PATIENT MANAGEMENT (super-admin only) ───────────────────── */}
+          {section === "patient-management" && (() => {
+            const q = pmSearch.toLowerCase();
+            const active  = pmPatients.filter(p => !p.deletedAt  && (!q || p.name.toLowerCase().includes(q) || p.email.toLowerCase().includes(q)));
+            const trashed = pmPatients.filter(p => !!p.deletedAt && (!q || p.name.toLowerCase().includes(q) || p.email.toLowerCase().includes(q)));
+            const shown   = pmTab === "active" ? active : trashed;
+
+            const calcAge = (dob: string | null) => {
+              if (!dob) return null;
+              const diff = Date.now() - new Date(dob).getTime();
+              return Math.floor(diff / (1000 * 60 * 60 * 24 * 365.25));
+            };
+
+            return (
+              <div className="overflow-y-auto flex flex-col h-full">
+
+                {/* Confirmation modal */}
+                {pmConfirm && (
+                  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+                    <div className="bg-slate-900 border border-slate-700 rounded-2xl p-6 w-full max-w-sm shadow-2xl">
+                      {pmConfirm.kind === "trash" ? (
+                        <>
+                          <div className="h-10 w-10 rounded-full bg-amber-500/15 border border-amber-500/30 flex items-center justify-center mb-4">
+                            <Trash2 className="h-5 w-5 text-amber-400" />
+                          </div>
+                          <h3 className="text-base font-bold text-white mb-1">Move to Trash?</h3>
+                          <p className="text-[12px] text-slate-400 mb-5">
+                            <span className="font-semibold text-white">{pmConfirm.name}</span> will be hidden from all clinicians but their data is preserved. You can restore them later.
+                          </p>
+                          <div className="flex gap-2">
+                            <button onClick={() => setPmConfirm(null)} className="flex-1 h-9 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-[12px] rounded-xl transition-colors">Cancel</button>
+                            <button
+                              onClick={() => trashPatient(pmConfirm.id)}
+                              disabled={pmAction === pmConfirm.id}
+                              className="flex-1 h-9 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 text-[12px] font-semibold rounded-xl transition-colors disabled:opacity-50"
+                            >
+                              {pmAction === pmConfirm.id ? "Moving…" : "Move to Trash"}
+                            </button>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div className="h-10 w-10 rounded-full bg-red-500/15 border border-red-500/30 flex items-center justify-center mb-4">
+                            <XCircle className="h-5 w-5 text-red-400" />
+                          </div>
+                          <h3 className="text-base font-bold text-white mb-1">Permanently Delete?</h3>
+                          <p className="text-[12px] text-slate-400 mb-5">
+                            This will <span className="font-bold text-red-400">permanently erase</span> <span className="font-semibold text-white">{pmConfirm.name}</span> and all their vitals, alerts, and thresholds. This cannot be undone.
+                          </p>
+                          <div className="flex gap-2">
+                            <button onClick={() => setPmConfirm(null)} className="flex-1 h-9 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-[12px] rounded-xl transition-colors">Cancel</button>
+                            <button
+                              onClick={() => hardDeletePatient(pmConfirm.id)}
+                              disabled={pmAction === pmConfirm.id}
+                              className="flex-1 h-9 bg-red-500/20 hover:bg-red-500/30 border border-red-500/40 text-red-300 text-[12px] font-semibold rounded-xl transition-colors disabled:opacity-50"
+                            >
+                              {pmAction === pmConfirm.id ? "Deleting…" : "Delete Forever"}
+                            </button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Toolbar */}
+                <div className="flex items-center justify-between gap-3 flex-wrap px-2 mb-4">
+                  {/* Tab switcher */}
+                  <div className="flex items-center bg-slate-800/60 border border-slate-700/60 rounded-xl p-1 gap-1">
+                    {(["active", "trashed"] as const).map(t => (
+                      <button
+                        key={t}
+                        onClick={() => setPmTab(t)}
+                        className={`flex items-center gap-1.5 px-4 h-7 rounded-lg text-[11px] font-semibold transition-colors ${
+                          pmTab === t
+                            ? t === "trashed"
+                              ? "bg-amber-500/20 text-amber-300 border border-amber-500/30"
+                              : "bg-slate-700 text-white"
+                            : "text-slate-500 hover:text-slate-300"
+                        }`}
+                      >
+                        {t === "active" ? <Users className="h-3 w-3" /> : <Trash2 className="h-3 w-3" />}
+                        {t === "active" ? `Active (${active.length})` : `Trash (${trashed.length})`}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    {/* Search */}
+                    <div className="relative">
+                      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-500" />
+                      <input
+                        value={pmSearch}
+                        onChange={e => setPmSearch(e.target.value)}
+                        placeholder="Search patients…"
+                        className="pl-8 pr-3 h-8 bg-slate-800 border border-slate-700 rounded-lg text-[11px] text-slate-200 focus:outline-none focus:ring-1 focus:ring-violet-500 w-44"
+                      />
+                    </div>
+                    <button
+                      onClick={fetchAllPatients}
+                      className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-[11px] px-3 h-8 rounded-lg transition-colors"
+                    >
+                      <RefreshCw className="h-3 w-3" /> Refresh
+                    </button>
+                  </div>
+                </div>
+
+                {/* Stats strip */}
+                <div className="grid grid-cols-3 gap-3 mb-4">
+                  {[
+                    { label: "Total Patients",  value: pmPatients.filter(p => !p.deletedAt).length,  color: "text-emerald-400" },
+                    { label: "In Trash",        value: pmPatients.filter(p => !!p.deletedAt).length, color: "text-amber-400"   },
+                    { label: "Total Records",   value: pmPatients.length,                             color: "text-violet-400"  },
+                  ].map(s => (
+                    <div key={s.label} className="bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 text-center">
+                      <p className={`text-xl font-black ${s.color}`}>{s.value}</p>
+                      <p className="text-[10px] text-slate-500 mt-0.5 uppercase tracking-wider font-semibold">{s.label}</p>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Patient list */}
+                <div className="flex-1 overflow-y-auto bg-slate-900 border border-slate-800 rounded-2xl divide-y divide-slate-800/50">
+                  {pmLoading ? (
+                    <div className="flex items-center justify-center py-16">
+                      <RefreshCw className="h-5 w-5 text-slate-600 animate-spin" />
+                    </div>
+                  ) : shown.length === 0 ? (
+                    <div className="text-center py-16 text-slate-600 text-sm">
+                      {pmTab === "trashed" ? "Trash is empty." : "No active patients found."}
+                    </div>
+                  ) : shown.map(p => {
+                    const age = calcAge(p.dateOfBirth);
+                    const initials = p.name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
+                    const isActing = pmAction === p.id;
+                    const isTrashed = !!p.deletedAt;
+                    return (
+                      <div key={p.id} className={`flex items-center gap-4 px-5 py-3.5 hover:bg-slate-800/20 transition-colors ${isTrashed ? "opacity-60" : ""}`}>
+                        {/* Avatar */}
+                        <div className={`h-9 w-9 rounded-full flex items-center justify-center text-xs font-bold shrink-0 border ${
+                          isTrashed
+                            ? "bg-amber-500/10 border-amber-500/20 text-amber-400"
+                            : "bg-emerald-500/10 border-emerald-500/20 text-emerald-300"
+                        }`}>
+                          {initials}
+                        </div>
+
+                        {/* Info */}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <p className="text-[12px] font-semibold text-white truncate">{p.name}</p>
+                            {isTrashed && (
+                              <span className="px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400 text-[9px] font-bold border border-amber-500/25">TRASH</span>
+                            )}
+                          </div>
+                          <p className="text-[10px] text-slate-500 truncate">{p.email}</p>
+                          <div className="flex items-center gap-3 mt-0.5 text-[9px] text-slate-600">
+                            {age !== null && <span>{age} yrs · {p.gender ?? "—"}</span>}
+                            {p.conditions?.length > 0 && <span>{p.conditions.slice(0, 2).join(", ")}{p.conditions.length > 2 ? " …" : ""}</span>}
+                            {isTrashed && p.deletedAt && <span className="text-amber-600">Trashed {new Date(p.deletedAt).toLocaleDateString()}</span>}
+                          </div>
+                        </div>
+
+                        {/* Device badge */}
+                        <span className="hidden sm:block px-2 py-0.5 rounded-full bg-slate-800 border border-slate-700 text-[9px] text-slate-400 capitalize shrink-0">
+                          {p.deviceType ?? "manual"}
+                        </span>
+
+                        {/* Actions */}
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          {isTrashed ? (
+                            <>
+                              <button
+                                onClick={() => restorePatient(p.id)}
+                                disabled={isActing}
+                                title="Restore patient"
+                                className="h-7 px-3 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/25 text-emerald-400 text-[10px] font-semibold rounded-lg transition-colors disabled:opacity-50 flex items-center gap-1"
+                              >
+                                {isActing ? <RefreshCw className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />}
+                                Restore
+                              </button>
+                              <button
+                                onClick={() => setPmConfirm({ id: p.id, name: p.name, kind: "delete" })}
+                                disabled={isActing}
+                                title="Delete permanently"
+                                className="h-7 px-3 bg-red-500/10 hover:bg-red-500/20 border border-red-500/25 text-red-400 text-[10px] font-semibold rounded-lg transition-colors disabled:opacity-50 flex items-center gap-1"
+                              >
+                                <XCircle className="h-3 w-3" /> Delete Forever
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <button
+                                onClick={() => setPmConfirm({ id: p.id, name: p.name, kind: "trash" })}
+                                disabled={isActing}
+                                title="Move to trash"
+                                className="h-7 px-3 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/25 text-amber-400 text-[10px] font-semibold rounded-lg transition-colors disabled:opacity-50 flex items-center gap-1"
+                              >
+                                <Trash2 className="h-3 w-3" /> Trash
+                              </button>
+                              <button
+                                onClick={() => setPmConfirm({ id: p.id, name: p.name, kind: "delete" })}
+                                disabled={isActing}
+                                title="Delete permanently"
+                                className="h-7 px-3 bg-red-500/10 hover:bg-red-500/20 border border-red-500/25 text-red-400 text-[10px] font-semibold rounded-lg transition-colors disabled:opacity-50 flex items-center gap-1"
+                              >
+                                <XCircle className="h-3 w-3" /> Delete
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {pmTab === "trashed" && trashed.length > 0 && (
+                  <p className="text-center text-[10px] text-slate-600 mt-3 pb-2">
+                    Trashed patients are hidden from all clinicians. Restore to make them visible again, or delete forever to erase all data.
+                  </p>
+                )}
+              </div>
+            );
+          })()}
 
           {/* ── MLNN Research & Implementation (super-admin only) ─────── */}
           {section === "mlnn-research" && (() => {

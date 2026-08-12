@@ -20,6 +20,7 @@ export const patientsTable = pgTable("patients", {
   passwordResetCodeExpiry: timestamp("password_reset_code_expiry"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  deletedAt: timestamp("deleted_at"),
 });
 
 export const insertPatientSchema = createInsertSchema(patientsTable).omit({

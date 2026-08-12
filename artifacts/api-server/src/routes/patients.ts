@@ -246,6 +246,9 @@ router.get("/patients", requireAuth, async (req, res) => {
       }
     }
 
+    // Never return trashed patients to normal views
+    conditions.push(isNull(patientsTable.deletedAt));
+
     if (conditions.length > 0) {
       query = query.where(and(...conditions));
     }
@@ -458,6 +461,87 @@ router.put("/patients/:patientId", requireAuth, async (req, res) => {
   } catch (err) {
     console.error("Update patient error:", err);
     res.status(500).json({ error: "Internal Server Error", message: "Failed to update patient" });
+  }
+});
+
+// ── Admin: list ALL patients including trashed (super-admin only) ────────────
+router.get("/admin/patients/all", requireAuth, async (req, res) => {
+  try {
+    if (req.user!.role !== "admin") {
+      res.status(403).json({ error: "Forbidden", message: "Admin only" });
+      return;
+    }
+    const patients = await db
+      .select({
+        id: patientsTable.id,
+        name: patientsTable.name,
+        email: patientsTable.email,
+        dateOfBirth: patientsTable.dateOfBirth,
+        gender: patientsTable.gender,
+        conditions: patientsTable.conditions,
+        deviceType: patientsTable.deviceType,
+        providerId: patientsTable.providerId,
+        createdAt: patientsTable.createdAt,
+        deletedAt: patientsTable.deletedAt,
+      })
+      .from(patientsTable)
+      .orderBy(desc(patientsTable.createdAt));
+    res.json(patients);
+  } catch (err) {
+    console.error("List all patients error:", err);
+    res.status(500).json({ error: "Internal Server Error", message: "Failed to list patients" });
+  }
+});
+
+// ── Admin: move a patient to trash (soft delete) ─────────────────────────────
+router.post("/admin/patients/:patientId/trash", requireAuth, async (req, res) => {
+  try {
+    if (req.user!.role !== "admin") {
+      res.status(403).json({ error: "Forbidden", message: "Admin only" });
+      return;
+    }
+    const patientId = Number(req.params.patientId);
+    const [patient] = await db.select().from(patientsTable).where(eq(patientsTable.id, patientId)).limit(1);
+    if (!patient) {
+      res.status(404).json({ error: "Not Found", message: "Patient not found" });
+      return;
+    }
+    const [updated] = await db
+      .update(patientsTable)
+      .set({ deletedAt: new Date() })
+      .where(eq(patientsTable.id, patientId))
+      .returning({ id: patientsTable.id, name: patientsTable.name });
+    console.log(`[admin] Patient ${patientId} (${patient.name}) moved to trash by ${req.user!.email}`);
+    res.json({ success: true, trashed: updated });
+  } catch (err) {
+    console.error("Trash patient error:", err);
+    res.status(500).json({ error: "Internal Server Error", message: "Failed to trash patient" });
+  }
+});
+
+// ── Admin: restore a patient from trash ──────────────────────────────────────
+router.post("/admin/patients/:patientId/restore", requireAuth, async (req, res) => {
+  try {
+    if (req.user!.role !== "admin") {
+      res.status(403).json({ error: "Forbidden", message: "Admin only" });
+      return;
+    }
+    const patientId = Number(req.params.patientId);
+    const [patient] = await db.select().from(patientsTable).where(eq(patientsTable.id, patientId)).limit(1);
+    if (!patient) {
+      res.status(404).json({ error: "Not Found", message: "Patient not found" });
+      return;
+    }
+    const [updated] = await db
+      .update(patientsTable)
+      .set({ deletedAt: null })
+      .where(eq(patientsTable.id, patientId))
+      .returning({ id: patientsTable.id, name: patientsTable.name });
+    console.log(`[admin] Patient ${patientId} (${patient.name}) restored from trash by ${req.user!.email}`);
+    res.json({ success: true, restored: updated });
+  } catch (err) {
+    console.error("Restore patient error:", err);
+    res.status(500).json({ error: "Internal Server Error", message: "Failed to restore patient" });
   }
 });
 

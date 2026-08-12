@@ -22,6 +22,11 @@ async function bootstrapSuperAdmin() {
         ADD COLUMN IF NOT EXISTS is_manager     boolean NOT NULL DEFAULT false
     `);
 
+    await db.execute(sql`
+      ALTER TABLE patients
+        ADD COLUMN IF NOT EXISTS deleted_at timestamp
+    `);
+
     // Step 2 — ensure Maxwell is a super admin with admin role
     await db.execute(sql`
       UPDATE providers
