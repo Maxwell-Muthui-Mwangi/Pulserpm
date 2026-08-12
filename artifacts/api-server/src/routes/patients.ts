@@ -461,4 +461,30 @@ router.put("/patients/:patientId", requireAuth, async (req, res) => {
   }
 });
 
+// ── Admin: delete a patient and all their data ──────────────────────────────
+router.delete("/admin/patients/:patientId", requireAuth, async (req, res) => {
+  try {
+    if (req.user!.role !== "admin") {
+      res.status(403).json({ error: "Forbidden", message: "Admin only" });
+      return;
+    }
+    const patientId = Number(req.params.patientId);
+    const [patient] = await db.select().from(patientsTable).where(eq(patientsTable.id, patientId)).limit(1);
+    if (!patient) {
+      res.status(404).json({ error: "Not Found", message: "Patient not found" });
+      return;
+    }
+    // Delete all related data first
+    await db.delete(vitalsTable).where(eq(vitalsTable.patientId, patientId));
+    await db.delete(alertsTable).where(eq(alertsTable.patientId, patientId));
+    await db.delete(thresholdsTable).where(eq(thresholdsTable.patientId, patientId));
+    await db.delete(patientsTable).where(eq(patientsTable.id, patientId));
+    console.log(`[admin] Patient ${patientId} (${patient.name}) deleted by ${req.user!.email}`);
+    res.json({ success: true, deleted: { id: patientId, name: patient.name, email: patient.email } });
+  } catch (err) {
+    console.error("Delete patient error:", err);
+    res.status(500).json({ error: "Internal Server Error", message: "Failed to delete patient" });
+  }
+});
+
 export default router;
