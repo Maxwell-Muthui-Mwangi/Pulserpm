@@ -157,7 +157,10 @@ export default function SuperAdmin() {
   const { user, isAdmin, isSuperAdmin, isLoading } = useAuth();
   const { fmt } = useTimezone();
 
-  const [section, setSection] = useState<AdminSection>("threat-alerts");
+  const [section, setSection] = useState<AdminSection>(() => {
+    const s = new URLSearchParams(window.location.search).get("section");
+    return (s as AdminSection) ?? "threat-alerts";
+  });
 
   // ── Threat state ────────────────────────────────────────────────────────────
   const [logs, setLogs] = useState<AuditLogEntry[]>([]);

@@ -23,7 +23,7 @@ import {
 } from "lucide-react";
 import { removeAuthToken, withAuth, getAuthToken } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
-import { Crown } from "lucide-react";
+import { Crown, Stethoscope } from "lucide-react";
 import { useListAlerts } from "@workspace/api-client-react";
 import { queryClient } from "@/lib/query-client";
 import { Button } from "@/components/ui/button";
@@ -85,6 +85,7 @@ export default function Layout({ children }: LayoutProps) {
   const providerNavItems = [
     { href: "/", label: "Overview", icon: LayoutDashboard },
     { href: "/patients", label: "Patients", icon: Users },
+    ...(isSuperAdmin ? [{ href: "/super-admin?section=healthcare-providers", label: "Healthcare Providers", icon: Stethoscope }] : []),
     { href: "/alerts", label: "Alerts", icon: AlertCircle },
     // Security / admin-only items — hidden from regular providers
     ...(isAdmin ? [
