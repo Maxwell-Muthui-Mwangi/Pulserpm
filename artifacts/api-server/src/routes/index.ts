@@ -10,6 +10,7 @@ import summaryRouter from "./summary.js";
 import deviceRouter from "./device.js";
 import auditRouter from "./audit.js";
 import testEmailRouter from "./testEmail.js";
+import adminSystemRouter from "./admin-system.js";
 
 const router: IRouter = Router();
 
@@ -24,5 +25,6 @@ router.use(summaryRouter);
 router.use(deviceRouter);
 router.use(auditRouter);
 router.use(testEmailRouter);
+router.use(adminSystemRouter);
 
 export default router;

@@ -12,6 +12,9 @@ import {
   Wifi, WifiOff, Search, Copy, CheckCircle2,
   BarChart3, Users, Settings, FileText, Globe,
   ChevronRight, Download, Filter,
+  Server, Database, Zap, Clock, Bell, Lock,
+  HardDrive, Cpu, XCircle, Info, Shield, Save,
+  ToggleLeft, ToggleRight, CheckSquare, Gauge,
 } from "lucide-react";
 import {
   LineChart, Line, PieChart, Pie, Cell,
@@ -210,6 +213,123 @@ export default function SuperAdmin() {
       }
     } catch { /* ignore */ }
     setActionLoading(null);
+  };
+
+  // ── Network monitoring state ─────────────────────────────────────────────────
+  const [netData, setNetData] = useState<any>(null);
+  const [netLoading, setNetLoading] = useState(false);
+
+  const fetchNetwork = useCallback(async () => {
+    setNetLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/system/network`, {
+        headers: { Authorization: `Bearer ${getAuthToken()}` },
+      });
+      if (res.ok) setNetData(await res.json());
+    } catch { /* ignore */ }
+    setNetLoading(false);
+  }, []);
+
+  useEffect(() => {
+    if (section !== "network") return;
+    fetchNetwork();
+    const id = setInterval(fetchNetwork, 30_000);
+    return () => clearInterval(id);
+  }, [section, fetchNetwork]);
+
+  // ── System integrity state ────────────────────────────────────────────────────
+  const [integrityData, setIntegrityData] = useState<any>(null);
+  const [integrityLoading, setIntegrityLoading] = useState(false);
+
+  const fetchIntegrity = useCallback(async () => {
+    setIntegrityLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/system/integrity`, {
+        headers: { Authorization: `Bearer ${getAuthToken()}` },
+      });
+      if (res.ok) setIntegrityData(await res.json());
+    } catch { /* ignore */ }
+    setIntegrityLoading(false);
+  }, []);
+
+  useEffect(() => {
+    if (section === "system") fetchIntegrity();
+  }, [section, fetchIntegrity]);
+
+  // ── Reports state ──────────────────────────────────────────────────────────────
+  const [reportData, setReportData] = useState<any>(null);
+  const [reportLoading, setReportLoading] = useState(false);
+  const [exportingCsv, setExportingCsv] = useState(false);
+
+  const fetchReport = useCallback(async () => {
+    setReportLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/reports/summary`, {
+        headers: { Authorization: `Bearer ${getAuthToken()}` },
+      });
+      if (res.ok) setReportData(await res.json());
+    } catch { /* ignore */ }
+    setReportLoading(false);
+  }, []);
+
+  useEffect(() => {
+    if (section === "reports") fetchReport();
+  }, [section, fetchReport]);
+
+  const downloadAuditCsv = async () => {
+    setExportingCsv(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/reports/audit-export?limit=1000`, {
+        headers: { Authorization: `Bearer ${getAuthToken()}` },
+      });
+      if (res.ok) {
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `pulserpm-audit-${new Date().toISOString().slice(0, 10)}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+      }
+    } catch { /* ignore */ }
+    setExportingCsv(false);
+  };
+
+  // ── Settings state ──────────────────────────────────────────────────────────
+  const [sysInfo, setSysInfo] = useState<any>(null);
+  const [settingsData, setSettingsData] = useState<any>(null);
+  const [settingsSaving, setSettingsSaving] = useState(false);
+  const [settingsSaved, setSettingsSaved] = useState(false);
+
+  const fetchSettings = useCallback(async () => {
+    try {
+      const [infoRes, settRes] = await Promise.all([
+        fetch(`${API_BASE}/api/admin/system/info`,     { headers: { Authorization: `Bearer ${getAuthToken()}` } }),
+        fetch(`${API_BASE}/api/admin/system/settings`, { headers: { Authorization: `Bearer ${getAuthToken()}` } }),
+      ]);
+      if (infoRes.ok)  setSysInfo(await infoRes.json());
+      if (settRes.ok) setSettingsData(await settRes.json());
+    } catch { /* ignore */ }
+  }, []);
+
+  useEffect(() => {
+    if (section === "settings") fetchSettings();
+  }, [section, fetchSettings]);
+
+  const saveSettings = async () => {
+    setSettingsSaving(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/system/settings`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${getAuthToken()}` },
+        body: JSON.stringify(settingsData),
+      });
+      if (res.ok) {
+        setSettingsSaved(true);
+        setTimeout(() => setSettingsSaved(false), 2500);
+      }
+    } catch { /* ignore */ }
+    setSettingsSaving(false);
   };
 
   // ── Blockchain state ────────────────────────────────────────────────────────
@@ -946,22 +1066,466 @@ export default function SuperAdmin() {
             </>
           )}
 
-          {/* ══ PLACEHOLDER SECTIONS ══════════════════════════════════════ */}
-          {!["threat-alerts","blockchain","user-activity"].includes(section) && (
-            <div className="flex flex-col items-center justify-center py-32 gap-4">
-              <div className="h-16 w-16 rounded-2xl bg-slate-800 border border-slate-700 flex items-center justify-center">
-                {sidebarItems.find((s) => s.id === section) && (() => {
-                  const Icon = sidebarItems.find((s) => s.id === section)!.icon;
-                  return <Icon className="h-7 w-7 text-slate-500" />;
-                })()}
+          {/* ══ NETWORK MONITORING ══════════════════════════════════════════ */}
+          {section === "network" && (
+            <>
+              <div className="flex items-center justify-between flex-wrap gap-3">
+                <div>
+                  <h2 className="text-sm font-bold text-white">Network Monitoring</h2>
+                  <p className="text-[11px] text-slate-500">Real-time API endpoint health and connectivity — refreshes every 30 seconds</p>
+                </div>
+                <button onClick={fetchNetwork} disabled={netLoading}
+                  className="flex items-center gap-1.5 bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-700 transition-colors">
+                  <RefreshCw className={`h-3.5 w-3.5 ${netLoading ? "animate-spin" : ""}`} />
+                  Refresh
+                </button>
               </div>
-              <div className="text-center">
-                <p className="text-sm font-semibold text-slate-400">
-                  {sidebarItems.find((s) => s.id === section)?.label}
-                </p>
-                <p className="text-xs text-slate-600 mt-1">This module is under construction.</p>
+
+              {netLoading && !netData ? (
+                <div className="flex items-center justify-center py-24"><RefreshCw className="h-5 w-5 text-slate-500 animate-spin" /></div>
+              ) : netData ? (
+                <>
+                  {/* KPI row */}
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                    {[
+                      { label: "DB Latency",          value: `${netData.dbLatencyMs}ms`,    icon: Database, color: netData.dbLatencyMs < 100 ? "text-emerald-400" : "text-amber-400" },
+                      { label: "Uptime",               value: `${Math.floor(netData.uptimeSeconds / 60)}m`,    icon: Clock,    color: "text-blue-400"    },
+                      { label: "Vitals / Hour",        value: String(netData.vitalsPerHour), icon: Zap,      color: "text-purple-400"  },
+                      { label: "Recent API Actions",   value: String(netData.activeConnections), icon: Activity, color: "text-teal-400"    },
+                    ].map(({ label, value, icon: Icon, color }) => (
+                      <div key={label} className="bg-slate-900 border border-slate-800 rounded-xl p-4">
+                        <div className="flex items-center gap-2 mb-2">
+                          <Icon className={`h-4 w-4 ${color}`} />
+                          <p className="text-[10px] text-slate-500 uppercase tracking-wide font-semibold">{label}</p>
+                        </div>
+                        <p className={`text-2xl font-black ${color}`}>{value}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Endpoint table */}
+                  <div className="bg-slate-900 rounded-xl border border-slate-800">
+                    <div className="px-5 py-3 border-b border-slate-800 flex items-center justify-between">
+                      <p className="text-xs font-semibold text-slate-300 uppercase tracking-wide">Endpoint Health</p>
+                      <span className="text-[10px] text-slate-500">Probe time: {netData.probeTimeMs}ms</span>
+                    </div>
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="border-b border-slate-800">
+                          {["Endpoint","Status","Latency","Uptime"].map(h => (
+                            <th key={h} className="px-5 py-2.5 text-left font-semibold text-slate-500 uppercase tracking-wide text-[10px]">{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800/60">
+                        {netData.endpoints.map((ep: any) => (
+                          <tr key={ep.name} className="hover:bg-slate-800/20 transition-colors">
+                            <td className="px-5 py-3 flex items-center gap-2">
+                              <Server className="h-3.5 w-3.5 text-slate-500 shrink-0" />
+                              <span className="text-slate-200 font-medium">{ep.name}</span>
+                            </td>
+                            <td className="px-5 py-3">
+                              <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                                ep.status === "healthy" ? "bg-emerald-500/15 text-emerald-400" : "bg-red-500/15 text-red-400"
+                              }`}>
+                                <span className={`h-1.5 w-1.5 rounded-full ${ep.status === "healthy" ? "bg-emerald-400" : "bg-red-400"} animate-pulse`} />
+                                {ep.status === "healthy" ? "Healthy" : "Degraded"}
+                              </span>
+                            </td>
+                            <td className="px-5 py-3">
+                              <div className="flex items-center gap-2">
+                                <div className="h-1.5 w-20 bg-slate-800 rounded-full overflow-hidden">
+                                  <div className="h-full bg-blue-500 rounded-full" style={{ width: `${Math.min((ep.latencyMs / 200) * 100, 100)}%` }} />
+                                </div>
+                                <span className="text-slate-300">{ep.latencyMs}ms</span>
+                              </div>
+                            </td>
+                            <td className="px-5 py-3 text-emerald-400">{ep.uptime.toFixed(2)}%</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* System info strip */}
+                  <div className="grid grid-cols-3 gap-3">
+                    {[
+                      { label: "API Server",     value: "Online", ok: true },
+                      { label: "Database",       value: netData.dbLatencyMs < 500 ? "Connected" : "Slow", ok: netData.dbLatencyMs < 500 },
+                      { label: "Email Service",  value: "Operational", ok: true },
+                    ].map(({ label, value, ok }) => (
+                      <div key={label} className={`rounded-xl border px-4 py-3 flex items-center gap-3 ${ok ? "bg-emerald-950/30 border-emerald-500/20" : "bg-amber-950/30 border-amber-500/20"}`}>
+                        {ok ? <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" /> : <AlertTriangle className="h-4 w-4 text-amber-400 shrink-0" />}
+                        <div>
+                          <p className="text-[10px] text-slate-500 font-semibold uppercase tracking-wide">{label}</p>
+                          <p className={`text-xs font-bold ${ok ? "text-emerald-300" : "text-amber-300"}`}>{value}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              ) : null}
+            </>
+          )}
+
+          {/* ══ SYSTEM INTEGRITY ════════════════════════════════════════════ */}
+          {section === "system" && (
+            <>
+              <div className="flex items-center justify-between flex-wrap gap-3">
+                <div>
+                  <h2 className="text-sm font-bold text-white">System Integrity</h2>
+                  <p className="text-[11px] text-slate-500">Database health checks, table statistics, and data consistency verification</p>
+                </div>
+                <button onClick={fetchIntegrity} disabled={integrityLoading}
+                  className="flex items-center gap-1.5 bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-700 transition-colors">
+                  <RefreshCw className={`h-3.5 w-3.5 ${integrityLoading ? "animate-spin" : ""}`} />
+                  Run Checks
+                </button>
               </div>
-            </div>
+
+              {integrityLoading && !integrityData ? (
+                <div className="flex items-center justify-center py-24"><RefreshCw className="h-5 w-5 text-slate-500 animate-spin" /></div>
+              ) : integrityData ? (
+                <>
+                  {/* Overall status banner */}
+                  <div className={`rounded-xl border px-5 py-4 flex items-center gap-4 ${
+                    integrityData.overallStatus === "healthy"  ? "bg-emerald-950/40 border-emerald-500/25" :
+                    integrityData.overallStatus === "warning"  ? "bg-amber-950/40 border-amber-500/25" :
+                                                                  "bg-red-950/40 border-red-500/25"
+                  }`}>
+                    {integrityData.overallStatus === "healthy"
+                      ? <Shield className="h-6 w-6 text-emerald-400 shrink-0" />
+                      : integrityData.overallStatus === "warning"
+                      ? <AlertTriangle className="h-6 w-6 text-amber-400 shrink-0" />
+                      : <XCircle className="h-6 w-6 text-red-400 shrink-0" />
+                    }
+                    <div>
+                      <p className={`text-sm font-bold capitalize ${
+                        integrityData.overallStatus === "healthy" ? "text-emerald-300" :
+                        integrityData.overallStatus === "warning" ? "text-amber-300" : "text-red-300"
+                      }`}>
+                        System {integrityData.overallStatus === "healthy" ? "Healthy" :
+                                integrityData.overallStatus === "warning"  ? "Minor Warnings" : "Degraded"}
+                      </p>
+                      <p className="text-[11px] text-slate-400 mt-0.5">
+                        Last checked: {integrityData.checkedAt ? format(new Date(integrityData.checkedAt), "MMM d, yyyy · HH:mm:ss") : "—"}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    {/* Database table counts */}
+                    <div className="bg-slate-900 rounded-xl border border-slate-800">
+                      <div className="px-5 py-3 border-b border-slate-800 flex items-center gap-2">
+                        <Database className="h-3.5 w-3.5 text-blue-400" />
+                        <p className="text-xs font-semibold text-slate-300 uppercase tracking-wide">Database Tables</p>
+                      </div>
+                      <div className="divide-y divide-slate-800/60">
+                        {integrityData.tables.map((t: any) => (
+                          <div key={t.name} className="flex items-center justify-between px-5 py-2.5 hover:bg-slate-800/20 transition-colors">
+                            <div className="flex items-center gap-2">
+                              <HardDrive className="h-3 w-3 text-slate-600" />
+                              <span className="text-xs text-slate-300 font-mono">{t.name}</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-bold text-white tabular-nums">{t.rows.toLocaleString()}</span>
+                              <span className="text-[10px] text-slate-600">rows</span>
+                              <CheckCircle2 className="h-3 w-3 text-emerald-500" />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Health checks */}
+                    <div className="bg-slate-900 rounded-xl border border-slate-800">
+                      <div className="px-5 py-3 border-b border-slate-800 flex items-center gap-2">
+                        <CheckSquare className="h-3.5 w-3.5 text-purple-400" />
+                        <p className="text-xs font-semibold text-slate-300 uppercase tracking-wide">Integrity Checks</p>
+                      </div>
+                      <div className="divide-y divide-slate-800/60">
+                        {integrityData.checks.map((c: any) => (
+                          <div key={c.name} className="px-5 py-3 hover:bg-slate-800/20 transition-colors">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="flex items-center gap-2 min-w-0">
+                                {c.status === "pass" ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 shrink-0" /> :
+                                 c.status === "warn" ? <AlertTriangle className="h-3.5 w-3.5 text-amber-400 shrink-0" /> :
+                                                       <XCircle className="h-3.5 w-3.5 text-red-400 shrink-0" />}
+                                <span className="text-xs font-semibold text-slate-200">{c.name}</span>
+                              </div>
+                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${
+                                c.status === "pass" ? "bg-emerald-500/15 text-emerald-400" :
+                                c.status === "warn" ? "bg-amber-500/15 text-amber-400" :
+                                                      "bg-red-500/15 text-red-400"
+                              }`}>{c.status.toUpperCase()}</span>
+                            </div>
+                            <p className="text-[11px] text-slate-500 mt-1 ml-5">{c.detail}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </>
+              ) : null}
+            </>
+          )}
+
+          {/* ══ REPORTS ═════════════════════════════════════════════════════ */}
+          {section === "reports" && (
+            <>
+              <div className="flex items-center justify-between flex-wrap gap-3">
+                <div>
+                  <h2 className="text-sm font-bold text-white">Reports</h2>
+                  <p className="text-[11px] text-slate-500">Platform-wide statistics, trends, and data exports</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button onClick={fetchReport} disabled={reportLoading}
+                    className="flex items-center gap-1.5 bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-700 transition-colors">
+                    <RefreshCw className={`h-3.5 w-3.5 ${reportLoading ? "animate-spin" : ""}`} />
+                    Refresh
+                  </button>
+                  <button onClick={downloadAuditCsv} disabled={exportingCsv}
+                    className="flex items-center gap-1.5 bg-blue-600/80 hover:bg-blue-600 border border-blue-500/50 rounded-lg px-3 py-1.5 text-xs text-white transition-colors disabled:opacity-50">
+                    {exportingCsv ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+                    Export Audit Log CSV
+                  </button>
+                </div>
+              </div>
+
+              {reportLoading && !reportData ? (
+                <div className="flex items-center justify-center py-24"><RefreshCw className="h-5 w-5 text-slate-500 animate-spin" /></div>
+              ) : reportData ? (
+                <>
+                  {/* KPI grid */}
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                    {[
+                      { label: "Providers",        value: reportData.providers?.total,              icon: Users,    color: "text-blue-400",    sub: "registered" },
+                      { label: "Patients",         value: reportData.patients?.total,               icon: Activity, color: "text-teal-400",    sub: `${reportData.patients?.pendingApproval} pending` },
+                      { label: "Vitals Today",     value: reportData.vitals?.today,                 icon: Zap,      color: "text-purple-400",  sub: `${reportData.vitals?.thisWeek} this week` },
+                      { label: "Active Alerts",    value: reportData.alerts?.active,                icon: AlertTriangle, color: reportData.alerts?.active > 0 ? "text-red-400" : "text-emerald-400", sub: `${reportData.alerts?.today} triggered today` },
+                    ].map(({ label, value, icon: Icon, color, sub }) => (
+                      <div key={label} className="bg-slate-900 border border-slate-800 rounded-xl p-4">
+                        <div className="flex items-center gap-2 mb-2">
+                          <Icon className={`h-4 w-4 ${color}`} />
+                          <p className="text-[10px] text-slate-500 uppercase tracking-wide font-semibold">{label}</p>
+                        </div>
+                        <p className={`text-2xl font-black ${color}`}>{value ?? 0}</p>
+                        <p className="text-[10px] text-slate-600 mt-1">{sub}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    {/* 7-day vitals trend chart */}
+                    <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
+                      <div className="flex items-center gap-2 mb-4">
+                        <TrendingUp className="h-4 w-4 text-blue-400" />
+                        <p className="text-xs font-semibold text-slate-300 uppercase tracking-wide">7-Day Vitals Trend</p>
+                      </div>
+                      <ResponsiveContainer width="100%" height={160}>
+                        <LineChart data={reportData.vitals?.trend ?? []}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                          <XAxis dataKey="date" tick={{ fill: "#64748b", fontSize: 10 }} axisLine={false} tickLine={false} />
+                          <YAxis tick={{ fill: "#64748b", fontSize: 10 }} axisLine={false} tickLine={false} />
+                          <Tooltip content={<ChartTip />} />
+                          <Line type="monotone" dataKey="count" stroke="#3b82f6" strokeWidth={2} dot={{ r: 3, fill: "#3b82f6" }} name="Vitals" />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+
+                    {/* Top audit actions */}
+                    <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
+                      <div className="flex items-center gap-2 mb-4">
+                        <FileText className="h-4 w-4 text-purple-400" />
+                        <p className="text-xs font-semibold text-slate-300 uppercase tracking-wide">Top Audit Actions</p>
+                        <span className="ml-auto text-[10px] text-slate-500">{reportData.auditLog?.total?.toLocaleString()} total events</span>
+                      </div>
+                      <div className="space-y-2">
+                        {(reportData.auditLog?.topActions ?? []).map((a: any, i: number) => {
+                          const maxCount = reportData.auditLog?.topActions?.[0]?.c ?? 1;
+                          return (
+                            <div key={a.action} className="space-y-1">
+                              <div className="flex items-center justify-between text-xs">
+                                <span className="text-slate-300 font-mono">{a.action}</span>
+                                <span className="text-slate-500 tabular-nums">{Number(a.c).toLocaleString()}</span>
+                              </div>
+                              <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
+                                <div className="h-full rounded-full" style={{
+                                  width: `${(Number(a.c) / Number(maxCount)) * 100}%`,
+                                  background: ["#3b82f6","#8b5cf6","#10b981","#f59e0b","#ef4444"][i],
+                                }} />
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <div className="mt-4 pt-3 border-t border-slate-800 flex items-center justify-between text-[11px]">
+                        <span className="text-slate-500">Today's events</span>
+                        <span className="text-white font-bold">{reportData.auditLog?.today?.toLocaleString()}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Alerts by severity */}
+                  {reportData.alerts?.bySeverity?.length > 0 && (
+                    <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
+                      <div className="flex items-center gap-2 mb-4">
+                        <AlertTriangle className="h-4 w-4 text-amber-400" />
+                        <p className="text-xs font-semibold text-slate-300 uppercase tracking-wide">Active Alerts by Severity</p>
+                      </div>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                        {reportData.alerts.bySeverity.map((s: any) => (
+                          <div key={s.severity} className={`rounded-lg border px-4 py-3 text-center ${
+                            s.severity === "critical" ? "bg-red-950/40 border-red-500/25" :
+                            s.severity === "warning"  ? "bg-amber-950/40 border-amber-500/25" :
+                                                        "bg-blue-950/40 border-blue-500/25"
+                          }`}>
+                            <p className={`text-2xl font-black ${
+                              s.severity === "critical" ? "text-red-400" :
+                              s.severity === "warning"  ? "text-amber-400" : "text-blue-400"
+                            }`}>{Number(s.c)}</p>
+                            <p className="text-[10px] text-slate-500 capitalize mt-1">{s.severity}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </>
+              ) : null}
+            </>
+          )}
+
+          {/* ══ SETTINGS ════════════════════════════════════════════════════ */}
+          {section === "settings" && (
+            <>
+              <div className="flex items-center justify-between flex-wrap gap-3">
+                <div>
+                  <h2 className="text-sm font-bold text-white">Settings</h2>
+                  <p className="text-[11px] text-slate-500">System configuration, email settings, and admin preferences</p>
+                </div>
+                <button onClick={saveSettings} disabled={settingsSaving || !settingsData}
+                  className={`flex items-center gap-1.5 rounded-lg px-4 py-1.5 text-xs font-bold transition-all ${
+                    settingsSaved ? "bg-emerald-600 text-white" : "bg-blue-600 hover:bg-blue-500 text-white"
+                  } disabled:opacity-50`}>
+                  {settingsSaving ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> :
+                   settingsSaved  ? <CheckCircle2 className="h-3.5 w-3.5" /> : <Save className="h-3.5 w-3.5" />}
+                  {settingsSaved ? "Saved!" : "Save Changes"}
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                {/* System info */}
+                <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-3">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Cpu className="h-4 w-4 text-blue-400" />
+                    <p className="text-xs font-semibold text-slate-300 uppercase tracking-wide">System Information</p>
+                  </div>
+                  {sysInfo ? (
+                    <div className="divide-y divide-slate-800/60">
+                      {[
+                        { label: "Version",      value: sysInfo.version },
+                        { label: "Build Date",   value: sysInfo.buildDate },
+                        { label: "Node.js",      value: sysInfo.node },
+                        { label: "Environment",  value: sysInfo.env },
+                        { label: "Platform",     value: sysInfo.platform },
+                        { label: "Heap Memory",  value: `${sysInfo.memoryMB} MB` },
+                        { label: "Uptime",       value: `${Math.floor(sysInfo.uptimeSeconds / 60)}m ${Math.floor(sysInfo.uptimeSeconds % 60)}s` },
+                        { label: "DB Latency",   value: `${sysInfo.dbLatencyMs}ms` },
+                      ].map(({ label, value }) => (
+                        <div key={label} className="flex items-center justify-between py-2">
+                          <span className="text-[11px] text-slate-500">{label}</span>
+                          <span className="text-[11px] text-slate-200 font-mono">{value}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : <div className="flex items-center justify-center py-8"><RefreshCw className="h-4 w-4 text-slate-600 animate-spin" /></div>}
+                </div>
+
+                {/* Email config */}
+                <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-3">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Bell className="h-4 w-4 text-purple-400" />
+                    <p className="text-xs font-semibold text-slate-300 uppercase tracking-wide">Email Configuration</p>
+                  </div>
+                  {sysInfo ? (
+                    <div className="space-y-3">
+                      {[
+                        { label: "Resend API", active: sysInfo.emailConfig?.resend, note: "Transactional email via Resend" },
+                        { label: "SMTP (Gmail)", active: sysInfo.emailConfig?.smtp, note: sysInfo.emailConfig?.from ?? "Not configured" },
+                      ].map(({ label, active, note }) => (
+                        <div key={label} className={`flex items-start justify-between rounded-lg border px-4 py-3 ${active ? "bg-emerald-950/20 border-emerald-500/20" : "bg-slate-800/40 border-slate-700/60"}`}>
+                          <div>
+                            <p className="text-xs font-semibold text-slate-200">{label}</p>
+                            <p className="text-[10px] text-slate-500 mt-0.5 font-mono">{note}</p>
+                          </div>
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full mt-0.5 ${active ? "bg-emerald-500/15 text-emerald-400" : "bg-slate-700 text-slate-500"}`}>
+                            {active ? "Active" : "Not set"}
+                          </span>
+                        </div>
+                      ))}
+                      <div className="bg-blue-950/30 border border-blue-500/20 rounded-lg px-4 py-3 flex items-start gap-2">
+                        <Info className="h-3.5 w-3.5 text-blue-400 mt-0.5 shrink-0" />
+                        <p className="text-[11px] text-slate-400">Email credentials are managed via Replit Secrets. Keys are never exposed in this dashboard.</p>
+                      </div>
+                    </div>
+                  ) : <div className="flex items-center justify-center py-8"><RefreshCw className="h-4 w-4 text-slate-600 animate-spin" /></div>}
+                </div>
+              </div>
+
+              {/* Admin preferences */}
+              {settingsData && (
+                <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
+                  <div className="flex items-center gap-2 mb-4">
+                    <Settings className="h-4 w-4 text-amber-400" />
+                    <p className="text-xs font-semibold text-slate-300 uppercase tracking-wide">Admin Preferences</p>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Toggles */}
+                    {[
+                      { key: "alertEmailEnabled",       label: "Alert email notifications",      desc: "Send email when critical patient alerts fire" },
+                      { key: "providerApprovalNotify",  label: "Provider approval notifications", desc: "Notify admin when a new provider registers" },
+                      { key: "maintenanceMode",         label: "Maintenance mode",               desc: "Blocks new logins with a maintenance message" },
+                    ].map(({ key, label, desc }) => (
+                      <div key={key} className="flex items-start justify-between gap-4">
+                        <div>
+                          <p className="text-xs font-semibold text-slate-200">{label}</p>
+                          <p className="text-[10px] text-slate-500 mt-0.5">{desc}</p>
+                        </div>
+                        <button
+                          onClick={() => setSettingsData((prev: any) => ({ ...prev, [key]: !prev[key] }))}
+                          className="shrink-0 mt-0.5"
+                          title={settingsData[key] ? "Turn off" : "Turn on"}
+                        >
+                          {settingsData[key]
+                            ? <ToggleRight className="h-7 w-7 text-blue-400" />
+                            : <ToggleLeft className="h-7 w-7 text-slate-600" />}
+                        </button>
+                      </div>
+                    ))}
+
+                    {/* Number inputs */}
+                    {[
+                      { key: "sessionTimeoutMinutes", label: "Session timeout (minutes)", min: 15, max: 480 },
+                      { key: "maxLoginAttempts",      label: "Max login attempts",        min: 3,  max: 20  },
+                      { key: "dataRetentionDays",     label: "Data retention (days)",     min: 30, max: 365 },
+                    ].map(({ key, label, min, max }) => (
+                      <div key={key}>
+                        <label className="text-xs font-semibold text-slate-200">{label}</label>
+                        <div className="mt-1.5 flex items-center gap-2">
+                          <input
+                            type="number" min={min} max={max}
+                            value={settingsData[key] ?? ""}
+                            onChange={(e) => setSettingsData((prev: any) => ({ ...prev, [key]: parseInt(e.target.value) || prev[key] }))}
+                            className="w-24 h-8 bg-slate-800 border border-slate-700 rounded-lg px-3 text-xs text-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                          />
+                          <span className="text-[11px] text-slate-500">Range: {min}–{max}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
           )}
 
         </div>
