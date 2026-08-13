@@ -2816,7 +2816,7 @@ export default function SuperAdmin() {
               { label: "Precision", value: 97.4, color: "text-blue-400",    bar: "bg-blue-500"   },
               { label: "Recall",    value: 97.4, color: "text-emerald-400", bar: "bg-emerald-500" },
               { label: "F1-Score",  value: 97.1, color: "text-amber-400",   bar: "bg-amber-500"  },
-              { label: "ROC-AUC",   value: 99.2, color: "text-pink-400",    bar: "bg-pink-500"   },
+              { label: "ROC-AUC",   value: 99.3, color: "text-pink-400",    bar: "bg-pink-500"   },
             ];
             const features = [
               { name: "Network Traffic",     desc: "Packets/sec — elevated during attacks",      weight: 20 },
@@ -3199,7 +3199,7 @@ export default function SuperAdmin() {
                     <BarChart3 className="h-4 w-4 text-pink-400" />
                     ROC Threshold Analysis
                   </h3>
-                  <p className="text-[10px] text-slate-500 mb-4">True Positive Rate vs False Positive Rate across 10 decision thresholds · ROC-AUC ≈ 0.992</p>
+                  <p className="text-[10px] text-slate-500 mb-4">True Positive Rate vs False Positive Rate across 10 decision thresholds · ROC-AUC = 0.993</p>
                   <div className="overflow-x-auto">
                     <table className="w-full text-[11px]">
                       <thead>
