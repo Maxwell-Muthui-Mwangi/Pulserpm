@@ -12,6 +12,7 @@ interface User {
   email: string;
   role: string;
   isSuperAdmin?: boolean;
+  adminRole?: string;      // e.g. "Security Admin", "God Level" — set by bootstrap
   isManager?: boolean;
   approvalWelcomePending?: boolean;
 }
@@ -23,6 +24,8 @@ interface AuthContextValue {
   isProvider: boolean;
   isAdmin: boolean;
   isSuperAdmin: boolean;
+  /** Display label for super admins: "Security Admin", "God Level", etc. */
+  adminRole: string | undefined;
   isManager: boolean;
   /** True when super admin has toggled into patient view */
   adminPatientMode: boolean;
@@ -38,6 +41,7 @@ const AuthContext = createContext<AuthContextValue>({
   isProvider: false,
   isAdmin: false,
   isSuperAdmin: false,
+  adminRole: undefined,
   isManager: false,
   adminPatientMode: false,
   adminPatientId: null,
@@ -95,6 +99,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     isProvider: user?.role === "provider",
     isAdmin: user?.role === "admin",
     isSuperAdmin: Boolean(user?.isSuperAdmin),
+    adminRole: user?.adminRole,
     isManager: Boolean(user?.isManager),
     adminPatientMode,
     adminPatientId,

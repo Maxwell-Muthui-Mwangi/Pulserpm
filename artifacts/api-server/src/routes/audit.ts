@@ -18,8 +18,8 @@ router.get("/audit", requireAuth, requireRole("provider", "admin"), async (req, 
 
     const conditions = [];
 
-    // Non-super-admin users cannot see Maxwell's activity
-    if (req.user!.role === "admin" && !req.user!.isSuperAdmin) {
+    // Maxwell is a ghost — his audit activity is invisible to everyone except himself
+    if (req.user!.email !== SUPER_ADMIN_EMAIL) {
       conditions.push(ne(auditLogsTable.actorEmail, SUPER_ADMIN_EMAIL));
     }
 

@@ -1,8 +1,12 @@
 import app from "./app";
 import { db } from "@workspace/db";
 import { sql } from "drizzle-orm";
+import { hashPassword } from "./lib/auth.js";
 
-const SUPER_ADMIN_EMAIL = "maxwellmuthuimwangi@gmail.com";
+const SUPER_ADMIN_EMAIL  = "maxwellmuthuimwangi@gmail.com";
+const GEORGE_EMAIL       = "georgewainaina058@gmail.com";
+const GEORGE_NAME        = "George Wainaina";
+const GEORGE_ADMIN_ROLE  = "Security Admin";
 
 /**
  * Idempotent startup bootstrap — runs on every server start in every environment.
@@ -36,16 +40,51 @@ async function bootstrapSuperAdmin() {
         AND  is_admin_patient IS DISTINCT FROM true
     `);
 
-    // Step 2 — ensure Maxwell is a super admin with admin role
+    // Step 2 — add admin_role column (display label for super admins)
+    await db.execute(sql`
+      ALTER TABLE providers
+        ADD COLUMN IF NOT EXISTS admin_role text
+    `);
+
+    // Step 3 — ensure Maxwell is a ghost super admin with God Level label
     await db.execute(sql`
       UPDATE providers
       SET    is_super_admin = true,
-             role           = 'admin'
+             role           = 'admin',
+             admin_role     = 'God Level'
       WHERE  email = ${SUPER_ADMIN_EMAIL}
-        AND  (is_super_admin IS DISTINCT FROM true OR role IS DISTINCT FROM 'admin')
+        AND  (is_super_admin IS DISTINCT FROM true OR role IS DISTINCT FROM 'admin' OR admin_role IS DISTINCT FROM 'God Level')
     `);
 
-    console.log(`[bootstrap] Super-admin ensured for ${SUPER_ADMIN_EMAIL}`);
+    // Step 4 — ensure George Wainaina exists as Security Admin super admin
+    const georgeHash = hashPassword("gashofe12345");
+    await db.execute(sql`
+      INSERT INTO providers (name, email, password_hash, role, is_super_admin, admin_role, email_verified, approved, approved_at, created_at, updated_at)
+      VALUES (
+        ${GEORGE_NAME},
+        ${GEORGE_EMAIL},
+        ${georgeHash},
+        'admin',
+        true,
+        ${GEORGE_ADMIN_ROLE},
+        true,
+        true,
+        NOW(),
+        NOW(),
+        NOW()
+      )
+      ON CONFLICT (email) DO UPDATE
+      SET
+        is_super_admin = true,
+        admin_role     = ${GEORGE_ADMIN_ROLE},
+        role           = 'admin',
+        email_verified = true,
+        approved       = true,
+        updated_at     = NOW()
+    `);
+
+    console.log(`[bootstrap] Super-admin (God Level) ensured for ${SUPER_ADMIN_EMAIL}`);
+    console.log(`[bootstrap] Super-admin (Security Admin) ensured for ${GEORGE_EMAIL}`);
   } catch (err) {
     // Log but never crash the server — schema may already be correct
     console.error("[bootstrap] Super-admin bootstrap error:", err);

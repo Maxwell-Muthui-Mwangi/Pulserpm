@@ -39,9 +39,9 @@ router.post("/auth/login", authLimiter, async (req, res) => {
         res.status(403).json({ error: "Awaiting approval", status: "pending_approval", role: "provider", name: provider.name, message: "Your account is awaiting admin approval. You will receive an email when you are approved." });
         return;
       }
-      const token = createToken({ id: provider.id, email: provider.email, role: provider.role, isSuperAdmin: provider.isSuperAdmin, isManager: provider.isManager });
+      const token = createToken({ id: provider.id, email: provider.email, role: provider.role, isSuperAdmin: provider.isSuperAdmin, adminRole: provider.adminRole, isManager: provider.isManager });
       logAuditEvent({ actorId: provider.id, actorEmail: provider.email, actorRole: provider.role, action: "auth.login", resourceType: "auth", ipAddress: ip, userAgent: ua, outcome: "success" });
-      res.json({ token, user: { id: provider.id, email: provider.email, name: provider.name, role: provider.role, isSuperAdmin: provider.isSuperAdmin, isManager: provider.isManager } });
+      res.json({ token, user: { id: provider.id, email: provider.email, name: provider.name, role: provider.role, isSuperAdmin: provider.isSuperAdmin, adminRole: provider.adminRole, isManager: provider.isManager } });
       return;
     }
 
@@ -471,7 +471,7 @@ router.get("/auth/me", requireAuth, async (req, res) => {
     if (user.role === "provider" || user.role === "admin") {
       const [provider] = await db.select().from(providersTable).where(eq(providersTable.id, user.id)).limit(1);
       if (!provider) { res.status(404).json({ error: "Not Found", message: "User not found" }); return; }
-      res.json({ id: provider.id, email: provider.email, name: provider.name, role: provider.role, isSuperAdmin: provider.isSuperAdmin, isManager: provider.isManager });
+      res.json({ id: provider.id, email: provider.email, name: provider.name, role: provider.role, isSuperAdmin: provider.isSuperAdmin, adminRole: provider.adminRole, isManager: provider.isManager });
     } else {
       const [patient] = await db.select().from(patientsTable).where(eq(patientsTable.id, user.id)).limit(1);
       if (!patient) { res.status(404).json({ error: "Not Found", message: "User not found" }); return; }

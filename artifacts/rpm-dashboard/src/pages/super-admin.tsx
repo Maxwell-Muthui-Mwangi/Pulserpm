@@ -155,7 +155,7 @@ function ChartTip({ active, payload, label }: any) {
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function SuperAdmin() {
   const [, setLocation] = useLocation();
-  const { user, isAdmin, isSuperAdmin, isLoading } = useAuth();
+  const { user, isAdmin, isSuperAdmin, adminRole, isLoading } = useAuth();
   const { fmt } = useTimezone();
 
   const [section, setSection] = useState<AdminSection>(() => {
@@ -832,7 +832,7 @@ export default function SuperAdmin() {
             <div className="text-right hidden sm:block">
               <p className="text-xs font-semibold text-white">{user.name}</p>
               {isSuperAdmin ? (
-                <p className="text-[10px] font-bold text-violet-400 uppercase tracking-wide">⚡ God Level Access</p>
+                <p className="text-[10px] font-bold text-violet-400 uppercase tracking-wide">⚡ {adminRole ?? "God Level Access"}</p>
               ) : (
                 <p className="text-[10px] text-slate-400 capitalize">Admin</p>
               )}
@@ -2706,22 +2706,108 @@ export default function SuperAdmin() {
 
           {/* ── MLNN Research & Implementation (super-admin only) ─────── */}
           {section === "mlnn-research" && (() => {
-            // ── Actual training history from notebook (loss × 10000 for chart readability) ──
+            // ── Exact training history from notebook — all 100 epochs (loss × 10000 for chart readability) ──
             const trainingCurve = [
-              { epoch: 1,   trainLoss: 1569, valLoss: 129  },
-              { epoch: 2,   trainLoss: 111,  valLoss: 32   },
-              { epoch: 5,   trainLoss: 17,   valLoss: 5.6  },
-              { epoch: 10,  trainLoss: 7.97, valLoss: 1.38 },
-              { epoch: 15,  trainLoss: 2.08, valLoss: 0.625},
-              { epoch: 20,  trainLoss: 1.76, valLoss: 0.293},
-              { epoch: 25,  trainLoss: 1.09, valLoss: 0.166},
-              { epoch: 35,  trainLoss: 1.25, valLoss: 0.111},
-              { epoch: 45,  trainLoss: 0.372,valLoss: 0.084},
-              { epoch: 55,  trainLoss: 0.544,valLoss: 0.074},
-              { epoch: 65,  trainLoss: 0.234,valLoss: 0.063},
-              { epoch: 75,  trainLoss: 0.718,valLoss: 0.057},
-              { epoch: 85,  trainLoss: 0.413,valLoss: 0.055},
-              { epoch: 100, trainLoss: 0.431,valLoss: 0.054},
+              { epoch: 1,   trainLoss: 1569.0,  valLoss: 129.0,   trainAcc: 97.75,  lr: 0.001000 },
+              { epoch: 2,   trainLoss: 111.0,   valLoss: 32.0,    trainAcc: 99.97,  lr: 0.001000 },
+              { epoch: 3,   trainLoss: 43.0,    valLoss: 15.0,    trainAcc: 99.97,  lr: 0.001000 },
+              { epoch: 4,   trainLoss: 24.0,    valLoss: 8.65,    trainAcc: 99.97,  lr: 0.001000 },
+              { epoch: 5,   trainLoss: 17.0,    valLoss: 5.63,    trainAcc: 99.97,  lr: 0.001000 },
+              { epoch: 6,   trainLoss: 13.0,    valLoss: 3.86,    trainAcc: 100.00, lr: 0.001000 },
+              { epoch: 7,   trainLoss: 12.0,    valLoss: 2.80,    trainAcc: 99.97,  lr: 0.001000 },
+              { epoch: 8,   trainLoss: 8.37,    valLoss: 2.14,    trainAcc: 100.00, lr: 0.001000 },
+              { epoch: 9,   trainLoss: 6.32,    valLoss: 1.72,    trainAcc: 100.00, lr: 0.001000 },
+              { epoch: 10,  trainLoss: 7.97,    valLoss: 1.38,    trainAcc: 99.97,  lr: 0.001000 },
+              { epoch: 11,  trainLoss: 6.29,    valLoss: 1.15,    trainAcc: 100.00, lr: 0.001000 },
+              { epoch: 12,  trainLoss: 6.23,    valLoss: 0.969,   trainAcc: 99.97,  lr: 0.001000 },
+              { epoch: 13,  trainLoss: 5.09,    valLoss: 0.792,   trainAcc: 100.00, lr: 0.001000 },
+              { epoch: 14,  trainLoss: 5.57,    valLoss: 0.728,   trainAcc: 100.00, lr: 0.001000 },
+              { epoch: 15,  trainLoss: 2.08,    valLoss: 0.625,   trainAcc: 100.00, lr: 0.001000 },
+              { epoch: 16,  trainLoss: 2.23,    valLoss: 0.540,   trainAcc: 100.00, lr: 0.001000 },
+              { epoch: 17,  trainLoss: 3.26,    valLoss: 0.420,   trainAcc: 100.00, lr: 0.001000 },
+              { epoch: 18,  trainLoss: 1.92,    valLoss: 0.363,   trainAcc: 100.00, lr: 0.001000 },
+              { epoch: 19,  trainLoss: 2.63,    valLoss: 0.318,   trainAcc: 100.00, lr: 0.001000 },
+              { epoch: 20,  trainLoss: 1.76,    valLoss: 0.293,   trainAcc: 100.00, lr: 0.001000 },
+              { epoch: 21,  trainLoss: 3.14,    valLoss: 0.249,   trainAcc: 100.00, lr: 0.001000 },
+              { epoch: 22,  trainLoss: 1.57,    valLoss: 0.226,   trainAcc: 100.00, lr: 0.001000 },
+              { epoch: 23,  trainLoss: 1.40,    valLoss: 0.211,   trainAcc: 100.00, lr: 0.001000 },
+              { epoch: 24,  trainLoss: 1.44,    valLoss: 0.195,   trainAcc: 100.00, lr: 0.001000 },
+              { epoch: 25,  trainLoss: 1.09,    valLoss: 0.166,   trainAcc: 100.00, lr: 0.001000 }, // LR ↓ 0.0005
+              { epoch: 26,  trainLoss: 2.87,    valLoss: 0.191,   trainAcc: 99.97,  lr: 0.000500 },
+              { epoch: 27,  trainLoss: 1.24,    valLoss: 0.186,   trainAcc: 100.00, lr: 0.000500 },
+              { epoch: 28,  trainLoss: 2.61,    valLoss: 0.166,   trainAcc: 100.00, lr: 0.000500 },
+              { epoch: 29,  trainLoss: 1.40,    valLoss: 0.152,   trainAcc: 100.00, lr: 0.000500 },
+              { epoch: 30,  trainLoss: 1.53,    valLoss: 0.145,   trainAcc: 100.00, lr: 0.000500 },
+              { epoch: 31,  trainLoss: 1.53,    valLoss: 0.148,   trainAcc: 100.00, lr: 0.000500 },
+              { epoch: 32,  trainLoss: 1.18,    valLoss: 0.133,   trainAcc: 100.00, lr: 0.000500 },
+              { epoch: 33,  trainLoss: 2.46,    valLoss: 0.128,   trainAcc: 100.00, lr: 0.000500 },
+              { epoch: 34,  trainLoss: 1.42,    valLoss: 0.131,   trainAcc: 100.00, lr: 0.000500 },
+              { epoch: 35,  trainLoss: 1.25,    valLoss: 0.111,   trainAcc: 100.00, lr: 0.000500 }, // LR ↓ 0.00025
+              { epoch: 36,  trainLoss: 1.13,    valLoss: 0.105,   trainAcc: 100.00, lr: 0.000250 },
+              { epoch: 37,  trainLoss: 0.614,   valLoss: 0.102,   trainAcc: 100.00, lr: 0.000250 },
+              { epoch: 38,  trainLoss: 1.44,    valLoss: 0.0955,  trainAcc: 100.00, lr: 0.000250 },
+              { epoch: 39,  trainLoss: 1.15,    valLoss: 0.0968,  trainAcc: 100.00, lr: 0.000250 },
+              { epoch: 40,  trainLoss: 2.47,    valLoss: 0.0948,  trainAcc: 100.00, lr: 0.000250 },
+              { epoch: 41,  trainLoss: 1.40,    valLoss: 0.0942,  trainAcc: 100.00, lr: 0.000250 },
+              { epoch: 42,  trainLoss: 0.390,   valLoss: 0.0913,  trainAcc: 100.00, lr: 0.000250 },
+              { epoch: 43,  trainLoss: 0.664,   valLoss: 0.0904,  trainAcc: 100.00, lr: 0.000250 },
+              { epoch: 44,  trainLoss: 0.311,   valLoss: 0.0879,  trainAcc: 100.00, lr: 0.000250 },
+              { epoch: 45,  trainLoss: 0.372,   valLoss: 0.0844,  trainAcc: 100.00, lr: 0.000250 }, // LR ↓ 0.000125
+              { epoch: 46,  trainLoss: 0.939,   valLoss: 0.0849,  trainAcc: 100.00, lr: 0.000125 },
+              { epoch: 47,  trainLoss: 0.935,   valLoss: 0.0846,  trainAcc: 100.00, lr: 0.000125 },
+              { epoch: 48,  trainLoss: 0.428,   valLoss: 0.0839,  trainAcc: 100.00, lr: 0.000125 },
+              { epoch: 49,  trainLoss: 0.366,   valLoss: 0.0829,  trainAcc: 100.00, lr: 0.000125 },
+              { epoch: 50,  trainLoss: 0.792,   valLoss: 0.0818,  trainAcc: 100.00, lr: 0.000125 },
+              { epoch: 51,  trainLoss: 1.46,    valLoss: 0.0839,  trainAcc: 100.00, lr: 0.000125 },
+              { epoch: 52,  trainLoss: 0.744,   valLoss: 0.0818,  trainAcc: 100.00, lr: 0.000125 },
+              { epoch: 53,  trainLoss: 0.700,   valLoss: 0.0779,  trainAcc: 100.00, lr: 0.000125 },
+              { epoch: 54,  trainLoss: 1.09,    valLoss: 0.0734,  trainAcc: 100.00, lr: 0.000125 },
+              { epoch: 55,  trainLoss: 0.544,   valLoss: 0.0738,  trainAcc: 100.00, lr: 0.000125 }, // LR ↓ 0.0000625
+              { epoch: 56,  trainLoss: 0.532,   valLoss: 0.0736,  trainAcc: 100.00, lr: 0.0000625 },
+              { epoch: 57,  trainLoss: 0.507,   valLoss: 0.0724,  trainAcc: 100.00, lr: 0.0000625 },
+              { epoch: 58,  trainLoss: 0.475,   valLoss: 0.0713,  trainAcc: 100.00, lr: 0.0000625 },
+              { epoch: 59,  trainLoss: 1.28,    valLoss: 0.0699,  trainAcc: 100.00, lr: 0.0000625 },
+              { epoch: 60,  trainLoss: 0.984,   valLoss: 0.0677,  trainAcc: 100.00, lr: 0.0000625 },
+              { epoch: 61,  trainLoss: 0.529,   valLoss: 0.0663,  trainAcc: 100.00, lr: 0.0000625 },
+              { epoch: 62,  trainLoss: 0.486,   valLoss: 0.0659,  trainAcc: 100.00, lr: 0.0000625 },
+              { epoch: 63,  trainLoss: 1.39,    valLoss: 0.0649,  trainAcc: 100.00, lr: 0.0000625 },
+              { epoch: 64,  trainLoss: 1.08,    valLoss: 0.0631,  trainAcc: 100.00, lr: 0.0000625 },
+              { epoch: 65,  trainLoss: 0.234,   valLoss: 0.0627,  trainAcc: 100.00, lr: 0.0000625 }, // LR ↓ 0.00003125
+              { epoch: 66,  trainLoss: 0.399,   valLoss: 0.0620,  trainAcc: 100.00, lr: 0.00003125 },
+              { epoch: 67,  trainLoss: 0.513,   valLoss: 0.0613,  trainAcc: 100.00, lr: 0.00003125 },
+              { epoch: 68,  trainLoss: 0.187,   valLoss: 0.0611,  trainAcc: 100.00, lr: 0.00003125 },
+              { epoch: 69,  trainLoss: 0.565,   valLoss: 0.0612,  trainAcc: 100.00, lr: 0.00003125 },
+              { epoch: 70,  trainLoss: 0.365,   valLoss: 0.0609,  trainAcc: 100.00, lr: 0.00003125 },
+              { epoch: 71,  trainLoss: 0.359,   valLoss: 0.0604,  trainAcc: 100.00, lr: 0.00003125 },
+              { epoch: 72,  trainLoss: 0.825,   valLoss: 0.0599,  trainAcc: 100.00, lr: 0.00003125 },
+              { epoch: 73,  trainLoss: 0.386,   valLoss: 0.0594,  trainAcc: 100.00, lr: 0.00003125 },
+              { epoch: 74,  trainLoss: 0.454,   valLoss: 0.0589,  trainAcc: 100.00, lr: 0.00003125 },
+              { epoch: 75,  trainLoss: 0.718,   valLoss: 0.0574,  trainAcc: 100.00, lr: 0.00003125 }, // LR ↓ 0.000015625
+              { epoch: 76,  trainLoss: 1.73,    valLoss: 0.0576,  trainAcc: 100.00, lr: 0.000015625 },
+              { epoch: 77,  trainLoss: 0.544,   valLoss: 0.0572,  trainAcc: 100.00, lr: 0.000015625 },
+              { epoch: 78,  trainLoss: 1.24,    valLoss: 0.0571,  trainAcc: 100.00, lr: 0.000015625 },
+              { epoch: 79,  trainLoss: 0.500,   valLoss: 0.0569,  trainAcc: 100.00, lr: 0.000015625 },
+              { epoch: 80,  trainLoss: 0.393,   valLoss: 0.0568,  trainAcc: 100.00, lr: 0.000015625 },
+              { epoch: 81,  trainLoss: 0.535,   valLoss: 0.0565,  trainAcc: 100.00, lr: 0.000015625 },
+              { epoch: 82,  trainLoss: 0.332,   valLoss: 0.0562,  trainAcc: 100.00, lr: 0.000015625 },
+              { epoch: 83,  trainLoss: 0.421,   valLoss: 0.0561,  trainAcc: 100.00, lr: 0.000015625 },
+              { epoch: 84,  trainLoss: 0.308,   valLoss: 0.0559,  trainAcc: 100.00, lr: 0.000015625 },
+              { epoch: 85,  trainLoss: 0.413,   valLoss: 0.0554,  trainAcc: 100.00, lr: 0.000015625 }, // LR ↓ 0.00001 (min)
+              { epoch: 86,  trainLoss: 0.384,   valLoss: 0.0553,  trainAcc: 100.00, lr: 0.000010 },
+              { epoch: 87,  trainLoss: 0.862,   valLoss: 0.0548,  trainAcc: 100.00, lr: 0.000010 },
+              { epoch: 88,  trainLoss: 3.40,    valLoss: 0.0555,  trainAcc: 99.97,  lr: 0.000010 },
+              { epoch: 89,  trainLoss: 0.279,   valLoss: 0.0555,  trainAcc: 100.00, lr: 0.000010 },
+              { epoch: 90,  trainLoss: 0.459,   valLoss: 0.0554,  trainAcc: 100.00, lr: 0.000010 },
+              { epoch: 91,  trainLoss: 0.772,   valLoss: 0.0555,  trainAcc: 100.00, lr: 0.000010 },
+              { epoch: 92,  trainLoss: 0.985,   valLoss: 0.0552,  trainAcc: 100.00, lr: 0.000010 },
+              { epoch: 93,  trainLoss: 0.303,   valLoss: 0.0551,  trainAcc: 100.00, lr: 0.000010 },
+              { epoch: 94,  trainLoss: 0.615,   valLoss: 0.0551,  trainAcc: 100.00, lr: 0.000010 },
+              { epoch: 95,  trainLoss: 0.565,   valLoss: 0.0549,  trainAcc: 100.00, lr: 0.000010 },
+              { epoch: 96,  trainLoss: 0.964,   valLoss: 0.0549,  trainAcc: 100.00, lr: 0.000010 },
+              { epoch: 97,  trainLoss: 0.503,   valLoss: 0.0547,  trainAcc: 100.00, lr: 0.000010 },
+              { epoch: 98,  trainLoss: 0.794,   valLoss: 0.0544,  trainAcc: 100.00, lr: 0.000010 },
+              { epoch: 99,  trainLoss: 0.312,   valLoss: 0.0542,  trainAcc: 100.00, lr: 0.000010 },
+              { epoch: 100, trainLoss: 0.431,   valLoss: 0.0540,  trainAcc: 100.00, lr: 0.000010 },
             ];
             // Confusion matrix from notebook: [[484,16],[13,487]]
             const cm = { tn: 484, fp: 16, fn: 13, tp: 487, total: 1000 };
@@ -2867,12 +2953,12 @@ export default function SuperAdmin() {
                     <div className="flex flex-col items-center gap-2">
                       <div className="flex gap-2 text-[9px] text-slate-500 w-full px-12">
                         <span className="flex-1 text-center">Predicted Normal</span>
-                        <span className="flex-1 text-center">Predicted Anomaly</span>
+                        <span className="flex-1 text-center">Predicted Attack</span>
                       </div>
                       <div className="flex items-stretch gap-0.5 w-full">
                         <div className="flex flex-col justify-around text-[9px] text-slate-500 pr-2 py-1 shrink-0">
                           <span className="text-center" style={{writingMode:'vertical-rl',transform:'rotate(180deg)'}}>Actual Normal</span>
-                          <span className="text-center" style={{writingMode:'vertical-rl',transform:'rotate(180deg)'}}>Actual Anomaly</span>
+                          <span className="text-center" style={{writingMode:'vertical-rl',transform:'rotate(180deg)'}}>Actual Attack</span>
                         </div>
                         <div className="flex-1 grid grid-cols-2 gap-1">
                           <div className="bg-emerald-500/20 border-2 border-emerald-500/40 rounded-xl p-4 text-center">
@@ -2888,12 +2974,12 @@ export default function SuperAdmin() {
                           <div className="bg-orange-500/15 border-2 border-orange-500/30 rounded-xl p-4 text-center">
                             <p className="text-3xl font-black text-orange-400">{cm.fn}</p>
                             <p className="text-[9px] text-orange-600 font-bold mt-1">FALSE NEGATIVE</p>
-                            <p className="text-[9px] text-slate-500">{((cm.fn/500)*100).toFixed(1)}% of anomalies</p>
+                            <p className="text-[9px] text-slate-500">{((cm.fn/500)*100).toFixed(1)}% of attacks</p>
                           </div>
                           <div className="bg-emerald-500/20 border-2 border-emerald-500/40 rounded-xl p-4 text-center">
                             <p className="text-3xl font-black text-emerald-400">{cm.tp}</p>
                             <p className="text-[9px] text-emerald-600 font-bold mt-1">TRUE POSITIVE</p>
-                            <p className="text-[9px] text-slate-500">{((cm.tp/500)*100).toFixed(1)}% of anomalies</p>
+                            <p className="text-[9px] text-slate-500">{((cm.tp/500)*100).toFixed(1)}% of attacks</p>
                           </div>
                         </div>
                       </div>
@@ -2921,7 +3007,7 @@ export default function SuperAdmin() {
                     Training Loss Curve (loss × 10⁴ for readability)
                   </h3>
                   <p className="text-[10px] text-slate-500 mb-4">
-                    EarlyStopping (patience=20) · ReduceLROnPlateau (factor=0.5, patience=10) — 6 LR reductions over 100 epochs
+                    EarlyStopping (patience=20) · ReduceLROnPlateau (factor=0.5, patience=10) — 7 LR reductions over 100 epochs
                   </p>
                   <div className="h-48">
                     <ResponsiveContainer width="100%" height="100%">
@@ -3049,7 +3135,7 @@ export default function SuperAdmin() {
                       <tbody className="divide-y divide-slate-800/50">
                         {[
                           { cls: "Normal",       prec: "0.974", rec: "0.968", f1: "0.971", sup: "500",  col: "text-emerald-400" },
-                          { cls: "Anomaly",      prec: "0.968", rec: "0.974", f1: "0.971", sup: "500",  col: "text-red-400"     },
+                          { cls: "Attack",      prec: "0.968", rec: "0.974", f1: "0.971", sup: "500",  col: "text-red-400"     },
                           { cls: "Accuracy",     prec: "",      rec: "",      f1: "0.971", sup: "1000", col: "text-violet-400"  },
                           { cls: "Macro avg",    prec: "0.971", rec: "0.971", f1: "0.971", sup: "1000", col: "text-blue-400"    },
                           { cls: "Weighted avg", prec: "0.971", rec: "0.971", f1: "0.971", sup: "1000", col: "text-blue-400"    },
@@ -3069,8 +3155,229 @@ export default function SuperAdmin() {
                     <span className="font-bold text-violet-400">Author: George Wainaina · </span>
                     Adaptive MLNN trained on 5,000 synthetic wearable healthcare security records (50/50 balanced).
                     The model achieves <span className="font-bold text-white">97.1% accuracy</span> with only 29 combined errors out of 1,000 test samples —
-                    16 false positives and 13 false negatives — making it highly reliable for real-time anomaly detection in RPM wearable devices.
+                    16 false positives and 13 false negatives — making it highly reliable for real-time threat detection in RPM wearable devices.
                   </div>
+                </div>
+
+                {/* ── Adaptive Features ── */}
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+                  <h3 className="text-sm font-bold text-white mb-4 flex items-center gap-2">
+                    <Zap className="h-4 w-4 text-yellow-400" />
+                    Adaptive Training Features
+                  </h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    {[
+                      { label: "Final Learning Rate", value: "1.0000×10⁻⁵", sub: "ReduceLROnPlateau hit min_lr", col: "text-yellow-400", bar: "bg-yellow-500" },
+                      { label: "Training Stopped At", value: "Epoch 100 / 100", sub: "EarlyStopping patience=20 not triggered", col: "text-blue-400", bar: "bg-blue-500" },
+                      { label: "Best val_loss", value: "5.4043×10⁻⁶", sub: "Restored from best weights", col: "text-emerald-400", bar: "bg-emerald-500" },
+                    ].map(item => (
+                      <div key={item.label} className="bg-slate-800/60 rounded-xl p-4 border border-slate-700/50">
+                        <p className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold mb-1">{item.label}</p>
+                        <p className={`text-lg font-black font-mono ${item.col}`}>{item.value}</p>
+                        <p className="text-[9px] text-slate-600 mt-1">{item.sub}</p>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-2 text-[10px]">
+                    {[
+                      ["LR Reductions", "7 total"],
+                      ["ReduceLR Factor", "0.5 per step"],
+                      ["ReduceLR Patience", "10 epochs"],
+                      ["Callbacks", "EarlyStopping + ReduceLROnPlateau"],
+                    ].map(([k, v]) => (
+                      <div key={k} className="bg-slate-800/40 rounded-lg px-3 py-2">
+                        <span className="text-slate-500">{k}: </span>
+                        <span className="text-slate-200 font-semibold">{v}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* ── ROC Threshold Analysis ── */}
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+                  <h3 className="text-sm font-bold text-white mb-1 flex items-center gap-2">
+                    <BarChart3 className="h-4 w-4 text-pink-400" />
+                    ROC Threshold Analysis
+                  </h3>
+                  <p className="text-[10px] text-slate-500 mb-4">True Positive Rate vs False Positive Rate across 10 decision thresholds · ROC-AUC ≈ 0.992</p>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-[11px]">
+                      <thead>
+                        <tr className="border-b border-slate-800">
+                          <th className="text-left text-slate-500 pb-2 pr-6">Threshold</th>
+                          <th className="text-right text-slate-500 pb-2 px-4">TPR (Sensitivity)</th>
+                          <th className="text-right text-slate-500 pb-2 px-4">FPR (1 − Specificity)</th>
+                          <th className="text-left text-slate-500 pb-2 pl-4">TPR bar</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800/50">
+                        {[
+                          { thr: "0.10", tpr: 1.000, fpr: 1.000 },
+                          { thr: "0.20", tpr: 0.994, fpr: 0.186 },
+                          { thr: "0.30", tpr: 0.989, fpr: 0.108 },
+                          { thr: "0.40", tpr: 0.982, fpr: 0.061 },
+                          { thr: "0.50", tpr: 0.974, fpr: 0.032 },
+                          { thr: "0.60", tpr: 0.960, fpr: 0.018 },
+                          { thr: "0.70", tpr: 0.938, fpr: 0.010 },
+                          { thr: "0.80", tpr: 0.901, fpr: 0.005 },
+                          { thr: "0.90", tpr: 0.842, fpr: 0.002 },
+                          { thr: "1.00", tpr: 0.000, fpr: 0.000 },
+                        ].map(row => (
+                          <tr key={row.thr} className="hover:bg-slate-800/20 transition-colors">
+                            <td className="py-1.5 pr-6 font-mono text-amber-400 font-semibold">{row.thr}</td>
+                            <td className="text-right py-1.5 px-4 text-emerald-400 font-mono">{row.tpr.toFixed(3)}</td>
+                            <td className="text-right py-1.5 px-4 text-red-400 font-mono">{row.fpr.toFixed(3)}</td>
+                            <td className="py-1.5 pl-4 w-40">
+                              <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                                <div className="h-full bg-gradient-to-r from-emerald-500 to-blue-500 rounded-full" style={{ width: `${row.tpr * 100}%` }} />
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* ── Full Training Log ── */}
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+                  <h3 className="text-sm font-bold text-white mb-1 flex items-center gap-2">
+                    <FileText className="h-4 w-4 text-slate-400" />
+                    Full Training Log — All 100 Epochs
+                  </h3>
+                  <p className="text-[10px] text-slate-500 mb-3">Exact values from Colab notebook output · val_accuracy = 1.0000 throughout training</p>
+                  <div className="overflow-x-auto max-h-72 overflow-y-auto rounded-xl border border-slate-800">
+                    <table className="w-full text-[10px] font-mono">
+                      <thead className="sticky top-0 bg-slate-900 border-b border-slate-800 z-10">
+                        <tr>
+                          <th className="text-left text-slate-500 px-3 py-2">Epoch</th>
+                          <th className="text-right text-slate-500 px-3 py-2">Train Loss</th>
+                          <th className="text-right text-slate-500 px-3 py-2">Val Loss</th>
+                          <th className="text-right text-slate-500 px-3 py-2">Train Acc</th>
+                          <th className="text-right text-slate-500 px-3 py-2">LR</th>
+                          <th className="text-left text-slate-500 px-3 py-2">Note</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800/30">
+                        {trainingCurve.map(row => {
+                          const lrNotes: Record<number,string> = {
+                            25: "LR → 0.000500",
+                            35: "LR → 0.000250",
+                            45: "LR → 0.000125",
+                            55: "LR → 0.0000625",
+                            65: "LR → 0.0000313",
+                            75: "LR → 0.0000156",
+                            85: "LR → 0.000010 (min)",
+                          };
+                          const note = lrNotes[row.epoch];
+                          return (
+                            <tr key={row.epoch} className={`hover:bg-slate-800/20 transition-colors ${note ? "bg-yellow-500/5" : ""}`}>
+                              <td className="px-3 py-1 text-slate-400">{row.epoch}</td>
+                              <td className="text-right px-3 py-1 text-violet-300">{(row.trainLoss / 10000).toFixed(7)}</td>
+                              <td className="text-right px-3 py-1 text-emerald-300">{(row.valLoss / 10000).toFixed(7)}</td>
+                              <td className="text-right px-3 py-1 text-blue-300">{row.trainAcc.toFixed(2)}%</td>
+                              <td className="text-right px-3 py-1 text-amber-300">{row.lr.toFixed(6)}</td>
+                              <td className="px-3 py-1 text-yellow-500 text-[9px]">{note ?? ""}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* ── PulseRPM ML Integration ── */}
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+                  <h3 className="text-sm font-bold text-white mb-4 flex items-center gap-2">
+                    <Wifi className="h-4 w-4 text-emerald-400" />
+                    PulseRPM ML/NN Integration — Cell 2
+                  </h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                    {[
+                      { title: "Anomaly Detection", desc: "Threshold 0.60 · CRITICAL >85 · HIGH >70 · MODERATE >55 · NORMAL ≤55", col: "border-red-500/25 bg-red-500/5" },
+                      { title: "Risk Prediction", desc: "HIGH RISK >75 · MODERATE >50 · LOW RISK >30 · MINIMAL RISK ≤30", col: "border-orange-500/25 bg-orange-500/5" },
+                      { title: "Smart Search Engine", desc: "TF-IDF cosine similarity over patient/audit records for semantic matching", col: "border-blue-500/25 bg-blue-500/5" },
+                      { title: "Login Outcome Predictor", desc: "Suspicious IP scoring · off-hours detection · failed-attempt frequency weighting", col: "border-violet-500/25 bg-violet-500/5" },
+                    ].map(item => (
+                      <div key={item.title} className={`rounded-xl p-3 border ${item.col}`}>
+                        <p className="text-[11px] font-semibold text-white mb-1">{item.title}</p>
+                        <p className="text-[10px] text-slate-400">{item.desc}</p>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="bg-slate-800/40 rounded-xl p-3 text-[10px] text-slate-400">
+                    <p className="text-[10px] font-semibold text-emerald-400 mb-1">PulseRPMDataFetcher — live endpoint</p>
+                    <p className="font-mono text-[9px] break-all text-slate-500">https://remote-patient-monitor--georgenwainaina.replit.app/</p>
+                    <p className="mt-2 text-[9px] text-slate-600">Extracts: patients · audit_logs · vitals · login_attempts via BeautifulSoup + regex</p>
+                    <p className="mt-2 font-semibold text-emerald-400">Status: INTEGRATION SUCCESSFUL</p>
+                  </div>
+                </div>
+
+                {/* ── Blockchain & Security Performance ── */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+                  {/* Blockchain Performance */}
+                  <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+                    <h3 className="text-sm font-bold text-white mb-1 flex items-center gap-2">
+                      <Link2 className="h-4 w-4 text-blue-400" />
+                      Blockchain Performance — Cell 3
+                    </h3>
+                    <p className="text-[10px] text-slate-500 mb-4">SHA-256 immutable ledger · consent contracts · audit/access/consent event logging</p>
+                    <div className="space-y-3">
+                      {[
+                        { label: "Transaction Latency",             value: "0.47 s",   pct: 47,  col: "text-blue-400",    bar: "bg-blue-500"    },
+                        { label: "Throughput",                      value: "194.01 tx/s", pct: 97, col: "text-emerald-400", bar: "bg-emerald-500" },
+                        { label: "Consensus Success Rate",          value: "99.40%",   pct: 99.4, col: "text-violet-400",  bar: "bg-violet-500"  },
+                        { label: "Data Integrity Verification Rate",value: "99.80%",   pct: 99.8, col: "text-cyan-400",    bar: "bg-cyan-500"    },
+                      ].map(item => (
+                        <div key={item.label}>
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-[10px] text-slate-400">{item.label}</span>
+                            <span className={`text-[11px] font-black font-mono ${item.col}`}>{item.value}</span>
+                          </div>
+                          <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                            <div className={`h-full ${item.bar} rounded-full`} style={{ width: `${Math.min(item.pct, 100)}%` }} />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="mt-4 bg-blue-500/8 border border-blue-500/20 rounded-lg px-3 py-2 text-[10px]">
+                      <span className="text-blue-400 font-semibold">Status: </span>
+                      <span className="text-emerald-400 font-semibold">BLOCKCHAIN INTEGRATION SUCCESSFUL</span>
+                    </div>
+                  </div>
+
+                  {/* Security Performance */}
+                  <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+                    <h3 className="text-sm font-bold text-white mb-1 flex items-center gap-2">
+                      <Shield className="h-4 w-4 text-red-400" />
+                      Security Performance — Cell 3
+                    </h3>
+                    <p className="text-[10px] text-slate-500 mb-4">MLNN + Blockchain combined security layer metrics</p>
+                    <div className="space-y-3">
+                      {[
+                        { label: "Detection Accuracy",   value: "97.10%",  pct: 97.1,  col: "text-emerald-400", bar: "bg-emerald-500" },
+                        { label: "False Positive Rate",  value: "3.41%",   pct: 3.41,  col: "text-red-400",     bar: "bg-red-500"    },
+                        { label: "Detection Latency",    value: "0.58 s",  pct: 58,    col: "text-orange-400",  bar: "bg-orange-500" },
+                        { label: "Encryption Time",      value: "0.39 s",  pct: 39,    col: "text-violet-400",  bar: "bg-violet-500" },
+                      ].map(item => (
+                        <div key={item.label}>
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-[10px] text-slate-400">{item.label}</span>
+                            <span className={`text-[11px] font-black font-mono ${item.col}`}>{item.value}</span>
+                          </div>
+                          <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                            <div className={`h-full ${item.bar} rounded-full`} style={{ width: `${Math.min(item.pct, 100)}%` }} />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="mt-4 bg-slate-800/40 rounded-xl p-3 text-[10px] text-slate-400">
+                      <p className="font-semibold text-white mb-1">SmartContract · PulseRPMBlockchain</p>
+                      <p>Consent contracts with view/edit/export permissions, expiry enforcement, revocation, and immutable permission history. Chain integrity verified via SHA-256 block hashing.</p>
+                    </div>
+                  </div>
+
                 </div>
 
               </div>
