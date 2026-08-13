@@ -99,7 +99,7 @@ export default function Layout({ children }: LayoutProps) {
     ...(isAdmin ? [
       { href: "/security", label: "Audit Log", icon: Shield },
       { href: "/threat-detection", label: "MLNN Model Anomaly Detection", icon: ShieldAlert },
-      ...(isSuperAdmin ? [{ href: "/super-admin?section=mlnn-research", label: "MLNN Research", icon: BrainCircuit }] : []),
+      ...(isSuperAdmin ? [{ href: "/super-admin?section=mlnn-research", label: "MODEL PARAMETERS", icon: BrainCircuit }] : []),
       { href: "/blockchain", label: "Blockchain Monitor", icon: Link2 },
       { href: "/security-framework", label: "Security Framework", icon: ShieldCheck },
     ] : []),

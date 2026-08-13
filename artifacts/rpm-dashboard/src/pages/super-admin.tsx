@@ -700,7 +700,7 @@ export default function SuperAdmin() {
     { id: "healthcare-providers", label: "Healthcare Providers",           icon: Shield, superAdminOnly: true },
     { id: "admins-management",    label: "Admins",                         icon: Lock,  superAdminOnly: true },
     { id: "patient-management",   label: "Patient Management",             icon: Users, superAdminOnly: true, danger: true },
-    { id: "mlnn-research",        label: "MLNN Research",                  icon: BrainCircuit, superAdminOnly: true },
+    { id: "mlnn-research",        label: "MODEL PARAMETERS",               icon: BrainCircuit, superAdminOnly: true },
     { id: "system",               label: "System Integrity",               icon: ShieldAlert },
     { id: "reports",              label: "Reports",                        icon: FileText },
     { id: "settings",             label: "Settings",                       icon: Settings },
@@ -818,7 +818,7 @@ export default function SuperAdmin() {
               {section === "healthcare-providers" && "Healthcare Providers"}
               {section === "admins-management"    && "Admins Management"}
               {section === "patient-management"   && "Patient Management"}
-              {section === "mlnn-research"        && "MLNN Model — Research & Implementation"}
+              {section === "mlnn-research"        && "MODEL PARAMETERS"}
             </h1>
           </div>
           <div className="flex items-center gap-3">
@@ -2776,6 +2776,19 @@ export default function SuperAdmin() {
                           <span key={t.label} className={`px-2.5 py-1 rounded-full text-[10px] font-semibold border ${t.col}`}>{t.label}</span>
                         ))}
                       </div>
+
+                      {/* Colab notebook link */}
+                      <a
+                        href="https://colab.research.google.com/drive/1DTPaHtpjBKxGXDLGJ51lBNKJGmKf3jvb#scrollTo=lBfQUXB-Ewid"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-2 mt-4 px-3 py-1.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/25 hover:border-amber-500/40 text-amber-400 text-[11px] font-semibold transition-colors"
+                      >
+                        <svg className="h-3.5 w-3.5 shrink-0" viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M12 0C5.372 0 0 5.373 0 12s5.372 12 12 12 12-5.373 12-12S18.628 0 12 0zm5.082 8.56l-1.74 1.74a4.636 4.636 0 00-6.485 6.486l-1.74 1.74A7.003 7.003 0 0112 5a6.972 6.972 0 015.082 3.56zm1.658 1.658A7.003 7.003 0 0119 12a6.97 6.97 0 01-6.97 6.97 6.972 6.972 0 01-3.382-.878l1.74-1.74a4.636 4.636 0 006.486-6.486l1.866-1.648z"/>
+                        </svg>
+                        Open in Google Colab — Full Notebook
+                      </a>
                     </div>
                   </div>
                 </div>
