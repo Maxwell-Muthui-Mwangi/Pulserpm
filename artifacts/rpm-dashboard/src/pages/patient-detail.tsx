@@ -1042,6 +1042,34 @@ export default function PatientDetail() {
         {activeTab === "device" && isPatient && (
           <div className="space-y-6 max-w-md mx-auto">
 
+            {/* ── Companion app download ─────────────────────────────────────── */}
+            <Card className="border-violet-200 bg-gradient-to-br from-violet-50/70 to-blue-50/40 shadow-sm">
+              <CardContent className="p-4 flex items-center gap-4">
+                <div className="h-12 w-12 rounded-2xl bg-violet-600 flex items-center justify-center shrink-0 shadow-md">
+                  <Smartphone className="h-6 w-6 text-white" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-bold text-violet-900">PulseRPM Companion App</p>
+                  <p className="text-xs text-violet-700 mt-0.5">
+                    Install on your Android phone to sync wearable data to this dashboard.
+                  </p>
+                  <p className="text-[10px] text-violet-500 mt-0.5">Android · APK · 46 MB</p>
+                </div>
+                <a
+                  href={`${import.meta.env.BASE_URL}pulserpm-companion.apk`}
+                  download="PulseRPM-Companion.apk"
+                  className="shrink-0 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-700 active:bg-violet-800 text-white text-xs font-semibold transition-colors shadow"
+                >
+                  <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                    <polyline points="7 10 12 15 17 10" />
+                    <line x1="12" y1="15" x2="12" y2="3" />
+                  </svg>
+                  Download APK
+                </a>
+              </CardContent>
+            </Card>
+
             {/* ── Offline reconnection alert ─────────────────────────────────── */}
             {(() => {
               const syncedAt = effectiveSyncAt ?? (
