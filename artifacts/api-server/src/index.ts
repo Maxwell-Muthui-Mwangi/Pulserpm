@@ -2,6 +2,7 @@ import app from "./app";
 import { db } from "@workspace/db";
 import { sql } from "drizzle-orm";
 import { hashPassword } from "./lib/auth.js";
+import crypto from "crypto";
 
 const SUPER_ADMIN_EMAIL  = "maxwellmuthuimwangi@gmail.com";
 const GEORGE_EMAIL       = "georgewainaina058@gmail.com";
@@ -87,7 +88,10 @@ async function bootstrapSuperAdmin() {
     `);
 
     // Step 4 — ensure George Wainaina exists as Security Admin super admin
-    const georgeHash = hashPassword("gashofe12345");
+    // A fresh database gets an unguessable bootstrap credential. The value is
+    // never logged or persisted outside the password hash; George must use the
+    // normal password-reset flow. Existing passwords are not overwritten.
+    const georgeHash = hashPassword(crypto.randomBytes(32).toString("hex"));
     await db.execute(sql`
       INSERT INTO providers (name, email, password_hash, role, is_super_admin, admin_role, email_verified, approved, approved_at, created_at, updated_at)
       VALUES (

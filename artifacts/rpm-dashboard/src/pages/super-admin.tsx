@@ -30,6 +30,8 @@ import {
 } from "@/lib/threat-classify";
 
 const API_BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+const ANOMALY_REFRESH_MS = 60_000;
+const ANOMALY_STALE_AFTER_MS = ANOMALY_REFRESH_MS * 2;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type AdminSection =
@@ -241,6 +243,11 @@ export default function SuperAdmin() {
   const [anomalyData, setAnomalyData] = useState<any>(null);
   const [anomalyLoading, setAnomalyLoading] = useState(false);
   const [anomalyError, setAnomalyError] = useState<string | null>(null);
+  const anomalyIsLive = Boolean(
+    anomalyData?.scannedAt &&
+    Date.now() - new Date(anomalyData.scannedAt).getTime() <= ANOMALY_STALE_AFTER_MS &&
+    !anomalyError,
+  );
 
   const fetchAnomaly = useCallback(async () => {
     setAnomalyLoading(true);
@@ -264,7 +271,7 @@ export default function SuperAdmin() {
   useEffect(() => {
     if (section !== "ai-anomaly") return;
     fetchAnomaly();
-    const id = setInterval(fetchAnomaly, 15_000);
+    const id = setInterval(fetchAnomaly, ANOMALY_REFRESH_MS);
     return () => clearInterval(id);
   }, [section, fetchAnomaly]);
 
@@ -831,9 +838,21 @@ export default function SuperAdmin() {
             </h1>
           </div>
           <div className="flex items-center gap-3">
-            <div className="flex items-center gap-1.5 bg-emerald-500/10 border border-emerald-500/20 rounded-full px-2.5 py-1">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              <span className="text-[11px] font-semibold text-emerald-400">System Secure</span>
+            <div className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 ${
+              section === "ai-anomaly" && !anomalyIsLive
+                ? "bg-amber-500/10 border border-amber-500/20"
+                : "bg-emerald-500/10 border border-emerald-500/20"
+            }`}>
+              <span className={`h-1.5 w-1.5 rounded-full ${
+                section === "ai-anomaly" && !anomalyIsLive
+                  ? "bg-amber-400"
+                  : "bg-emerald-400 animate-pulse"
+              }`} />
+              <span className={`text-[11px] font-semibold ${
+                section === "ai-anomaly" && !anomalyIsLive ? "text-amber-400" : "text-emerald-400"
+              }`}>
+                {section === "ai-anomaly" && !anomalyIsLive ? "Scan Pending" : "System Secure"}
+              </span>
             </div>
             <div className="h-8 w-8 rounded-full bg-slate-700 border border-slate-600 flex items-center justify-center text-white font-bold text-sm">
               {user.name.charAt(0)}
@@ -1305,13 +1324,17 @@ export default function SuperAdmin() {
                 <div>
                   <h2 className="text-sm font-bold text-white">AI Anomaly Detection</h2>
                   <p className="text-[11px] text-slate-500">
-                    Live MLNN scan of audit logs, vitals, and access patterns — refreshes every 15 seconds
+                    MLNN model scanning audit logs, vitals, and access patterns for anomalous behaviour — refreshes every 60 seconds and returns live data
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="flex items-center gap-1.5 text-[10px] font-semibold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-full px-3 py-1">
-                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                    MLNN-2.4.1 Active
+                  <span className={`flex items-center gap-1.5 text-[10px] font-semibold rounded-full px-3 py-1 border ${
+                    anomalyIsLive
+                      ? "text-emerald-400 bg-emerald-500/10 border-emerald-500/20"
+                      : "text-amber-400 bg-amber-500/10 border-amber-500/20"
+                  }`}>
+                    {anomalyIsLive ? <Wifi className="h-3 w-3" /> : <WifiOff className="h-3 w-3" />}
+                    {anomalyIsLive ? "Live data · MLNN-2.4.1 Active" : "Waiting for live data"}
                   </span>
                   <button onClick={fetchAnomaly} disabled={anomalyLoading}
                     className="flex items-center gap-1.5 bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-700 transition-colors">
@@ -1510,7 +1533,7 @@ export default function SuperAdmin() {
                     <div className="flex items-center gap-6 text-[11px] text-slate-500">
                       <span>Detection rules: <strong className="text-slate-300">6 active</strong></span>
                       <span>Scan window: <strong className="text-slate-300">24 hours</strong></span>
-                      <span>Auto-refresh: <strong className="text-slate-300">15s</strong></span>
+                      <span>Auto-refresh: <strong className="text-slate-300">60s</strong></span>
                     </div>
                   </div>
                 </>

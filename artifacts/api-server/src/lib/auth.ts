@@ -1,6 +1,9 @@
 import crypto from "crypto";
 
-const JWT_SECRET = process.env.JWT_SECRET || "rpm-secret-key-change-in-production";
+const JWT_SECRET = process.env.JWT_SECRET || process.env.SESSION_SECRET;
+if (!JWT_SECRET) {
+  throw new Error("JWT_SECRET or SESSION_SECRET environment variable is required");
+}
 const TOKEN_EXPIRY_SECS = 7 * 24 * 60 * 60; // 7 days
 
 export function hashPassword(password: string): string {
@@ -29,7 +32,11 @@ export function verifyToken(token: string): Record<string, unknown> | null {
       .createHmac("sha256", JWT_SECRET)
       .update(`${header}.${body}`)
       .digest("base64url");
-    if (sig !== expectedSig) return null;
+    const supplied = Buffer.from(sig);
+    const expected = Buffer.from(expectedSig);
+    if (supplied.length !== expected.length || !crypto.timingSafeEqual(supplied, expected)) {
+      return null;
+    }
     const payload = JSON.parse(Buffer.from(body, "base64url").toString("utf-8"));
     if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) {
       return null; // Token expired
