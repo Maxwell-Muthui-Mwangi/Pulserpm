@@ -262,6 +262,7 @@ describe(
         heartRate:  68,
         source:     "manual",
         recordedAt: staleTime,
+        createdAt:  staleTime,
       });
 
       const { ok, body } = await getJson(`${baseUrl}/api/patients`, {

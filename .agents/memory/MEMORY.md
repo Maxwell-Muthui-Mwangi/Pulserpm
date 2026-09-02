@@ -1,2 +1,3 @@
 - [Gmail SMTP setup for transactional email](gmail-smtp.md) — auto-detect by domain works, but bad/expired App Passwords fail silently as generic errors; verify via a dev test-email endpoint.
 - [Super Admin role rules and protection](super-admin-rules.md) — Maxwell is the permanently protected founding super admin; audit log column is `timestamp` not `createdAt`.
+- [Artifact publish package bootstrap](artifact-publish-package-bootstrap.md) — Replit may run npm before deployment hooks; allow bootstrap, then enforce the pnpm lockfile in the build hook.
