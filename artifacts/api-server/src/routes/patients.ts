@@ -356,7 +356,11 @@ router.get("/patients/:patientId", requireAuth, async (req, res) => {
     const [patient] = await db
       .select()
       .from(patientsTable)
-      .where(eq(patientsTable.id, patientId))
+      .where(and(
+        eq(patientsTable.id, patientId),
+        isNull(patientsTable.deletedAt),
+        eq(patientsTable.isAdminPatient, false)
+      ))
       .limit(1);
 
     if (!patient) {
@@ -510,6 +514,7 @@ router.get("/admin/patients/all", requireAuth, async (req, res) => {
         deletedAt: patientsTable.deletedAt,
       })
       .from(patientsTable)
+      .where(eq(patientsTable.isAdminPatient, false))
       .orderBy(desc(patientsTable.createdAt));
     res.json(patients);
   } catch (err) {

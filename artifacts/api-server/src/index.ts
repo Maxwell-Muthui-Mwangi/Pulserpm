@@ -7,6 +7,7 @@ const SUPER_ADMIN_EMAIL  = "maxwellmuthuimwangi@gmail.com";
 const GEORGE_EMAIL       = "georgewainaina058@gmail.com";
 const GEORGE_NAME        = "George Wainaina";
 const GEORGE_ADMIN_ROLE  = "Security Admin";
+const RETIRED_TEST_PATIENT_EMAIL = "justmwangiike@gmail.com";
 
 /**
  * Idempotent startup bootstrap — runs on every server start in every environment.
@@ -38,6 +39,35 @@ async function bootstrapSuperAdmin() {
       SET    is_admin_patient = true
       WHERE  email = ${SUPER_ADMIN_EMAIL}
         AND  is_admin_patient IS DISTINCT FROM true
+    `);
+
+    // Permanently purge the retired JohnyTest account and all linked healthcare data.
+    // The email is intentionally exact so no real patient can be removed by a name match.
+    await db.execute(sql`
+      WITH target AS (
+        SELECT id FROM patients WHERE lower(email) = lower(${RETIRED_TEST_PATIENT_EMAIL})
+      ),
+      deleted_vitals AS (
+        DELETE FROM vitals WHERE patient_id IN (SELECT id FROM target)
+      ),
+      deleted_alerts AS (
+        DELETE FROM alerts WHERE patient_id IN (SELECT id FROM target)
+      ),
+      deleted_thresholds AS (
+        DELETE FROM thresholds WHERE patient_id IN (SELECT id FROM target)
+      ),
+      deleted_audit AS (
+        DELETE FROM audit_logs
+        WHERE lower(actor_email) = lower(${RETIRED_TEST_PATIENT_EMAIL})
+           OR (
+             resource_type = 'patient'
+             AND resource_id IN (SELECT id::text FROM target)
+           )
+      ),
+      deleted_pending AS (
+        DELETE FROM pending_patients WHERE lower(email) = lower(${RETIRED_TEST_PATIENT_EMAIL})
+      )
+      DELETE FROM patients WHERE id IN (SELECT id FROM target)
     `);
 
     // Step 2 — add admin_role column (display label for super admins)

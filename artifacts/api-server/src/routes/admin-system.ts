@@ -91,15 +91,18 @@ router.get("/admin/anomaly/analysis", requireAuth, adminOnly, async (_req, res) 
     // ── Vitals outliers ──
     const outlierVitals = await db
       .select({ id: vitalsTable.id, patientId: vitalsTable.patientId, heartRate: vitalsTable.heartRate,
-                oxygenSaturation: vitalsTable.oxygenSaturation, systolicBp: vitalsTable.systolicBp,
+                spo2: vitalsTable.spo2, systolicBp: vitalsTable.systolicBp,
                 recordedAt: vitalsTable.recordedAt })
       .from(vitalsTable)
+      .innerJoin(patientsTable, eq(vitalsTable.patientId, patientsTable.id))
       .where(and(
         gte(vitalsTable.recordedAt, since24h),
+        sql`patients.is_admin_patient = false`,
+        sql`patients.deleted_at IS NULL`,
         or(
           sql`${vitalsTable.heartRate} > 150`,
           sql`${vitalsTable.heartRate} < 40`,
-          sql`${vitalsTable.oxygenSaturation} < 88`,
+          sql`${vitalsTable.spo2} < 88`,
           sql`${vitalsTable.systolicBp} > 190`,
           sql`${vitalsTable.systolicBp} < 70`
         )
@@ -110,11 +113,25 @@ router.get("/admin/anomaly/analysis", requireAuth, adminOnly, async (_req, res) 
     const since48h = new Date(now.getTime() - 48 * 60 * 60 * 1000);
     const recentPatients = await db
       .select({ patientId: vitalsTable.patientId })
-      .from(vitalsTable).where(gte(vitalsTable.recordedAt, since48h)).groupBy(vitalsTable.patientId);
+      .from(vitalsTable)
+      .innerJoin(patientsTable, eq(vitalsTable.patientId, patientsTable.id))
+      .where(and(
+        gte(vitalsTable.recordedAt, since48h),
+        sql`patients.is_admin_patient = false`,
+        sql`patients.deleted_at IS NULL`
+      ))
+      .groupBy(vitalsTable.patientId);
     const recentSet = new Set(recentPatients.map(r => r.patientId));
     const historicPatients = await db
       .select({ patientId: vitalsTable.patientId })
-      .from(vitalsTable).where(lt(vitalsTable.recordedAt, since48h)).groupBy(vitalsTable.patientId);
+      .from(vitalsTable)
+      .innerJoin(patientsTable, eq(vitalsTable.patientId, patientsTable.id))
+      .where(and(
+        lt(vitalsTable.recordedAt, since48h),
+        sql`patients.is_admin_patient = false`,
+        sql`patients.deleted_at IS NULL`
+      ))
+      .groupBy(vitalsTable.patientId);
     const silentDevices = historicPatients.filter(r => !recentSet.has(r.patientId)).length;
 
     // ── 7-day daily anomaly count trend ──
@@ -145,7 +162,7 @@ router.get("/admin/anomaly/analysis", requireAuth, adminOnly, async (_req, res) 
         severity: "medium",
         actor: r.actorEmail ?? "unknown",
         description: "Authentication failed — invalid credentials or unverified account",
-        timestamp: r.createdAt?.toISOString() ?? "",
+        timestamp: r.timestamp?.toISOString() ?? "",
       });
     });
 
@@ -180,7 +197,7 @@ router.get("/admin/anomaly/analysis", requireAuth, adminOnly, async (_req, res) 
     outlierVitals.slice(0, 3).forEach((v, i) => {
       let reason = "";
       if (v.heartRate && (v.heartRate > 150 || v.heartRate < 40)) reason = `Heart rate ${v.heartRate} bpm (critical range)`;
-      else if (v.oxygenSaturation && v.oxygenSaturation < 88) reason = `SpO₂ ${v.oxygenSaturation}% (dangerously low)`;
+      else if (v.spo2 && v.spo2 < 88) reason = `SpO₂ ${v.spo2}% (dangerously low)`;
       else if (v.systolicBp && (v.systolicBp > 190 || v.systolicBp < 70)) reason = `Systolic BP ${v.systolicBp} mmHg (extreme)`;
       anomalies.push({
         id: `vital-${i}`,

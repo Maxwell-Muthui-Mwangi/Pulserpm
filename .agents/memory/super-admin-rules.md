@@ -18,6 +18,7 @@ description: Role hierarchy, Maxwell protection rules, and schema details for Pu
 - His role cannot be changed — `POST /admin/providers/:id/set-role` blocks if target is Maxwell.
 - Patients cannot be assigned to him — approve endpoint checks `isSuperAdmin` before inserting patient.
 - He does not appear in the public provider list (patient signup dropdown) — filtered by `!p.isSuperAdmin`.
+- Any patient record linked to the founding admin is internal-only: exclude it from patient rosters, patient management, patient details, reports, and healthcare/anomaly metrics.
 
 ## DB columns added
 - `providers.is_super_admin` — boolean, default false. Maxwell is the only row with `true`.
@@ -31,6 +32,6 @@ description: Role hierarchy, Maxwell protection rules, and schema details for Pu
 - Admins additionally see: Audit Log, Threat Detection, Blockchain Monitor, Security Framework, Admin Panel.
 - Super admin sees "Super Admin" label; regular admins see "Admin Panel" label.
 
-**Why:** Maxwell is the founding account of the system and must be permanently undeletable by design. Other admins are provider-level users with elevated features, not full system admins.
+**Why:** Maxwell is the founding account of the system and must be permanently undeletable by design. His internal patient record must never be presented or counted as a real healthcare patient. Other admins are provider-level users with elevated features, not full system admins.
 
-**How to apply:** Any new delete/modify endpoint that touches `providersTable` must check `isSuperAdmin` or `email === SUPER_ADMIN_EMAIL` before proceeding.
+**How to apply:** Any new delete/modify endpoint that touches `providersTable` must check `isSuperAdmin` or `email === SUPER_ADMIN_EMAIL`. Any patient-facing query or aggregate must exclude admin-patient records.

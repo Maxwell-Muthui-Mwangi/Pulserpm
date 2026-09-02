@@ -240,22 +240,31 @@ export default function SuperAdmin() {
   // ── AI Anomaly Detection state ────────────────────────────────────────────────
   const [anomalyData, setAnomalyData] = useState<any>(null);
   const [anomalyLoading, setAnomalyLoading] = useState(false);
+  const [anomalyError, setAnomalyError] = useState<string | null>(null);
 
   const fetchAnomaly = useCallback(async () => {
     setAnomalyLoading(true);
+    setAnomalyError(null);
     try {
       const res = await fetch(`${API_BASE}/api/admin/anomaly/analysis`, {
         headers: { Authorization: `Bearer ${getAuthToken()}` },
       });
-      if (res.ok) setAnomalyData(await res.json());
-    } catch { /* ignore */ }
-    setAnomalyLoading(false);
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.message ?? `Live scan failed (${res.status})`);
+      }
+      setAnomalyData(await res.json());
+    } catch (error) {
+      setAnomalyError(error instanceof Error ? error.message : "Unable to load live anomaly data");
+    } finally {
+      setAnomalyLoading(false);
+    }
   }, []);
 
   useEffect(() => {
     if (section !== "ai-anomaly") return;
     fetchAnomaly();
-    const id = setInterval(fetchAnomaly, 60_000); // refresh every minute
+    const id = setInterval(fetchAnomaly, 15_000);
     return () => clearInterval(id);
   }, [section, fetchAnomaly]);
 
@@ -1296,7 +1305,7 @@ export default function SuperAdmin() {
                 <div>
                   <h2 className="text-sm font-bold text-white">AI Anomaly Detection</h2>
                   <p className="text-[11px] text-slate-500">
-                    MLNN model scanning audit logs, vitals, and access patterns for anomalous behaviour — refreshes every 60 seconds
+                    Live MLNN scan of audit logs, vitals, and access patterns — refreshes every 15 seconds
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
@@ -1315,7 +1324,20 @@ export default function SuperAdmin() {
               {anomalyLoading && !anomalyData ? (
                 <div className="flex flex-col items-center justify-center py-24 gap-3">
                   <BrainCircuit className="h-10 w-10 text-blue-400 animate-pulse" />
-                  <p className="text-xs text-slate-500">MLNN model scanning…</p>
+                  <p className="text-xs text-slate-500">Loading live MLNN data…</p>
+                </div>
+              ) : anomalyError && !anomalyData ? (
+                <div className="flex flex-col items-center justify-center py-20 gap-3 rounded-xl border border-red-500/20 bg-red-950/20">
+                  <AlertTriangle className="h-9 w-9 text-red-400" />
+                  <p className="text-sm font-semibold text-red-300">Live anomaly data is unavailable</p>
+                  <p className="text-xs text-slate-500">{anomalyError}</p>
+                  <button
+                    onClick={fetchAnomaly}
+                    className="mt-2 flex items-center gap-1.5 bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-700"
+                  >
+                    <RefreshCw className="h-3.5 w-3.5" />
+                    Retry live scan
+                  </button>
                 </div>
               ) : anomalyData ? (
                 <>
@@ -1488,7 +1510,7 @@ export default function SuperAdmin() {
                     <div className="flex items-center gap-6 text-[11px] text-slate-500">
                       <span>Detection rules: <strong className="text-slate-300">6 active</strong></span>
                       <span>Scan window: <strong className="text-slate-300">24 hours</strong></span>
-                      <span>Auto-refresh: <strong className="text-slate-300">60s</strong></span>
+                      <span>Auto-refresh: <strong className="text-slate-300">15s</strong></span>
                     </div>
                   </div>
                 </>
