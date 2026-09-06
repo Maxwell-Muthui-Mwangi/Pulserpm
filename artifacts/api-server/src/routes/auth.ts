@@ -8,6 +8,7 @@ import { logAuditEvent, getClientIp } from "../middlewares/auditLog.js";
 import { authLimiter } from "../middlewares/rateLimit.js";
 
 const router = Router();
+const BLOCKED_LOGIN_EMAILS = new Set(["test.provider@rpm.com"]);
 
 function generateCode(): string {
   return String(Math.floor(100000 + Math.random() * 900000));
@@ -25,7 +26,22 @@ router.post("/auth/login", authLimiter, async (req, res) => {
       return;
     }
 
-    const [provider] = await db.select().from(providersTable).where(eq(providersTable.email, email)).limit(1);
+    const normalizedEmail = String(email).trim().toLowerCase();
+    if (BLOCKED_LOGIN_EMAILS.has(normalizedEmail)) {
+      logAuditEvent({
+        actorEmail: normalizedEmail,
+        action: "auth.login_failed",
+        resourceType: "auth",
+        ipAddress: ip,
+        userAgent: ua,
+        outcome: "failure",
+        details: JSON.stringify({ reason: "account_blocked" }),
+      });
+      res.status(401).json({ error: "Unauthorized", message: "Invalid email or password" });
+      return;
+    }
+
+    const [provider] = await db.select().from(providersTable).where(eq(providersTable.email, normalizedEmail)).limit(1);
     if (provider && verifyPassword(password, provider.passwordHash)) {
       // Block login until email is verified
       if (!provider.emailVerified) {
@@ -45,7 +61,7 @@ router.post("/auth/login", authLimiter, async (req, res) => {
       return;
     }
 
-    const [patient] = await db.select().from(patientsTable).where(eq(patientsTable.email, email)).limit(1);
+    const [patient] = await db.select().from(patientsTable).where(eq(patientsTable.email, normalizedEmail)).limit(1);
     if (patient && verifyPassword(password, patient.passwordHash)) {
       const token = createToken({ id: patient.id, email: patient.email, role: patient.role });
       logAuditEvent({ actorId: patient.id, actorEmail: patient.email, actorRole: patient.role, action: "auth.login", resourceType: "auth", ipAddress: ip, userAgent: ua, outcome: "success" });
@@ -53,9 +69,9 @@ router.post("/auth/login", authLimiter, async (req, res) => {
       return;
     }
 
-    const [pending] = await db.select().from(pendingPatientsTable).where(eq(pendingPatientsTable.email, email)).limit(1);
+    const [pending] = await db.select().from(pendingPatientsTable).where(eq(pendingPatientsTable.email, normalizedEmail)).limit(1);
     if (pending && verifyPassword(password, pending.passwordHash)) {
-      logAuditEvent({ actorEmail: email, action: "auth.login", resourceType: "auth", ipAddress: ip, userAgent: ua, outcome: "denied", details: JSON.stringify({ reason: pending.emailVerified ? "pending_approval" : "email_unverified" }) });
+      logAuditEvent({ actorEmail: normalizedEmail, action: "auth.login", resourceType: "auth", ipAddress: ip, userAgent: ua, outcome: "denied", details: JSON.stringify({ reason: pending.emailVerified ? "pending_approval" : "email_unverified" }) });
       if (!pending.emailVerified) {
         res.status(403).json({ error: "Email not verified", status: "email_unverified", message: "Please verify your email before logging in.", email: pending.email });
         return;
@@ -64,7 +80,7 @@ router.post("/auth/login", authLimiter, async (req, res) => {
       return;
     }
 
-    logAuditEvent({ actorEmail: email, action: "auth.login_failed", resourceType: "auth", ipAddress: ip, userAgent: ua, outcome: "failure", details: JSON.stringify({ reason: "invalid_credentials" }) });
+    logAuditEvent({ actorEmail: normalizedEmail, action: "auth.login_failed", resourceType: "auth", ipAddress: ip, userAgent: ua, outcome: "failure", details: JSON.stringify({ reason: "invalid_credentials" }) });
     res.status(401).json({ error: "Unauthorized", message: "Invalid email or password" });
   } catch (err) {
     console.error("Login error:", err);
