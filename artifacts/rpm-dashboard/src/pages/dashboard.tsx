@@ -609,10 +609,24 @@ export default function Dashboard() {
                 : "All patients are currently stable. No active alerts."}
             </p>
           </div>
-          {/* Live indicator */}
-          <div className="flex items-center gap-2 bg-card border border-border/50 rounded-full px-3 py-1.5 shadow-sm text-xs text-muted-foreground">
-            <span className="h-2 w-2 rounded-full bg-success animate-pulse" />
-            <span className="font-medium text-success-foreground">Live</span>
+          {/* Live feed indicator */}
+          <div
+            role="status"
+            aria-live="polite"
+            className={`flex items-center gap-2 bg-card border rounded-full px-3 py-1.5 shadow-sm text-xs ${
+              sseActive
+                ? "border-border/50 text-muted-foreground"
+                : "border-amber-500/30 text-amber-700 dark:text-amber-400"
+            }`}
+          >
+            {sseActive ? (
+              <span className="h-2 w-2 rounded-full bg-success animate-pulse" />
+            ) : (
+              <WifiOff className="h-3.5 w-3.5" aria-hidden="true" />
+            )}
+            <span className={`font-medium ${sseActive ? "text-success-foreground" : ""}`}>
+              {sseActive ? "Live" : "Reconnecting…"}
+            </span>
             <span className="text-muted-foreground/70">·</span>
             <span>Updated {formatDistanceToNow(lastRefresh, { addSuffix: true })}</span>
           </div>

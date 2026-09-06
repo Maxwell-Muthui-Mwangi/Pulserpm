@@ -319,40 +319,59 @@ export default function SuperAdmin() {
   // ── Reports state ──────────────────────────────────────────────────────────────
   const [reportData, setReportData] = useState<any>(null);
   const [reportLoading, setReportLoading] = useState(false);
+  const [reportError, setReportError] = useState<string | null>(null);
   const [exportingCsv, setExportingCsv] = useState(false);
+  const [exportStatus, setExportStatus] = useState<string | null>(null);
 
   const fetchReport = useCallback(async () => {
     setReportLoading(true);
+    setReportError(null);
     try {
       const res = await fetch(`${API_BASE}/api/admin/reports/summary`, {
         headers: { Authorization: `Bearer ${getAuthToken()}` },
       });
-      if (res.ok) setReportData(await res.json());
-    } catch { /* ignore */ }
-    setReportLoading(false);
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.message ?? `Reports request failed (${res.status})`);
+      }
+      setReportData(await res.json());
+    } catch (error) {
+      setReportError(error instanceof Error ? error.message : "Unable to load report data");
+    } finally {
+      setReportLoading(false);
+    }
   }, []);
 
   useEffect(() => {
-    if (section === "reports") fetchReport();
+    if (section !== "reports") return;
+    fetchReport();
+    const id = setInterval(fetchReport, 60_000);
+    return () => clearInterval(id);
   }, [section, fetchReport]);
 
   const downloadAuditCsv = async () => {
     setExportingCsv(true);
+    setExportStatus(null);
     try {
       const res = await fetch(`${API_BASE}/api/admin/reports/audit-export?limit=1000`, {
         headers: { Authorization: `Bearer ${getAuthToken()}` },
       });
-      if (res.ok) {
-        const blob = await res.blob();
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = `pulserpm-audit-${new Date().toISOString().slice(0, 10)}.csv`;
-        a.click();
-        URL.revokeObjectURL(url);
+      if (!res.ok) {
+        throw new Error(`Audit export failed (${res.status})`);
       }
-    } catch { /* ignore */ }
-    setExportingCsv(false);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `pulserpm-audit-${new Date().toISOString().slice(0, 10)}.csv`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1_000);
+      setExportStatus("Audit log CSV downloaded");
+    } catch (error) {
+      setExportStatus(error instanceof Error ? error.message : "Unable to export audit log");
+    } finally {
+      setExportingCsv(false);
+    }
   };
 
   // ── Settings state ──────────────────────────────────────────────────────────
@@ -1751,7 +1770,14 @@ export default function SuperAdmin() {
               <div className="flex items-center justify-between flex-wrap gap-3">
                 <div>
                   <h2 className="text-sm font-bold text-white">Reports</h2>
-                  <p className="text-[11px] text-slate-500">Platform-wide statistics, trends, and data exports</p>
+                  <p className="text-[11px] text-slate-500">
+                    Platform-wide statistics, trends, and data exports · refreshes every 60 seconds
+                  </p>
+                  {reportData?.generatedAt && (
+                    <p className="text-[10px] text-slate-600 mt-1">
+                      Last updated {formatDistanceToNow(new Date(reportData.generatedAt), { addSuffix: true })}
+                    </p>
+                  )}
                 </div>
                 <div className="flex items-center gap-2">
                   <button onClick={fetchReport} disabled={reportLoading}
@@ -1767,10 +1793,34 @@ export default function SuperAdmin() {
                 </div>
               </div>
 
+              {exportStatus && (
+                <div className={`rounded-lg border px-4 py-2 text-xs ${
+                  exportStatus.includes("downloaded")
+                    ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-400"
+                    : "border-red-500/20 bg-red-500/10 text-red-400"
+                }`}>
+                  {exportStatus}
+                </div>
+              )}
+
               {reportLoading && !reportData ? (
                 <div className="flex items-center justify-center py-24"><RefreshCw className="h-5 w-5 text-slate-500 animate-spin" /></div>
+              ) : reportError && !reportData ? (
+                <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-red-500/20 bg-red-950/20 py-20">
+                  <XCircle className="h-8 w-8 text-red-400" />
+                  <p className="text-sm font-semibold text-red-300">Reports could not be loaded</p>
+                  <p className="text-xs text-red-400/80">{reportError}</p>
+                  <button onClick={fetchReport} className="rounded-lg bg-red-500/20 px-3 py-1.5 text-xs text-red-300 hover:bg-red-500/30">
+                    Try again
+                  </button>
+                </div>
               ) : reportData ? (
                 <>
+                  {reportError && (
+                    <div className="rounded-lg border border-amber-500/20 bg-amber-500/10 px-4 py-2 text-xs text-amber-300">
+                      Showing the last successful report. Refresh failed: {reportError}
+                    </div>
+                  )}
                   {/* KPI grid */}
                   <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                     {[
@@ -1784,7 +1834,7 @@ export default function SuperAdmin() {
                           <Icon className={`h-4 w-4 ${color}`} />
                           <p className="text-[10px] text-slate-500 uppercase tracking-wide font-semibold">{label}</p>
                         </div>
-                        <p className={`text-2xl font-black ${color}`}>{value ?? 0}</p>
+                        <p className={`text-2xl font-black ${color}`}>{Number(value ?? 0).toLocaleString()}</p>
                         <p className="text-[10px] text-slate-600 mt-1">{sub}</p>
                       </div>
                     ))}
@@ -1833,6 +1883,9 @@ export default function SuperAdmin() {
                             </div>
                           );
                         })}
+                        {!reportData.auditLog?.topActions?.length && (
+                          <p className="py-8 text-center text-xs text-slate-600">No audit activity recorded yet.</p>
+                        )}
                       </div>
                       <div className="mt-4 pt-3 border-t border-slate-800 flex items-center justify-between text-[11px]">
                         <span className="text-slate-500">Today's events</span>
@@ -1842,14 +1895,14 @@ export default function SuperAdmin() {
                   </div>
 
                   {/* Alerts by severity */}
-                  {reportData.alerts?.bySeverity?.length > 0 && (
-                    <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
+                  <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
                       <div className="flex items-center gap-2 mb-4">
                         <AlertTriangle className="h-4 w-4 text-amber-400" />
                         <p className="text-xs font-semibold text-slate-300 uppercase tracking-wide">Active Alerts by Severity</p>
                       </div>
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                        {reportData.alerts.bySeverity.map((s: any) => (
+                      {reportData.alerts?.bySeverity?.length > 0 ? (
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                          {reportData.alerts.bySeverity.map((s: any) => (
                           <div key={s.severity} className={`rounded-lg border px-4 py-3 text-center ${
                             s.severity === "critical" ? "bg-red-950/40 border-red-500/25" :
                             s.severity === "warning"  ? "bg-amber-950/40 border-amber-500/25" :
@@ -1861,10 +1914,15 @@ export default function SuperAdmin() {
                             }`}>{Number(s.c)}</p>
                             <p className="text-[10px] text-slate-500 capitalize mt-1">{s.severity}</p>
                           </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-center gap-2 py-8 text-xs text-emerald-400">
+                          <CheckCircle2 className="h-4 w-4" />
+                          No active alerts
+                        </div>
+                      )}
+                  </div>
                 </>
               ) : null}
             </>

@@ -11,7 +11,7 @@
 
 import { Router } from "express";
 import { db, providersTable, patientsTable, vitalsTable, alertsTable, auditLogsTable, pendingPatientsTable, thresholdsTable } from "@workspace/db";
-import { eq, and, or, count, gte, desc, lt, sql, ne } from "drizzle-orm";
+import { eq, and, or, count, gte, desc, lt, sql, ne, isNull } from "drizzle-orm";
 import { requireAuth } from "../middlewares/auth.js";
 
 const router = Router();
@@ -404,25 +404,43 @@ router.get("/admin/reports/summary", requireAuth, adminOnly, async (req, res) =>
   try {
     const today = new Date(); today.setHours(0, 0, 0, 0);
     const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const visiblePatient = and(
+      eq(patientsTable.isAdminPatient, false),
+      isNull(patientsTable.deletedAt),
+    );
 
     const [[totProviders], [totPatients], [totPending], [totVitals], [totAlerts], [totAudit],
            [vitalsToday], [vitalsWeek], [alertsActive], [alertsToday], [auditToday]] = await Promise.all([
-      db.select({ c: count() }).from(providersTable),
-      db.select({ c: count() }).from(patientsTable),
+      db.select({ c: count() }).from(providersTable).where(eq(providersTable.role, "provider")),
+      db.select({ c: count() }).from(patientsTable).where(visiblePatient),
       db.select({ c: count() }).from(pendingPatientsTable).where(eq(pendingPatientsTable.emailVerified, true)),
-      db.select({ c: count() }).from(vitalsTable),
-      db.select({ c: count() }).from(alertsTable),
+      db.select({ c: count() }).from(vitalsTable)
+        .innerJoin(patientsTable, eq(vitalsTable.patientId, patientsTable.id))
+        .where(visiblePatient),
+      db.select({ c: count() }).from(alertsTable)
+        .innerJoin(patientsTable, eq(alertsTable.patientId, patientsTable.id))
+        .where(visiblePatient),
       db.select({ c: count() }).from(auditLogsTable),
-      db.select({ c: count() }).from(vitalsTable).where(gte(vitalsTable.recordedAt, today)),
-      db.select({ c: count() }).from(vitalsTable).where(gte(vitalsTable.recordedAt, weekAgo)),
-      db.select({ c: count() }).from(alertsTable).where(eq(alertsTable.status, "active")),
-      db.select({ c: count() }).from(alertsTable).where(gte(alertsTable.createdAt, today)),
+      db.select({ c: count() }).from(vitalsTable)
+        .innerJoin(patientsTable, eq(vitalsTable.patientId, patientsTable.id))
+        .where(and(visiblePatient, gte(vitalsTable.recordedAt, today))),
+      db.select({ c: count() }).from(vitalsTable)
+        .innerJoin(patientsTable, eq(vitalsTable.patientId, patientsTable.id))
+        .where(and(visiblePatient, gte(vitalsTable.recordedAt, weekAgo))),
+      db.select({ c: count() }).from(alertsTable)
+        .innerJoin(patientsTable, eq(alertsTable.patientId, patientsTable.id))
+        .where(and(visiblePatient, eq(alertsTable.status, "active"))),
+      db.select({ c: count() }).from(alertsTable)
+        .innerJoin(patientsTable, eq(alertsTable.patientId, patientsTable.id))
+        .where(and(visiblePatient, gte(alertsTable.triggeredAt, today))),
       db.select({ c: count() }).from(auditLogsTable).where(gte(auditLogsTable.timestamp, today)),
     ]);
 
     // Alerts by severity
     const alertsBySev = await db.select({ severity: alertsTable.severity, c: count() })
-      .from(alertsTable).where(eq(alertsTable.status, "active"))
+      .from(alertsTable)
+      .innerJoin(patientsTable, eq(alertsTable.patientId, patientsTable.id))
+      .where(and(visiblePatient, eq(alertsTable.status, "active")))
       .groupBy(alertsTable.severity);
 
     // Audit actions breakdown (top 5)
@@ -435,7 +453,12 @@ router.get("/admin/reports/summary", requireAuth, adminOnly, async (req, res) =>
       const dayStart = new Date(); dayStart.setHours(0,0,0,0); dayStart.setDate(dayStart.getDate() - d);
       const dayEnd = new Date(dayStart); dayEnd.setDate(dayEnd.getDate() + 1);
       const [{ c }] = await db.select({ c: count() }).from(vitalsTable)
-        .where(and(gte(vitalsTable.recordedAt, dayStart), sql`${vitalsTable.recordedAt} < ${dayEnd.toISOString()}`));
+        .innerJoin(patientsTable, eq(vitalsTable.patientId, patientsTable.id))
+        .where(and(
+          visiblePatient,
+          gte(vitalsTable.recordedAt, dayStart),
+          sql`${vitalsTable.recordedAt} < ${dayEnd.toISOString()}`,
+        ));
       vitalsTrend.push({ date: dayStart.toLocaleDateString("en-US", { weekday: "short" }), count: Number(c) });
     }
 
@@ -445,6 +468,7 @@ router.get("/admin/reports/summary", requireAuth, adminOnly, async (req, res) =>
       vitals:    { total: Number(totVitals.c), today: Number(vitalsToday.c), thisWeek: Number(vitalsWeek.c), trend: vitalsTrend },
       alerts:    { total: Number(totAlerts.c), active: Number(alertsActive.c), today: Number(alertsToday.c), bySeverity: alertsBySev },
       auditLog:  { total: Number(totAudit.c), today: Number(auditToday.c), topActions: auditByAction },
+      generatedAt: new Date().toISOString(),
     });
   } catch (err) {
     console.error("Reports summary error:", err);
@@ -463,7 +487,7 @@ router.get("/admin/reports/audit-export", requireAuth, adminOnly, async (req, re
       headers.join(","),
       ...rows.map((r) => [
         r.id,
-        r.createdAt?.toISOString() ?? "",
+        r.timestamp?.toISOString() ?? "",
         `"${r.actorEmail ?? ""}"`,
         r.actorRole ?? "",
         `"${r.action ?? ""}"`,
